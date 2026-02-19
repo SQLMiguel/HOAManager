@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — Glenridge Community</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Admin-specific styles */
+    .admin-container { max-width: 1000px; margin: 0 auto; padding: 40px 24px; }
+    .admin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
+    .admin-header h1 { font-size: 1.8rem; color: var(--text); }
+    .admin-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+    .admin-tab { padding: 10px 20px; border-radius: 8px; border: 2px solid var(--primary); background: transparent;
+      color: var(--primary); cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s ease; font-family: var(--font-body); }
+    .admin-tab.active, .admin-tab:hover { background: var(--primary); color: white; }
+    .admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .admin-stat { background: var(--white); border-radius: var(--radius-sm); padding: 20px; text-align: center; box-shadow: var(--shadow-sm); }
+    .admin-stat .count { font-size: 2rem; font-weight: 700; color: var(--primary); }
+    .admin-stat .label { font-size: 0.85rem; color: var(--text-light); margin-top: 4px; }
+    .user-list { display: flex; flex-direction: column; gap: 12px; }
+    .user-row { background: var(--white); border-radius: var(--radius-sm); padding: 20px 24px; box-shadow: var(--shadow-sm);
+      display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; transition: all 0.2s ease; border-left: 4px solid transparent; }
+    .user-row.pending { border-left-color: #f39c12; }
+    .user-row.approved { border-left-color: var(--primary); }
+    .user-row.denied { border-left-color: #e74c3c; }
+    .user-row:hover { box-shadow: var(--shadow-md); }
+    .user-info h3 { font-size: 1.05rem; margin-bottom: 4px; }
+    .user-info p { font-size: 0.85rem; color: var(--text-light); margin-bottom: 2px; }
+    .user-info .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .badge-pending { background: #fff3cd; color: #856404; }
+    .badge-approved { background: #d4edda; color: #155724; }
+    .badge-denied { background: #f8d7da; color: #721c24; }
+    .user-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .user-actions button { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.82rem;
+      transition: all 0.2s ease; font-family: var(--font-body); }
+    .btn-approve { background: var(--primary); color: white; }
+    .btn-approve:hover { background: var(--primary-dark); }
+    .btn-deny { background: #e74c3c; color: white; }
+    .btn-deny:hover { background: #c0392b; }
+    .btn-delete { background: #6c757d; color: white; }
+    .btn-delete:hover { background: #495057; }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--text-light); }
+    .empty-state svg { margin-bottom: 16px; opacity: 0.4; }
+    .empty-state p { font-size: 1rem; }
+
+    /* Admin login form */
+    .admin-login-wrap { max-width: 400px; margin: 100px auto; padding: 0 24px; }
+    .admin-login-card { background: var(--white); border-radius: var(--radius); padding: 40px 32px; box-shadow: var(--shadow-lg); text-align: center; }
+    .admin-login-card h2 { margin-bottom: 8px; }
+    .admin-login-card p { color: var(--text-light); margin-bottom: 24px; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+  <!-- ========== NAVIGATION ========== -->
+  <nav class="navbar scrolled" id="navbar">
+    <div class="container">
+      <a href="index.html" class="nav-brand">
+        <img src="images/LogoFlower_Edited.png" alt="Glenridge Community Logo">
+        Glenridge Community
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="events.html">Events</a>
+        <a href="contact.html">Contact</a>
+        <a href="members.html" class="nav-cta">Members</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========== ADMIN LOGIN ========== -->
+  <div id="adminLoginSection" class="admin-login-wrap">
+    <div class="admin-login-card">
+      <h2>Admin Login</h2>
+      <p>Enter your admin credentials to manage member accounts.</p>
+      <form id="adminLoginForm">
+        <div class="form-group">
+          <label for="adminUser">Username</label>
+          <input type="text" id="adminUser" name="username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="adminPass">Password</label>
+          <input type="password" id="adminPass" name="password" required autocomplete="current-password">
+        </div>
+        <div id="adminLoginError" style="color: #e74c3c; font-size: 0.85rem; margin-bottom: 12px; display: none;"></div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Log In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========== ADMIN PANEL ========== -->
+  <div id="adminPanel" style="display: none;">
+    <section class="page-hero" style="padding: 100px 0 30px;">
+      <div class="container">
+        <h1>Admin Panel</h1>
+        <p>Manage resident signups and member accounts</p>
+      </div>
+    </section>
+
+    <div class="admin-container">
+      <div class="admin-header">
+        <h1>Member Management</h1>
+        <div style="display:flex;gap:10px;align-items:center">
+          <a href="newsletter-admin.html" class="btn btn-primary" style="padding:8px 20px;font-size:0.85rem;text-decoration:none">📰 Newsletter</a>
+          <button class="btn btn-outline" id="adminLogoutBtn" style="padding: 8px 20px; font-size: 0.85rem;">Log Out</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="admin-stats" id="adminStats">
+        <div class="admin-stat"><div class="count" id="statPending">0</div><div class="label">Pending</div></div>
+        <div class="admin-stat"><div class="count" id="statApproved">0</div><div class="label">Approved</div></div>
+        <div class="admin-stat"><div class="count" id="statDenied">0</div><div class="label">Denied</div></div>
+        <div class="admin-stat"><div class="count" id="statTotal">0</div><div class="label">Total</div></div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-filter="pending">Pending Approval</button>
+        <button class="admin-tab" data-filter="approved">Approved</button>
+        <button class="admin-tab" data-filter="denied">Denied</button>
+        <button class="admin-tab" data-filter="all">All Users</button>
+      </div>
+
+      <!-- User list -->
+      <div class="user-list" id="userList">
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          <p>Loading users...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/main.js"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const loginSection = document.getElementById('adminLoginSection');
+    const adminPanel = document.getElementById('adminPanel');
+    const loginForm = document.getElementById('adminLoginForm');
+    const loginError = document.getElementById('adminLoginError');
+    const logoutBtn = document.getElementById('adminLogoutBtn');
+    const userListEl = document.getElementById('userList');
+
+    let allUsers = [];
+    let currentFilter = 'pending';
+
+    // Check admin status on load
+    checkAdminStatus();
+
+    async function checkAdminStatus() {
+      try {
+        const res = await fetch('/api/admin/status');
+        const data = await res.json();
+        if (data.isAdmin) {
+          showPanel();
+        }
+      } catch (e) {}
+    }
+
+    // Admin login
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      loginError.style.display = 'none';
+
+      const username = document.getElementById('adminUser').value;
+      const password = document.getElementById('adminPass').value;
+
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showPanel();
+        } else {
+          loginError.textContent = data.error;
+          loginError.style.display = 'block';
+        }
+      } catch (err) {
+        loginError.textContent = 'Connection error. Please try again.';
+        loginError.style.display = 'block';
+      }
+    });
+
+    // Logout
+    logoutBtn.addEventListener('click', async () => {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      loginSection.style.display = '';
+      adminPanel.style.display = 'none';
+    });
+
+    function showPanel() {
+      loginSection.style.display = 'none';
+      adminPanel.style.display = 'block';
+      loadUsers();
+    }
+
+    // Tabs
+    document.querySelectorAll('.admin-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentFilter = tab.dataset.filter;
+        renderUsers();
+      });
+    });
+
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/admin/users');
+        allUsers = await res.json();
+        updateStats();
+        renderUsers();
+      } catch (err) {
+        userListEl.innerHTML = '<div class="empty-state"><p>Error loading users.</p></div>';
+      }
+    }
+
+    function updateStats() {
+      const pending = allUsers.filter(u => u.status === 'pending').length;
+      const approved = allUsers.filter(u => u.status === 'approved').length;
+      const denied = allUsers.filter(u => u.status === 'denied').length;
+      document.getElementById('statPending').textContent = pending;
+      document.getElementById('statApproved').textContent = approved;
+      document.getElementById('statDenied').textContent = denied;
+      document.getElementById('statTotal').textContent = allUsers.length;
+    }
+
+    function renderUsers() {
+      const filtered = currentFilter === 'all' ? allUsers : allUsers.filter(u => u.status === currentFilter);
+
+      if (filtered.length === 0) {
+        userListEl.innerHTML = `<div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          <p>No ${currentFilter === 'all' ? '' : currentFilter} users found.</p>
+        </div>`;
+        return;
+      }
+
+      userListEl.innerHTML = filtered.map(user => `
+        <div class="user-row ${user.status}">
+          <div class="user-info">
+            <h3>${user.first_name} ${user.last_name} <span class="badge badge-${user.status}">${user.status}</span></h3>
+            <p><strong>Email:</strong> ${user.email}</p>
+            <p><strong>Address:</strong> ${user.address}</p>
+            ${user.phone ? `<p><strong>Phone:</strong> ${user.phone}</p>` : ''}
+            <p style="font-size:0.8rem; color: #aaa; margin-top: 4px;">Registered: ${new Date(user.created_at).toLocaleDateString()}</p>
+          </div>
+          <div class="user-actions">
+            ${user.status === 'pending' ? `
+              <button class="btn-approve" onclick="approveUser('${user.id}')">Approve</button>
+              <button class="btn-deny" onclick="denyUser('${user.id}')">Deny</button>
+            ` : ''}
+            ${user.status === 'denied' ? `
+              <button class="btn-approve" onclick="approveUser('${user.id}')">Approve</button>
+            ` : ''}
+            <button class="btn-delete" onclick="deleteUser('${user.id}', '${user.first_name} ${user.last_name}')">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Global action handlers
+    window.approveUser = async (id) => {
+      if (!confirm('Approve this resident? They will receive an email notification.')) return;
+      try {
+        const res = await fetch(`/api/admin/users/${id}/approve`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          await loadUsers();
+          showAdminNotification(data.message, 'success');
+        } else {
+          showAdminNotification(data.error, 'error');
+        }
+      } catch (err) {
+        showAdminNotification('Error approving user.', 'error');
+      }
+    };
+
+    window.denyUser = async (id) => {
+      if (!confirm('Deny this resident? They will receive an email notification.')) return;
+      try {
+        const res = await fetch(`/api/admin/users/${id}/deny`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          await loadUsers();
+          showAdminNotification(data.message, 'success');
+        }
+      } catch (err) {
+        showAdminNotification('Error denying user.', 'error');
+      }
+    };
+
+    window.deleteUser = async (id, name) => {
+      if (!confirm(`Permanently delete ${name}? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          await loadUsers();
+          showAdminNotification('User deleted.', 'success');
+        }
+      } catch (err) {
+        showAdminNotification('Error deleting user.', 'error');
+      }
+    };
+
+    function showAdminNotification(msg, type) {
+      const note = document.createElement('div');
+      note.style.cssText = `position:fixed;top:90px;right:24px;max-width:420px;padding:16px 24px;border-radius:10px;
+        background:${type==='success'?'#2d6a4f':'#c0392b'};color:#fff;box-shadow:0 10px 30px rgba(0,0,0,0.2);
+        z-index:3000;font-family:var(--font-body);font-size:0.9rem;animation:slideInRight 0.4s ease;`;
+      note.textContent = msg;
+      document.body.appendChild(note);
+      setTimeout(() => { note.style.animation = 'slideOutRight 0.3s ease'; setTimeout(() => note.remove(), 300); }, 5000);
+    }
+  });
+  </script>
+</body>
+</html>

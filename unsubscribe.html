@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unsubscribe — Glenridge Community</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .unsub-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 60px 24px; }
+    .unsub-card { background: var(--white); border-radius: var(--radius); padding: 48px 40px; box-shadow: var(--shadow-lg); max-width: 480px; width: 100%; text-align: center; }
+    .unsub-icon { font-size: 3.5rem; margin-bottom: 16px; }
+    .unsub-card h2 { margin-bottom: 12px; font-size: 1.6rem; }
+    .unsub-card p { color: var(--text-light); line-height: 1.6; margin-bottom: 28px; }
+    .unsub-card a { color: var(--primary); font-weight: 600; text-decoration: none; }
+    .unsub-card a:hover { text-decoration: underline; }
+    .unsub-spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid #e0e0e0; border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <nav class="navbar scrolled" id="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-logo">
+        <div class="logo-icon">GH</div>
+        <div class="logo-text"><span class="logo-main">Glenridge</span><span class="logo-sub">HOA Community</span></div>
+      </a>
+    </div>
+  </nav>
+
+  <div class="unsub-wrap">
+    <div class="unsub-card" id="unsubCard">
+      <div class="unsub-spinner"></div>
+      <p>Processing your request...</p>
+    </div>
+  </div>
+
+  <script>
+    (async function () {
+      const card = document.getElementById('unsubCard');
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+
+      if (!token) {
+        card.innerHTML = `
+          <div class="unsub-icon">⚠️</div>
+          <h2>Invalid Link</h2>
+          <p>This unsubscribe link is invalid or has expired. Please contact us directly if you wish to be removed from our mailing list.</p>
+          <a href="index.html">Return Home</a>`;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/nl/unsubscribe?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+          card.innerHTML = `
+            <div class="unsub-icon">✅</div>
+            <h2>You have been unsubscribed</h2>
+            <p>You will no longer receive newsletters from Glenridge Community HOA. If this was a mistake, contact your HOA administrator to be re-added.</p>
+            <a href="index.html">Return Home</a>`;
+        } else {
+          throw new Error(data.error || 'Failed');
+        }
+      } catch (e) {
+        card.innerHTML = `
+          <div class="unsub-icon">❌</div>
+          <h2>Something went wrong</h2>
+          <p>We couldn't process your request. Please try again or contact your HOA administrator.</p>
+          <a href="index.html">Return Home</a>`;
+      }
+    })();
+  </script>
+</body>
+</html>

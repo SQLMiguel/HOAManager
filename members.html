@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOA Members — Glenridge Community</title>
+  <meta name="description" content="Glenridge Community HOA Member portal. Access pool information, events calendar, newsletters, vendor recommendations, and more.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ========== NAVIGATION ========== -->
+  <nav class="navbar scrolled" id="navbar">
+    <div class="container">
+      <a href="index.html" class="nav-brand">
+        <img src="images/LogoFlower_Edited.png" alt="Glenridge Community Logo">
+        Glenridge Community
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="events.html">Events</a>
+        <a href="contact.html">Contact</a>
+        <a href="members.html" class="nav-cta active">Members</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========== PAGE HERO ========== -->
+  <section class="page-hero">
+    <div class="hero-shape hero-shape-1"></div>
+    <div class="hero-shape hero-shape-2"></div>
+    <div class="container">
+      <h1>HOA Member Section</h1>
+      <p>Exclusive resources and information for Glenridge Community residents</p>
+    </div>
+  </section>
+
+  <!-- ========== AUTH SECTION (shown when NOT logged in) ========== -->
+  <section class="section" id="authSection">
+    <div class="container">
+      <div class="member-login-banner fade-in">
+        <h2>Welcome, Glenridge Residents</h2>
+        <p>If you are not a registered HOA Member, please use the Sign Up form below. You must be a current resident. Approval takes approximately 3–5 business days.</p>
+        <div class="member-login-buttons">
+          <button class="btn btn-outline" id="showSignupBtn" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>
+            </svg>
+            Sign Up
+          </button>
+          <button class="btn btn-accent" id="showLoginBtn" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+            Log In
+          </button>
+        </div>
+        <div style="margin-top:1.1rem;">
+          <a href="admin.html" style="font-size:.8rem;color:#aaa;text-decoration:none;display:inline-flex;align-items:center;gap:.35rem;transition:color .15s;" onmouseover="this.style.color='#2c5f3a'" onmouseout="this.style.color='#aaa'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            Admin Panel
+          </a>
+        </div>
+      </div>
+
+      <!-- ===== LOGIN FORM ===== -->
+      <div class="auth-form-card" id="loginCard" style="display:none;">
+        <h2>Log In</h2>
+        <p>Enter your credentials to access member resources.</p>
+
+        <!-- Social login -->
+        <div class="social-auth-divider"><span>Log in with</span></div>
+        <div class="social-auth-buttons">
+          <a href="/api/auth/google" class="btn btn-social btn-google">
+            <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            Google
+          </a>
+          <a href="/api/auth/facebook" class="btn btn-social btn-facebook">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M24 12.073C24 5.404 18.627 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.024 1.792-4.697 4.533-4.697 1.313 0 2.686.235 2.686.235v2.97h-1.514c-1.491 0-1.956.93-1.956 1.887v2.255h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
+            </svg>
+            Facebook
+          </a>
+        </div>
+        <div class="social-auth-divider"><span>or with email</span></div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="loginEmail">Email Address</label>
+            <input type="email" id="loginEmail" name="email" required autocomplete="email" placeholder="you@email.com">
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" name="password" required autocomplete="current-password" placeholder="Your password">
+          </div>
+          <div id="loginError" class="auth-error"></div>
+          <button type="submit" class="btn btn-primary auth-submit-btn" id="loginSubmitBtn">Log In</button>
+        </form>
+        <p class="auth-toggle">Don't have an account? <a href="#" id="switchToSignup">Sign Up</a></p>
+      </div>
+
+      <!-- ===== COMPLETE SOCIAL PROFILE CARD ===== -->
+      <div class="auth-form-card" id="socialCompleteCard" style="display:none;">
+        <h2>Complete Your Profile</h2>
+        <p id="socialCompleteIntro">Almost there! We just need your Glenridge address to verify residency before approving your account.</p>
+        <form id="socialCompleteForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="scFirst">First Name <span class="required">*</span></label>
+              <input type="text" id="scFirst" name="firstName" required placeholder="First name">
+            </div>
+            <div class="form-group">
+              <label for="scLast">Last Name <span class="required">*</span></label>
+              <input type="text" id="scLast" name="lastName" required placeholder="Last name">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="scAddress">Glenridge Street Address <span class="required">*</span></label>
+            <input type="text" id="scAddress" name="address" required placeholder="Your Glenridge address">
+          </div>
+          <div class="form-group">
+            <label for="scPhone">Phone Number</label>
+            <input type="tel" id="scPhone" name="phone" placeholder="(optional)">
+          </div>
+          <div id="socialCompleteError" class="auth-error"></div>
+          <button type="submit" class="btn btn-primary auth-submit-btn" id="socialCompleteBtn">Submit for Approval</button>
+        </form>
+      </div>
+
+      <!-- ===== SIGNUP FORM ===== -->
+      <div class="auth-form-card" id="signupCard" style="display:none;">
+        <h2>Create Account</h2>
+        <p>Sign up as a Glenridge Community resident. Your account will be reviewed and approved within 3–5 business days.</p>
+
+        <!-- Social signup -->
+        <div class="social-auth-divider"><span>Sign up with</span></div>
+        <div class="social-auth-buttons">
+          <a href="/api/auth/google" class="btn btn-social btn-google">
+            <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            Google
+          </a>
+          <a href="/api/auth/facebook" class="btn btn-social btn-facebook">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M24 12.073C24 5.404 18.627 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.024 1.792-4.697 4.533-4.697 1.313 0 2.686.235 2.686.235v2.97h-1.514c-1.491 0-1.956.93-1.956 1.887v2.255h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
+            </svg>
+            Facebook
+          </a>
+        </div>
+        <div class="social-auth-divider"><span>or create with email</span></div>
+
+        <form id="signupForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="signupFirst">First Name <span class="required">*</span></label>
+              <input type="text" id="signupFirst" name="firstName" required placeholder="First name">
+            </div>
+            <div class="form-group">
+              <label for="signupLast">Last Name <span class="required">*</span></label>
+              <input type="text" id="signupLast" name="lastName" required placeholder="Last name">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="signupEmail">Email Address <span class="required">*</span></label>
+            <input type="email" id="signupEmail" name="email" required autocomplete="email" placeholder="you@email.com">
+          </div>
+          <div class="form-group">
+            <label for="signupAddress">Street Address <span class="required">*</span></label>
+            <input type="text" id="signupAddress" name="address" required placeholder="Your Glenridge address">
+          </div>
+          <div class="form-group">
+            <label for="signupPhone">Phone Number</label>
+            <input type="tel" id="signupPhone" name="phone" placeholder="(optional)">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="signupPassword">Password <span class="required">*</span></label>
+              <input type="password" id="signupPassword" name="password" required minlength="8" autocomplete="new-password" placeholder="Min 8 characters">
+            </div>
+            <div class="form-group">
+              <label for="signupConfirm">Confirm Password <span class="required">*</span></label>
+              <input type="password" id="signupConfirm" name="confirmPassword" required minlength="8" autocomplete="new-password" placeholder="Re-enter password">
+            </div>
+          </div>
+          <div id="signupError" class="auth-error"></div>
+          <button type="submit" class="btn btn-primary auth-submit-btn" id="signupSubmitBtn">Create Account</button>
+        </form>
+        <p class="auth-toggle">Already have an account? <a href="#" id="switchToLogin">Log In</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== WELCOME BANNER (shown when logged in) ========== -->
+  <section class="section" id="welcomeSection" style="display:none;">
+    <div class="container">
+      <div class="member-login-banner fade-in">
+        <h2>Welcome back, <span id="welcomeName"></span>!</h2>
+        <p>You are logged in as a Glenridge Community member. Access your resources below.</p>
+        <div class="member-login-buttons">
+          <button class="btn btn-outline" id="logoutBtn" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Log Out
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== MEMBER RESOURCES ========== -->
+  <section class="section section-alt">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="section-label">Resources</span>
+        <h2>Member Resources</h2>
+        <p>Quick access to everything you need as a Glenridge Community resident.</p>
+      </div>
+      <div class="members-grid">
+        <!-- Pool Info -->
+        <div class="member-card fade-in">
+          <div class="member-card-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12h5l2-9 5 18 3-9h5"/>
+            </svg>
+          </div>
+          <h3>Pool Information</h3>
+          <p>Pool schedules, reservations, pool rules, shelter reservations, and swim team information for the community pool area.</p>
+          <a href="https://aquatechpm.com/areas-we-serve/nc-triad/" target="_blank" rel="noopener" class="btn btn-primary">View Pool Info</a>
+        </div>
+
+        <!-- Events Calendar -->
+        <div class="member-card fade-in">
+          <div class="member-card-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <h3>Events Calendar</h3>
+          <p>View upcoming neighborhood events and submit your own event requests to share with the community.</p>
+          <button class="btn btn-primary" id="viewEventsBtn" type="button">View Events</button>
+        </div>
+
+        <!-- Newsletters -->
+        <div class="member-card fade-in">
+          <div class="member-card-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/>
+            </svg>
+          </div>
+          <h3>The Glenridge Times</h3>
+          <p>Go back in time and review past newsletters and important neighborhood documents and communications.</p>
+          <a href="#" class="btn btn-primary">Read Newsletter</a>
+        </div>
+
+        <!-- Vendors -->
+        <div class="member-card fade-in">
+          <div class="member-card-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <h3>Recommended Vendors</h3>
+          <p>A curated list of neighbor-recommended vendors, babysitters, dog walkers, and service providers in our area.</p>
+          <a href="#" class="btn btn-primary">View Vendors</a>
+        </div>
+
+        <!-- HOA Management -->
+        <div class="member-card fade-in">
+          <div class="member-card-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </div>
+          <h3>HOA Management</h3>
+          <p>Information about Capstone Realty Consultants, our HOA management company, including contact details and services.</p>
+          <a href="https://www.capstonetriad.com" target="_blank" rel="noopener" class="btn btn-primary">Visit Capstone</a>
+        </div>
+
+        <!-- Member Directory -->
+        <div class="member-card fade-in">
+          <div class="member-card-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+            </svg>
+          </div>
+          <h3>Member Directory</h3>
+          <p>Browse the community member directory, manage your household profile, and control exactly what information you share.</p>
+          <a href="directory.html" class="btn btn-primary">Open Directory</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== COMMUNITY CALENDAR ========== -->
+  <section class="section" id="calendarSection" style="display:none;">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="section-label">Member Resources</span>
+        <h2>Community Events Calendar</h2>
+        <p>Browse upcoming events or add your own for all members to see.</p>
+      </div>
+
+      <div class="calendar-layout">
+        <!-- ── Left: Month calendar ── -->
+        <div class="cal-panel">
+          <div class="cal-nav">
+            <button class="cal-nav-btn" id="calPrev" aria-label="Previous month">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="cal-month-label" id="calMonthLabel"></span>
+            <button class="cal-nav-btn" id="calNext" aria-label="Next month">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <div class="cal-grid" id="calGrid">
+            <span class="cal-dow">Sun</span><span class="cal-dow">Mon</span><span class="cal-dow">Tue</span>
+            <span class="cal-dow">Wed</span><span class="cal-dow">Thu</span><span class="cal-dow">Fri</span><span class="cal-dow">Sat</span>
+          </div>
+          <button class="btn btn-primary cal-add-btn" id="openAddEventBtn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Event
+          </button>
+        </div>
+
+        <!-- ── Right: Event list for selected day ── -->
+        <div class="cal-panel">
+          <div class="cal-events-header">
+            <h3 id="calSelectedLabel">Select a day to view events</h3>
+          </div>
+          <div id="calEventsList" class="cal-events-list">
+            <p class="cal-empty">Click any date on the calendar to see events for that day.</p>
+          </div>
+
+          <!-- Upcoming events list -->
+          <div class="cal-upcoming">
+            <h4>Upcoming Events</h4>
+            <div id="calUpcomingList" class="cal-upcoming-list">
+              <p class="cal-empty">No upcoming events.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Add Event Form (hidden by default) ── -->
+      <div class="cal-add-form" id="addEventForm" style="display:none;">
+        <h3>Add a Community Event</h3>
+        <p>Your event will be visible to all approved members immediately.</p>
+        <div class="cal-form-grid">
+          <div class="form-group">
+            <label for="evTitle">Event Title <span class="required">*</span></label>
+            <input type="text" id="evTitle" placeholder="e.g. Block Party" maxlength="80">
+          </div>
+          <div class="form-group">
+            <label for="evDate">Date <span class="required">*</span></label>
+            <input type="date" id="evDate">
+          </div>
+          <div class="form-group">
+            <label for="evTime">Time</label>
+            <input type="time" id="evTime">
+          </div>
+          <div class="form-group">
+            <label for="evLocation">Location</label>
+            <input type="text" id="evLocation" placeholder="e.g. Pool Area" maxlength="100">
+          </div>
+          <div class="form-group cal-form-full">
+            <label for="evDesc">Description</label>
+            <textarea id="evDesc" rows="3" placeholder="Details about the event..." maxlength="500"></textarea>
+          </div>
+        </div>
+        <div id="addEventError" class="auth-error"></div>
+        <div class="cal-form-actions">
+          <button class="btn btn-primary" id="saveEventBtn" type="button">Save Event</button>
+          <button class="btn btn-outline" id="cancelAddEventBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== QUICK INFO ========== -->
+  <section class="section">
+    <div class="container">
+      <div class="about-preview">
+        <div class="about-text fade-in">
+          <span class="section-label">Quick Links</span>
+          <h2>Need Immediate Help?</h2>
+          <p>For immediate assistance, please contact our HOA Management company directly:</p>
+          <div style="background: var(--bg-alt); padding: 24px; border-radius: var(--radius-sm); margin: 16px 0;">
+            <p style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Capstone Realty Consultants, Inc.</p>
+            <p style="margin-bottom: 2px;">4622 Country Club Road, Ste-160</p>
+            <p style="margin-bottom: 2px;">Winston Salem, NC 27104</p>
+            <p style="margin-bottom: 2px;"><a href="tel:336-494-6080" style="color: var(--primary); font-weight: 500;">336-494-6080</a></p>
+            <p><a href="https://www.capstonetriad.com" target="_blank" rel="noopener" style="color: var(--primary); font-weight: 500;">www.capstonetriad.com</a></p>
+          </div>
+          <p>You can also email the HOA at <a href="mailto:admin@glenridgecommunity.com" style="color: var(--primary); font-weight: 500;">Admin@GlenridgeCommunity.com</a></p>
+        </div>
+        <div class="about-preview-img fade-in">
+          <img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80" alt="Community management">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h3>Glenridge Community</h3>
+          <p>A diverse, inclusive, and welcoming community in the heart of Winston-Salem, NC — offering something for everyone.</p>
+          <div class="footer-socials">
+            <a href="https://www.facebook.com/groups/224365097971183" target="_blank" rel="noopener" aria-label="Facebook">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
+              </svg>
+            </a>
+            <a href="mailto:admin@glenridgecommunity.com" aria-label="Email">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+        <div>
+          <h4>Quick Links</h4>
+          <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="about.html">About Us</a>
+            <a href="events.html">Events</a>
+            <a href="contact.html">Contact</a>
+            <a href="members.html">HOA Members</a>
+          </div>
+        </div>
+        <div>
+          <h4>Community</h4>
+          <div class="footer-links">
+            <a href="about.html#neighborhoods">Neighborhoods</a>
+            <a href="about.html#amenities">Amenities</a>
+            <a href="about.html#schools">Schools</a>
+            <a href="events.html">Photo Gallery</a>
+          </div>
+        </div>
+        <div>
+          <h4>Contact</h4>
+          <div class="footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/>
+            </svg>
+            <span><a href="mailto:admin@glenridgecommunity.com">Admin@GlenridgeCommunity.com</a></span>
+          </div>
+          <div class="footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+            </svg>
+            <span><a href="tel:336-494-6080">336-494-6080</a></span>
+          </div>
+          <div class="footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+            </svg>
+            <span>Winston-Salem, NC</span>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Glenridge Community HOA. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

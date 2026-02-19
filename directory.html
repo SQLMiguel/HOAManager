@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Member Directory — Glenridge Community</title>
+  <meta name="description" content="Members-only community directory for Glenridge Community residents.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/directory.css">
+</head>
+<body>
+
+  <!-- ========== NAVIGATION ========== -->
+  <nav class="navbar scrolled" id="navbar">
+    <div class="container">
+      <a href="index.html" class="nav-brand">
+        <img src="images/LogoFlower_Edited.png" alt="Glenridge Community Logo">
+        Glenridge Community
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="events.html">Events</a>
+        <a href="contact.html">Contact</a>
+        <a href="members.html" class="nav-cta">Members</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========== PAGE HERO ========== -->
+  <section class="page-hero">
+    <div class="hero-shape hero-shape-1"></div>
+    <div class="hero-shape hero-shape-2"></div>
+    <div class="container">
+      <h1>Member Directory</h1>
+      <p>Connect with your Glenridge neighbors — all information is member-only and privacy-controlled</p>
+    </div>
+  </section>
+
+  <!-- ========== AUTH GATE ========== -->
+  <section class="section" id="authGate" style="display:none;">
+    <div class="container" style="text-align:center;max-width:520px;margin:0 auto;">
+      <div class="dir-auth-prompt">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+        <h2>Members Only</h2>
+        <p>The Member Directory is available to approved Glenridge Community members only.</p>
+        <a href="members.html" class="btn btn-primary">Log In / Sign Up</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== MAIN DIRECTORY APP ========== -->
+  <div id="dirApp" style="display:none;">
+
+    <!-- Search & Actions Bar -->
+    <section class="section dir-toolbar-section">
+      <div class="container">
+        <div class="dir-toolbar">
+          <div class="dir-search-wrap">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="dirSearch" placeholder="Search by name, address, or street…" autocomplete="off">
+          </div>
+          <div class="dir-actions">
+            <button class="btn btn-outline" id="printDirBtn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+              </svg>
+              Print Preview
+            </button>
+            <button class="btn btn-primary" id="myProfileBtn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              </svg>
+              My Profile
+            </button>
+          </div>
+        </div>
+        <p class="dir-privacy-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          This directory is visible to approved members only. You control what information is displayed on your profile.
+        </p>
+      </div>
+    </section>
+
+    <!-- ── Directory Listing ── -->
+    <section class="section section-alt" id="dirListingSection">
+      <div class="container">
+        <div id="dirStats" class="dir-stats"></div>
+        <div id="dirGrid" class="dir-grid">
+          <div class="dir-loading">
+            <div class="dir-spinner"></div>
+            <p>Loading directory…</p>
+          </div>
+        </div>
+        <p id="dirNoResults" class="dir-no-results" style="display:none;">No members found matching your search.</p>
+      </div>
+    </section>
+
+    <!-- ── My Profile Editor ── -->
+    <section class="section" id="profileSection" style="display:none;">
+      <div class="container">
+        <div class="dir-editor">
+          <div class="dir-editor-header">
+            <div>
+              <h2>My Household Profile</h2>
+              <p>Control what your neighbors see in the directory. Name and address are always required.</p>
+            </div>
+            <button class="dir-close-btn" id="closeProfileBtn" aria-label="Close editor">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Tab Nav -->
+          <div class="dir-tabs">
+            <button class="dir-tab active" data-tab="info">Household Info</button>
+            <button class="dir-tab" data-tab="family">Family &amp; Pets</button>
+            <button class="dir-tab" data-tab="social">Social Links</button>
+            <button class="dir-tab" data-tab="photos">Photos</button>
+            <button class="dir-tab" data-tab="publish">Privacy &amp; Publish</button>
+          </div>
+
+          <!-- ── TAB: Household Info ── -->
+          <div class="dir-tab-panel active" id="tab-info">
+            <div class="dir-field-group">
+              <h4>Required Information <span class="dir-badge-required">Always Visible</span></h4>
+              <div class="dir-info-row">
+                <label>Primary Member Name</label>
+                <span id="infoNameDisplay" class="dir-readonly">—</span>
+              </div>
+              <div class="dir-info-row">
+                <label>Address</label>
+                <span id="infoAddressDisplay" class="dir-readonly">—</span>
+              </div>
+            </div>
+
+            <div class="dir-field-group">
+              <h4>Display Name <span class="dir-badge-required">Required</span></h4>
+              <p class="dir-field-hint">How your household appears in the directory (e.g. "The Johnson Family").</p>
+              <input type="text" id="profDisplayName" placeholder="e.g. The Johnson Family" maxlength="80" class="dir-input" required>
+            </div>
+
+            <div class="dir-field-group">
+              <div class="dir-toggle-field">
+                <div>
+                  <h4>Phone Number <span class="dir-badge-optional">Optional</span></h4>
+                  <input type="tel" id="profPhone" placeholder="(336) 555-0000" class="dir-input" style="margin-top:8px;">
+                </div>
+                <label class="dir-toggle" title="Show phone in directory">
+                  <input type="checkbox" id="profShowPhone">
+                  <span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Show</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="dir-field-group">
+              <div class="dir-info-row" style="margin-top:.5rem;">
+                <label>Email Address</label>
+                <span id="infoEmailDisplay" class="dir-readonly dir-badge-required" style="font-size:.82rem;padding:.15rem .5rem;">Always shown</span>
+                <span id="infoEmailValue" class="dir-readonly" style="margin-left:.5rem;"></span>
+              </div>
+              <p class="dir-field-hint" style="margin-top:.4rem;">Your registered email is always displayed to members in the directory.</p>
+            </div>
+
+            <div class="dir-field-group">
+              <div class="dir-toggle-field">
+                <div>
+                  <h4>Anniversary <span class="dir-badge-optional">Optional</span></h4>
+                  <input type="text" id="profAnniversary" placeholder="e.g. June 14" maxlength="40" class="dir-input" style="margin-top:8px;">
+                </div>
+                <label class="dir-toggle">
+                  <input type="checkbox" id="profShowAnniversary">
+                  <span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Show</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="dir-field-group">
+              <div class="dir-toggle-field">
+                <div>
+                  <h4>Interests &amp; Hobbies <span class="dir-badge-optional">Optional</span></h4>
+                  <textarea id="profInterests" placeholder="e.g. Gardening, hiking, cooking…" maxlength="300" class="dir-input dir-textarea" style="margin-top:8px;"></textarea>
+                </div>
+                <label class="dir-toggle">
+                  <input type="checkbox" id="profShowInterests">
+                  <span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Show</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="dir-field-group">
+              <div class="dir-toggle-field">
+                <div>
+                  <h4>Notes <span class="dir-badge-optional">Optional</span></h4>
+                  <textarea id="profNotes" placeholder="Anything else you'd like neighbors to know…" maxlength="300" class="dir-input dir-textarea" style="margin-top:8px;"></textarea>
+                </div>
+                <label class="dir-toggle">
+                  <input type="checkbox" id="profShowNotes">
+                  <span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Show</span>
+                </label>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" id="saveInfoBtn" type="button">Save Info</button>
+            <span id="saveInfoMsg" class="dir-save-msg"></span>
+          </div>
+
+          <!-- ── TAB: Family & Pets ── -->
+          <div class="dir-tab-panel" id="tab-family">
+
+            <!-- Adults -->
+            <div class="dir-field-group">
+              <h4>Additional Adults in Household</h4>
+              <p class="dir-field-hint">Add spouses, partners, or other adults. First &amp; last name recommended.</p>
+              <div id="adultsList" class="dir-list"></div>
+              <div class="dir-add-row">
+                <input type="text" id="adultName" placeholder="Full name" maxlength="60" class="dir-input">
+                <input type="text" id="adultBirthday" placeholder="Birthday (e.g. March 5)" maxlength="30" class="dir-input">
+                <label class="dir-toggle" title="Show birthday">
+                  <input type="checkbox" id="adultShowBday"><span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Show bday</span>
+                </label>
+                <button class="btn btn-primary dir-add-btn" id="addAdultBtn" type="button">Add</button>
+              </div>
+            </div>
+
+            <!-- Children -->
+            <div class="dir-field-group">
+              <h4>Children <span class="dir-badge-optional">First name only recommended</span></h4>
+              <p class="dir-field-hint">Birth year is never stored. Only month and day may optionally be shown.</p>
+              <div id="childrenList" class="dir-list"></div>
+              <div class="dir-add-row dir-add-row-children">
+                <input type="text" id="childName" placeholder="First name" maxlength="40" class="dir-input">
+                <select id="childMonth" class="dir-input dir-select">
+                  <option value="">Month</option>
+                  <option>January</option><option>February</option><option>March</option>
+                  <option>April</option><option>May</option><option>June</option>
+                  <option>July</option><option>August</option><option>September</option>
+                  <option>October</option><option>November</option><option>December</option>
+                </select>
+                <input type="number" id="childDay" placeholder="Day" min="1" max="31" class="dir-input dir-input-sm">
+                <label class="dir-toggle" title="Show birthday">
+                  <input type="checkbox" id="childShowBday"><span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Show bday</span>
+                </label>
+                <button class="btn btn-primary dir-add-btn" id="addChildBtn" type="button">Add</button>
+              </div>
+            </div>
+
+            <!-- Pets -->
+            <div class="dir-field-group">
+              <h4>Pets <span class="dir-badge-optional">Optional</span></h4>
+              <div id="petsList" class="dir-list"></div>
+              <div class="dir-add-row">
+                <input type="text" id="petName" placeholder="Pet name" maxlength="40" class="dir-input">
+                <input type="text" id="petType" placeholder="Type (dog, cat…)" maxlength="30" class="dir-input">
+                <button class="btn btn-primary dir-add-btn" id="addPetBtn" type="button">Add</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── TAB: Social Links ── -->
+          <div class="dir-tab-panel" id="tab-social">
+            <div class="dir-field-group">
+              <h4>Social Media Accounts <span class="dir-badge-optional">Optional</span></h4>
+              <p class="dir-field-hint">Add links to social profiles you'd like to share with neighbors.</p>
+              <div id="socialList" class="dir-list"></div>
+              <div class="dir-add-row">
+                <select id="socialPlatform" class="dir-input dir-select">
+                  <option value="">Platform</option>
+                  <option>Facebook</option><option>Instagram</option><option>NextDoor</option>
+                  <option>LinkedIn</option><option>Twitter / X</option><option>YouTube</option><option>Other</option>
+                </select>
+                <input type="url" id="socialUrl" placeholder="https://…" class="dir-input" style="flex:2;">
+                <label class="dir-toggle">
+                  <input type="checkbox" id="socialVisible" checked><span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Show</span>
+                </label>
+                <button class="btn btn-primary dir-add-btn" id="addSocialBtn" type="button">Add</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── TAB: Photos ── -->
+          <div class="dir-tab-panel" id="tab-photos">
+            <div class="dir-field-group">
+              <h4>Household Photos</h4>
+              <p class="dir-field-hint">Upload up to 20 photos (JPG, PNG, WEBP — max 5MB each). You control which appear in the directory.</p>
+              <div id="photoGrid" class="dir-photo-grid"></div>
+              <div class="dir-photo-upload-area">
+                <label for="photoFileInput" class="dir-upload-btn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                    <path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/>
+                  </svg>
+                  Choose Photo
+                  <input type="file" id="photoFileInput" accept=".jpg,.jpeg,.png,.webp" style="display:none;">
+                </label>
+                <div class="dir-photo-meta">
+                  <select id="photoCategory" class="dir-input dir-select">
+                    <option>Household</option><option>Adult</option><option>Child</option>
+                    <option>Pet</option><option>Other</option>
+                  </select>
+                  <input type="text" id="photoCaption" placeholder="Caption (optional)" maxlength="100" class="dir-input">
+                </div>
+                <button class="btn btn-primary" id="uploadPhotoBtn" type="button">Upload</button>
+              </div>
+              <p id="photoUploadMsg" class="dir-save-msg"></p>
+            </div>
+          </div>
+
+          <!-- ── TAB: Privacy & Publish ── -->
+          <div class="dir-tab-panel" id="tab-publish">
+            <div class="dir-field-group">
+              <h4>Do Not List</h4>
+              <p class="dir-field-hint">When enabled, your profile is hidden from all directory listings. Your name and address will not appear.</p>
+              <label class="dir-toggle dir-toggle-large">
+                <input type="checkbox" id="profDoNotList">
+                <span class="dir-toggle-slider"></span>
+                <span class="dir-toggle-label" style="font-size:1rem;">Hide my profile from the directory</span>
+              </label>
+            </div>
+
+            <div class="dir-field-group">
+              <h4>Publish Profile</h4>
+              <p class="dir-field-hint">When published, your profile (with your chosen visibility settings) is visible to all approved members. You can unpublish at any time.</p>
+
+              <div class="dir-consent-box" id="consentBox">
+                <label class="dir-consent-check">
+                  <input type="checkbox" id="consentCheck">
+                  <span>I confirm I have the right to share all uploaded photos and information. I understand this is visible to Glenridge Community members only and accept the <strong>member-only terms of use</strong>.</span>
+                </label>
+              </div>
+
+              <div class="dir-publish-actions">
+                <button class="btn btn-primary" id="publishBtn" type="button">Publish Profile</button>
+                <button class="btn btn-outline" id="unpublishBtn" type="button" style="display:none;">Unpublish Profile</button>
+                <span id="publishStatus" class="dir-publish-status"></span>
+              </div>
+            </div>
+
+            <div class="dir-field-group dir-danger-zone">
+              <h4>Content Guidelines</h4>
+              <p class="dir-field-hint">Prohibited: commercial advertising, explicit content, harassment, or copyrighted material. The HOA board reserves the right to remove any content.</p>
+            </div>
+          </div>
+
+        </div><!-- /.dir-editor -->
+      </div>
+    </section>
+
+    <!-- ── Print Template (hidden on screen, shown on print) ── -->
+    <div id="printTemplate" class="dir-print-template" style="display:none;">
+      <div class="dir-print-header">
+        <h1>Glenridge Community — Member Directory</h1>
+        <p>Printed <span id="printDate"></span> &nbsp;·&nbsp; <span id="printCount"></span></p>
+        <p class="dir-print-disclaimer">&#128274; For private community use only &mdash; redistribution prohibited.</p>
+      </div>
+      <div id="printBody"></div>
+      <div id="printFooter" style="margin-top:2rem;padding-top:.6rem;border-top:1px solid #ccc;font-size:.72rem;color:#888;text-align:center;">
+        glenridgecommunity.com &nbsp;·&nbsp; Generated <span class="pfDate"></span>
+      </div>
+    </div>
+
+  </div><!-- /#dirApp -->
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h3>Glenridge Community</h3>
+          <p>A diverse, inclusive, and welcoming community in the heart of Winston-Salem, NC.</p>
+          <div class="footer-socials">
+            <a href="https://www.facebook.com/groups/224365097971183" target="_blank" rel="noopener" aria-label="Facebook">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
+              </svg>
+            </a>
+            <a href="mailto:admin@glenridgecommunity.com" aria-label="Email">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+        <div>
+          <h4>Quick Links</h4>
+          <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="about.html">About Us</a>
+            <a href="events.html">Events</a>
+            <a href="contact.html">Contact</a>
+            <a href="members.html">HOA Members</a>
+          </div>
+        </div>
+        <div>
+          <h4>Contact</h4>
+          <div class="footer-contact-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/>
+            </svg>
+            <span><a href="mailto:admin@glenridgecommunity.com">Admin@GlenridgeCommunity.com</a></span>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Glenridge Community HOA. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/directory.js"></script>
+</body>
+</html>

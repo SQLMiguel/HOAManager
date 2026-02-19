@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Newsletter Admin — Glenridge Community</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/newsletter-admin.css">
+</head>
+<body class="nl-body">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="nl-topbar">
+    <div class="nl-topbar-left">
+      <a href="admin.html" class="nl-back-link">← Admin Panel</a>
+      <h1 class="nl-topbar-title">Newsletter Manager</h1>
+    </div>
+    <div class="nl-topbar-right">
+      <button id="btnNewNl" class="btn btn-primary">+ New Newsletter</button>
+    </div>
+  </header>
+
+  <!-- ============ MAIN LAYOUT ============ -->
+  <div class="nl-layout">
+
+    <!-- Sidebar -->
+    <aside class="nl-sidebar">
+      <nav class="nl-sidenav">
+        <button class="nl-sidenav-btn active" data-view="list">📋 Newsletters</button>
+        <button class="nl-sidenav-btn" data-view="subscribers">👥 Subscribers</button>
+      </nav>
+      <div id="nlList" class="nl-list">
+        <div class="nl-list-empty">Loading...</div>
+      </div>
+    </aside>
+
+    <!-- Content area -->
+    <main class="nl-content">
+
+      <!-- ── VIEW: Welcome / placeholder ── -->
+      <div id="viewWelcome" class="nl-view active">
+        <div class="nl-welcome">
+          <div class="nl-welcome-icon">📰</div>
+          <h2>Welcome to Newsletter Manager</h2>
+          <p>Create, design, and send newsletters to your community members. Click <strong>+ New Newsletter</strong> to get started, or select an existing one from the sidebar.</p>
+        </div>
+      </div>
+
+      <!-- ── VIEW: Editor ── -->
+      <div id="viewEditor" class="nl-view">
+        <div class="nl-editor-wrap">
+
+          <!-- ── Left Toolbox Sidebar ── -->
+          <div class="nl-toolbox">
+            <div class="nl-toolbox-header">
+              <span>Add</span>
+              <button class="nl-toolbox-toggle" id="btnToggleToolbox" title="Toggle sidebar">☰</button>
+            </div>
+
+            <div class="nl-toolbox-section">
+              <div class="nl-toolbox-category">Basic</div>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="text">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg></span>
+                <span class="nl-toolbox-label">Text</span>
+                <span class="nl-toolbox-desc">Start writing content</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="image">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
+                <span class="nl-toolbox-label">Image</span>
+                <span class="nl-toolbox-desc">Upload or Drag and Drop</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="button">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="3"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
+                <span class="nl-toolbox-label">Button</span>
+                <span class="nl-toolbox-desc">Simple call to action</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="divider">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span>
+                <span class="nl-toolbox-label">Divider</span>
+                <span class="nl-toolbox-desc">Visually divide content</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="video">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polygon points="10,8 16,12 10,16"/></svg></span>
+                <span class="nl-toolbox-label">Video</span>
+                <span class="nl-toolbox-desc">YouTube or Vimeo</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="logo">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v0a5 5 0 0 0-5 5v4a5 5 0 0 0 10 0V8a5 5 0 0 0-5-5z"/></svg></span>
+                <span class="nl-toolbox-label">Logo</span>
+                <span class="nl-toolbox-desc">Easily add your logo</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="two-col">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg></span>
+                <span class="nl-toolbox-label">Row</span>
+                <span class="nl-toolbox-desc">Add empty sections</span>
+              </button>
+            </div>
+
+            <div class="nl-toolbox-section">
+              <div class="nl-toolbox-category">Grouped</div>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="header">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M4 6h16"/><path d="M4 18h10"/></svg></span>
+                <span class="nl-toolbox-label">Header</span>
+                <span class="nl-toolbox-desc">Section heading</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="article">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg></span>
+                <span class="nl-toolbox-label">Article</span>
+                <span class="nl-toolbox-desc">Showcase a single post</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="social">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span>
+                <span class="nl-toolbox-label">Social</span>
+                <span class="nl-toolbox-desc">Display social pages</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="signature">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6.5"/><path d="M16 19l2 2 4-4"/><path d="M15.5 9l-4.5 4.5L9 11.5"/></svg></span>
+                <span class="nl-toolbox-label">Signature</span>
+                <span class="nl-toolbox-desc">Give a farewell</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="spacer">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 8l7-3 7 3"/><path d="M5 16l7 3 7-3"/></svg></span>
+                <span class="nl-toolbox-label">Spacer</span>
+                <span class="nl-toolbox-desc">Add vertical space</span>
+              </button>
+
+              <button class="nl-toolbox-item nl-add-block" data-type="html">
+                <span class="nl-toolbox-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+                <span class="nl-toolbox-label">HTML</span>
+                <span class="nl-toolbox-desc">Custom HTML block</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- ── Editor Center Panel ── -->
+          <div class="nl-editor-left">
+            <div class="nl-editor-toolbar">
+              <span id="editorStatus" class="nl-status-badge">Draft</span>
+              <div class="nl-editor-actions">
+                <button id="btnSaveDraft" class="btn btn-secondary btn-sm">Save Draft</button>
+                <button id="btnTestSend" class="btn btn-secondary btn-sm">Test Send</button>
+                <button id="btnSendAll" class="btn btn-primary btn-sm">Send to All</button>
+              </div>
+            </div>
+
+            <!-- Subject / Preview -->
+            <div class="nl-field-group">
+              <label class="nl-label" for="nlSubject">Subject Line <span class="req">*</span></label>
+              <input type="text" id="nlSubject" class="nl-input" placeholder="e.g. July Community Update">
+            </div>
+            <div class="nl-field-group">
+              <label class="nl-label" for="nlPreview">Preview Text</label>
+              <input type="text" id="nlPreview" class="nl-input" placeholder="Short teaser shown in email clients...">
+            </div>
+
+            <!-- Block canvas -->
+            <div id="nlBlocks" class="nl-blocks-canvas">
+              <div class="nl-blocks-empty">No blocks yet. Drag a block from the left panel to start building your email.</div>
+            </div>
+          </div>
+
+          <!-- Preview pane -->
+          <div class="nl-editor-right">
+            <div class="nl-preview-header">
+              <span class="nl-preview-title">Preview</span>
+              <div class="nl-preview-toggle">
+                <button class="nl-preview-btn active" data-mode="desktop">Desktop</button>
+                <button class="nl-preview-btn" data-mode="mobile">Mobile</button>
+              </div>
+            </div>
+            <div class="nl-preview-frame-wrap" id="previewWrap">
+              <iframe id="nlPreviewFrame" class="nl-preview-frame desktop" title="Email Preview"></iframe>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── VIEW: Analytics ── -->
+      <div id="viewAnalytics" class="nl-view">
+        <div class="nl-analytics-header">
+          <h2 id="analyticsTitle">Analytics</h2>
+          <button class="btn btn-secondary btn-sm" id="btnBackToEditor">← Back to Editor</button>
+        </div>
+        <div class="nl-stats-grid">
+          <div class="nl-stat-card"><div class="nl-stat-num" id="aDelivered">—</div><div class="nl-stat-lbl">Delivered</div></div>
+          <div class="nl-stat-card"><div class="nl-stat-num" id="aOpens">—</div><div class="nl-stat-lbl">Unique Opens</div></div>
+          <div class="nl-stat-card"><div class="nl-stat-num" id="aOpenRate">—</div><div class="nl-stat-lbl">Open Rate</div></div>
+          <div class="nl-stat-card"><div class="nl-stat-num" id="aClicks">—</div><div class="nl-stat-lbl">Unique Clicks</div></div>
+          <div class="nl-stat-card"><div class="nl-stat-num" id="aClickRate">—</div><div class="nl-stat-lbl">Click Rate</div></div>
+        </div>
+        <div class="nl-analytics-section">
+          <h3>Top Links</h3>
+          <div id="aTopLinks" class="nl-top-links"><em style="color:var(--text-light)">No click data yet.</em></div>
+        </div>
+      </div>
+
+      <!-- ── VIEW: Subscribers ── -->
+      <div id="viewSubscribers" class="nl-view">
+        <div class="nl-subs-header">
+          <h2>Subscribers</h2>
+          <div class="nl-subs-actions">
+            <button class="btn btn-secondary btn-sm" id="btnSyncSubs">Sync Members</button>
+            <button class="btn btn-primary btn-sm" id="btnAddSub">+ Add Subscriber</button>
+          </div>
+        </div>
+        <div id="subsList" class="nl-subs-table-wrap">
+          <table class="nl-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Source</th><th>Since</th><th></th></tr></thead>
+            <tbody id="subsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ============ MODALS ============ -->
+
+  <!-- Test Send Modal -->
+  <div class="nl-modal-overlay" id="testModal">
+    <div class="nl-modal">
+      <h3>Send Test Email</h3>
+      <p>Send a preview of this newsletter to an email address.</p>
+      <div class="nl-field-group">
+        <label class="nl-label" for="testEmail">Email Address</label>
+        <input type="email" id="testEmail" class="nl-input" placeholder="you@example.com">
+      </div>
+      <div class="nl-modal-actions">
+        <button class="btn btn-secondary" id="btnTestCancel">Cancel</button>
+        <button class="btn btn-primary" id="btnTestConfirm">Send Test</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Send Modal -->
+  <div class="nl-modal-overlay" id="sendModal">
+    <div class="nl-modal">
+      <h3>Send Newsletter</h3>
+      <p id="sendModalBody">Are you sure you want to send this newsletter to <strong id="sendSubCount">all active</strong> subscribers? This cannot be undone.</p>
+      <div class="nl-modal-actions">
+        <button class="btn btn-secondary" id="btnSendCancel">Cancel</button>
+        <button class="btn btn-primary" id="btnSendConfirm">Yes, Send Now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Subscriber Modal -->
+  <div class="nl-modal-overlay" id="addSubModal">
+    <div class="nl-modal">
+      <h3>Add Subscriber</h3>
+      <div class="nl-field-group">
+        <label class="nl-label" for="addSubEmail">Email <span class="req">*</span></label>
+        <input type="email" id="addSubEmail" class="nl-input" placeholder="email@example.com">
+      </div>
+      <div class="nl-field-group">
+        <label class="nl-label" for="addSubFirst">First Name</label>
+        <input type="text" id="addSubFirst" class="nl-input" placeholder="First">
+      </div>
+      <div class="nl-field-group">
+        <label class="nl-label" for="addSubLast">Last Name</label>
+        <input type="text" id="addSubLast" class="nl-input" placeholder="Last">
+      </div>
+      <div class="nl-modal-actions">
+        <button class="btn btn-secondary" id="btnAddSubCancel">Cancel</button>
+        <button class="btn btn-primary" id="btnAddSubConfirm">Add Subscriber</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image upload helper (invisible) -->
+  <input type="file" id="nlImgUpload" accept="image/*" style="display:none">
+
+  <!-- Toast -->
+  <div id="nlToast" class="nl-toast" aria-live="polite"></div>
+
+  <script src="js/newsletter-admin.js"></script>
+</body>
+</html>

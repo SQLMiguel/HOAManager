@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Member Directory — Print Preview | Glenridge Community</title>
+  <style>
+    /* ── Reset / Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 14px;
+      color: #111;
+      background: #f0f0f0;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Screen Toolbar (hidden on print) ── */
+    .preview-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #2c5f3a;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .75rem 2rem;
+      gap: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+    .preview-toolbar h2 {
+      font-size: .95rem;
+      font-family: Arial, sans-serif;
+      font-weight: 600;
+      letter-spacing: .02em;
+      flex: 1;
+    }
+    .preview-toolbar-btns { display: flex; gap: .75rem; }
+    .tbtn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .5rem 1.2rem;
+      border-radius: .4rem;
+      font-family: Arial, sans-serif;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      transition: background .15s, color .15s;
+    }
+    .tbtn-print {
+      background: #fff;
+      color: #2c5f3a;
+      border-color: #fff;
+    }
+    .tbtn-print:hover { background: #e8f5ec; }
+    .tbtn-back {
+      background: transparent;
+      color: #fff;
+      border-color: rgba(255,255,255,.5);
+    }
+    .tbtn-back:hover { background: rgba(255,255,255,.12); }
+
+    /* ── Page Wrapper ── */
+    .page-wrap {
+      max-width: 900px;
+      margin: 2rem auto 4rem;
+      background: #fff;
+      border-radius: .5rem;
+      box-shadow: 0 4px 24px rgba(0,0,0,.12);
+      padding: 3rem 3.5rem;
+    }
+
+    /* ── Document Header ── */
+    .doc-header {
+      text-align: center;
+      border-bottom: 2.5px solid #2c5f3a;
+      padding-bottom: 1.2rem;
+      margin-bottom: 2rem;
+    }
+    .doc-logo {
+      font-size: 1.6rem;
+      color: #2c5f3a;
+      font-weight: 700;
+      letter-spacing: -.01em;
+    }
+    .doc-subtitle {
+      font-size: 1rem;
+      color: #444;
+      margin-top: .25rem;
+    }
+    .doc-meta {
+      margin-top: .6rem;
+      font-size: .82rem;
+      color: #666;
+      font-family: Arial, sans-serif;
+    }
+    .doc-disclaimer {
+      display: inline-block;
+      margin-top: .5rem;
+      font-size: .78rem;
+      color: #888;
+      font-style: italic;
+      border: 1px solid #d0d0d0;
+      border-radius: .3rem;
+      padding: .2rem .7rem;
+      font-family: Arial, sans-serif;
+    }
+
+    /* ── Loading / Error ── */
+    .state-msg {
+      text-align: center;
+      padding: 3rem;
+      font-family: Arial, sans-serif;
+      color: #555;
+      font-size: 1rem;
+    }
+    .state-msg.error { color: #b00; }
+
+    /* ── Letter Group ── */
+    .letter-group { margin-bottom: 1.8rem; }
+    .letter-heading {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #2c5f3a;
+      border-bottom: 1.5px solid #2c5f3a;
+      padding-bottom: .2rem;
+      margin-bottom: .75rem;
+      letter-spacing: .06em;
+    }
+    .entries-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem 3rem;
+    }
+
+    /* ── Individual Entry ── */
+    .entry {
+      padding: .45rem 0 .45rem;
+      border-bottom: 1px dotted #ccc;
+      break-inside: avoid;
+    }
+    .entry-name {
+      font-weight: 700;
+      font-size: .97rem;
+      color: #111;
+      margin-bottom: .2rem;
+    }
+    .entry-row {
+      font-size: .8rem;
+      line-height: 1.6;
+      color: #333;
+      display: flex;
+      gap: .35rem;
+    }
+    .entry-label {
+      font-weight: 700;
+      color: #2c5f3a;
+      min-width: 52px;
+      font-size: .78rem;
+      flex-shrink: 0;
+      font-family: Arial, sans-serif;
+    }
+    .entry-val { word-break: break-word; }
+
+    /* ── Document Footer ── */
+    .doc-footer {
+      margin-top: 2.5rem;
+      padding-top: .75rem;
+      border-top: 1px solid #ddd;
+      font-size: .75rem;
+      color: #aaa;
+      text-align: center;
+      font-family: Arial, sans-serif;
+    }
+
+    /* ── Print Styles ── */
+    @media print {
+      body { background: #fff !important; }
+      .preview-toolbar { display: none !important; }
+      .page-wrap {
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+        border-radius: 0;
+      }
+      .doc-header { padding-bottom: .8rem; margin-bottom: 1.4rem; }
+      .doc-logo   { font-size: 1.3rem; }
+      .letter-group { margin-bottom: 1.2rem; page-break-inside: avoid; }
+      .entries-grid { grid-template-columns: 1fr 1fr; gap: .35rem 2rem; }
+      .entry { padding: .3rem 0; }
+      .entry-name { font-size: .9rem; }
+      .entry-row  { font-size: .75rem; }
+      @page { margin: 1.8cm 1.5cm; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen-only toolbar -->
+  <div class="preview-toolbar" id="toolbar">
+    <h2>🖨️ &nbsp; Directory Print Preview — Glenridge Community</h2>
+    <div class="preview-toolbar-btns">
+      <button class="tbtn tbtn-back" onclick="window.close()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <button class="tbtn tbtn-print" id="printBtn" onclick="window.print()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 6 2 18 2 18 9"/>
+          <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+          <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Print
+      </button>
+    </div>
+  </div>
+
+  <!-- Printable document -->
+  <div class="page-wrap" id="pageWrap">
+
+    <div class="doc-header" id="docHeader">
+      <div class="doc-logo">Glenridge Community</div>
+      <div class="doc-subtitle">Member Directory</div>
+      <div class="doc-meta" id="docMeta">Loading…</div>
+      <div class="doc-disclaimer">&#128274; For private community use only &mdash; redistribution prohibited.</div>
+    </div>
+
+    <div id="docBody">
+      <p class="state-msg" id="stateMsg">Loading directory…</p>
+    </div>
+
+    <div class="doc-footer" id="docFooter" style="display:none;">
+      glenridgecommunity.com &nbsp;·&nbsp; Generated <span id="footerDate"></span>
+    </div>
+
+  </div>
+
+  <script>
+  (function () {
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function displayName(m) {
+      if (m.profile && m.profile.display_name) return m.profile.display_name;
+      if (!m.user) return '(Unknown)';
+      return [m.user.first_name, m.user.last_name].filter(Boolean).join(' ') || '(Unknown)';
+    }
+    function row(label, val) {
+      return `<div class="entry-row"><span class="entry-label">${label}</span><span class="entry-val">${esc(val)}</span></div>`;
+    }
+
+    async function load() {
+      const stateEl = document.getElementById('stateMsg');
+      try {
+        // Auth check
+        const me = await fetch('/api/me');
+        if (!me.ok) { authFail(); return; }
+        const meData = await me.json();
+        if (!meData.authenticated) { authFail(); return; }
+
+        // Fetch directory
+        const res  = await fetch('/api/directory');
+        if (!res.ok) { stateEl.textContent = 'Failed to load directory. Please close and try again.'; stateEl.className = 'state-msg error'; return; }
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          stateEl.textContent = 'No members are currently in the directory.'; return;
+        }
+        render(data);
+      } catch (err) {
+        stateEl.textContent = 'Network error. Please close and try again.';
+        stateEl.className   = 'state-msg error';
+        console.error(err);
+      }
+    }
+
+    function authFail() {
+      document.getElementById('stateMsg').textContent = 'Access denied. Please log in as an approved member.';
+      document.getElementById('stateMsg').className   = 'state-msg error';
+      document.getElementById('printBtn').disabled    = true;
+    }
+
+    function render(members) {
+      const dateStr = new Date().toLocaleDateString('en-US', { dateStyle: 'long' });
+      document.getElementById('docMeta').innerHTML =
+        `Printed <strong>${esc(dateStr)}</strong> &nbsp;·&nbsp; <strong>${members.length}</strong> household${members.length !== 1 ? 's' : ''}`;
+      document.getElementById('footerDate').textContent = dateStr;
+      document.getElementById('docFooter').style.display = '';
+
+      // Alphabetical grouping
+      const groups = {};
+      members.forEach(m => {
+        const sortName = (m.profile && m.profile.display_name)
+          ? m.profile.display_name
+          : `${(m.user && m.user.last_name) || ''} ${(m.user && m.user.first_name) || ''}`.trim();
+        const letter = (sortName[0] || '#').toUpperCase();
+        (groups[letter] = groups[letter] || []).push(m);
+      });
+
+      const letters = Object.keys(groups).sort();
+      const body    = document.getElementById('docBody');
+      body.innerHTML = letters.map(letter => {
+        const entries = groups[letter].map(m => {
+          const user = m.user || {};
+          const prof = m.profile || {};
+
+          const adults   = (m.adults   || []).filter(a => a.name).map(a => esc(a.name));
+          const children = (m.children || []).filter(c => c.first_name).map(c => esc(c.first_name));
+          const pets     = (m.pets     || []).filter(p => p.name)
+            .map(p => esc(p.name) + (p.pet_type ? ` (${esc(p.pet_type)})` : ''));
+
+          const rows = [];
+          if (user.address)                           rows.push(`<div class="entry-row"><span class="entry-label">Address</span><span class="entry-val"><a href="https://maps.google.com/?q=${encodeURIComponent(user.address)}" target="_blank" rel="noopener">${esc(user.address)}</a></span></div>`);
+          if (user.email)                             rows.push(row('Email', user.email));
+          if (prof.show_phone && prof.phone)          rows.push(row('Phone', prof.phone));
+          if (adults.length)                          rows.push(`<div class="entry-row"><span class="entry-label">Adults</span><span class="entry-val">${adults.join(', ')}</span></div>`);
+          if (children.length)                        rows.push(`<div class="entry-row"><span class="entry-label">Children</span><span class="entry-val">${children.join(', ')}</span></div>`);
+          if (pets.length)                            rows.push(`<div class="entry-row"><span class="entry-label">Pets</span><span class="entry-val">${pets.join(', ')}</span></div>`);
+          if (prof.show_anniversary && prof.anniversary) rows.push(row('Anniv.', prof.anniversary));
+          if (prof.show_interests && prof.interests)  rows.push(row('Interests', prof.interests));
+
+          return `<div class="entry">
+            <div class="entry-name">${esc(displayName(m))}</div>
+            ${rows.join('')}
+          </div>`;
+        }).join('');
+
+        return `<div class="letter-group">
+          <div class="letter-heading">${esc(letter)}</div>
+          <div class="entries-grid">${entries}</div>
+        </div>`;
+      }).join('');
+    }
+
+    load();
+  })();
+  </script>
+
+</body>
+</html>
