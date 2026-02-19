@@ -1,2 +1,1 @@
-# HOAManager
-Homeowners Association Manager application
+# HOA Manager
