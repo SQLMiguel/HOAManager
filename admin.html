@@ -7,17 +7,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="images/LogoFlower_Edited.png">
   <link rel="stylesheet" href="css/style.css">
   <style>
     /* Admin-specific styles */
     .admin-container { max-width: 1000px; margin: 0 auto; padding: 40px 24px; }
     .admin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
     .admin-header h1 { font-size: 1.8rem; color: var(--text); }
-    .admin-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
-    .admin-tab { padding: 10px 20px; border-radius: 8px; border: 2px solid var(--primary); background: transparent;
-      color: var(--primary); cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s ease; font-family: var(--font-body); }
+    .admin-tabs { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; align-items: stretch; }
+    .admin-tab-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px 14px;
+      border: 1px solid #e0e4ea; border-radius: 10px; background: #f8f9fa; }
+    .admin-tab-group-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;
+      color: var(--text-light); margin-bottom: 6px; padding-left: 4px; }
+    .admin-tab { padding: 8px 16px; border-radius: 6px; border: 2px solid var(--primary); background: transparent;
+      color: var(--primary); cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s ease; font-family: var(--font-body); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
     .admin-tab.active, .admin-tab:hover { background: var(--primary); color: white; }
-    .admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .admin-stats-group { margin-bottom: 24px; }
+    .admin-stats-group-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; color: var(--text-light); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .admin-stats-group-label::after { content: ''; flex: 1; height: 1px; background: #e0e0e0; }
+    .admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 0; }
     .admin-stat { background: var(--white); border-radius: var(--radius-sm); padding: 20px; text-align: center; box-shadow: var(--shadow-sm); }
     .admin-stat .count { font-size: 2rem; font-weight: 700; color: var(--primary); }
     .admin-stat .label { font-size: 0.85rem; color: var(--text-light); margin-top: 4px; }
@@ -52,6 +60,91 @@
     .admin-login-card { background: var(--white); border-radius: var(--radius); padding: 40px 32px; box-shadow: var(--shadow-lg); text-align: center; }
     .admin-login-card h2 { margin-bottom: 8px; }
     .admin-login-card p { color: var(--text-light); margin-bottom: 24px; font-size: 0.9rem; }
+
+    /* Pool management styles */
+    .pool-section { display: none; }
+    .pool-section.active { display: block; }
+    .pool-sub-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+    .pool-sub-tab { padding: 8px 16px; border-radius: 6px; border: 1px solid #ddd; background: #f8f9fa;
+      cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.2s; font-family: var(--font-body); color: var(--text); }
+    .pool-sub-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .pool-sub-tab:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
+    .pool-panel { display: none; }
+    .pool-panel.active { display: block; }
+    .pool-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+    .pool-toolbar .btn { padding: 8px 16px; font-size: 0.85rem; }
+    .pool-table { width: 100%; border-collapse: collapse; background: var(--white); border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .pool-table th { background: #f1f3f5; padding: 12px 16px; text-align: left; font-size: 0.8rem; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--text-light); font-weight: 600; border-bottom: 2px solid #e0e0e0; }
+    .pool-table td { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem; vertical-align: middle; }
+    .pool-table tr:hover td { background: #f8fdf9; }
+    .pool-table .actions { display: flex; gap: 6px; }
+    .pool-table .actions button { padding: 5px 10px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.78rem; font-weight: 600; font-family: var(--font-body); }
+    .pool-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .pool-badge-active { background: #d4edda; color: #155724; }
+    .pool-badge-suspended { background: #fff3cd; color: #856404; }
+    .pool-badge-inactive { background: #f8d7da; color: #721c24; }
+    .pool-badge-system { background: #e8eaf6; color: #283593; }
+    .pool-badge-unlimited { background: #e3f2fd; color: #0d47a1; }
+    .pool-badge-recurring { background: #e8f5e9; color: #2e7d32; }
+    .pool-badge-one_time { background: #fff3e0; color: #e65100; }
+    .pool-badge-holiday { background: #fce4ec; color: #c62828; }
+    .pool-badge-yes { background: #d4edda; color: #155724; }
+    .pool-badge-no { background: #f8d7da; color: #721c24; }
+
+    /* Pool modal */
+    .pool-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; }
+    .pool-modal-overlay.open { display: flex; }
+    .pool-modal { background: var(--white); border-radius: var(--radius); padding: 32px; max-width: 520px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+    .pool-modal h3 { margin-bottom: 16px; font-size: 1.15rem; }
+    .pool-modal .form-group { margin-bottom: 14px; }
+    .pool-modal label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; color: var(--text); }
+    .pool-modal input, .pool-modal select, .pool-modal textarea { width: 100%; padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 6px;
+      font-size: 0.9rem; font-family: var(--font-body); }
+    .pool-modal input:focus, .pool-modal select:focus, .pool-modal textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(45,106,79,0.1); }
+    .pool-modal textarea { resize: vertical; min-height: 60px; }
+    .pool-modal .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .pool-modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .pool-modal .modal-actions button { padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.88rem; font-family: var(--font-body); }
+    .pool-modal .btn-save { background: var(--primary); color: white; }
+    .pool-modal .btn-save:hover { background: var(--primary-dark); }
+    .pool-modal .btn-cancel { background: #e0e0e0; color: var(--text); }
+    .pool-modal .btn-cancel:hover { background: #d0d0d0; }
+    .pool-modal .modal-error { color: #e74c3c; font-size: 0.82rem; margin-top: 4px; }
+    .pool-days-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pool-day-btn { padding: 6px 10px; border-radius: 4px; border: 1px solid #d0d5dd; background: #f8f9fa; cursor: pointer;
+      font-size: 0.8rem; font-weight: 600; font-family: var(--font-body); transition: all 0.15s; }
+    .pool-day-btn.selected { background: var(--primary); color: white; border-color: var(--primary); }
+    .pool-access-result { margin-top: 16px; }
+
+    @media (max-width: 768px) {
+      .pool-table { font-size: 0.82rem; }
+      .pool-table th, .pool-table td { padding: 8px 10px; }
+      .pool-modal .form-row { grid-template-columns: 1fr; }
+    }
+
+    .admin-footer { margin-top: 48px; padding: 24px 0; border-top: 1px solid #e0e0e0; text-align: center; }
+    .admin-footer-warning { display: inline-flex; align-items: flex-start; gap: 10px; background: #fff8e1; border: 1px solid #ffe082;
+      border-radius: 8px; padding: 14px 20px; max-width: 640px; margin: 0 auto 12px; text-align: left; font-size: 0.84rem; color: #5d4037; line-height: 1.5; }
+    .admin-footer-warning svg { flex-shrink: 0; margin-top: 2px; }
+    .admin-footer-copy { font-size: 0.78rem; color: var(--text-light); margin: 0; }
+
+    /* Trend chart */
+    .trend-chart-wrapper { margin-bottom: 24px; }
+    .trend-chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .trend-chart-header h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0; }
+    .trend-chart-header .trend-total { font-size: 0.82rem; color: var(--text-light); }
+    .trend-chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; background: var(--white); border-radius: var(--radius-sm);
+      padding: 16px 12px 28px; box-shadow: var(--shadow-sm); position: relative; }
+    .trend-bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; height: 100%; justify-content: flex-end; }
+    .trend-bar { width: 100%; min-width: 4px; max-width: 18px; border-radius: 3px 3px 0 0; background: var(--primary); transition: height 0.3s ease;
+      cursor: default; position: relative; }
+    .trend-bar.denied { background: #e74c3c; }
+    .trend-bar-label { position: absolute; bottom: -22px; font-size: 0.6rem; color: var(--text-light); white-space: nowrap;
+      transform: rotate(-45deg); transform-origin: top left; }
+    .trend-bar-group:hover .trend-bar { opacity: 0.8; }
+    .trend-bar-group:hover::after { content: attr(data-tip); position: absolute; top: -28px; background: #333; color: #fff;
+      padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; white-space: nowrap; z-index: 10; }
   </style>
 </head>
 <body>
@@ -107,27 +200,59 @@
 
     <div class="admin-container">
       <div class="admin-header">
-        <h1>Member Management</h1>
-        <div style="display:flex;gap:10px;align-items:center">
-          <a href="newsletter-admin.html" class="btn btn-primary" style="padding:8px 20px;font-size:0.85rem;text-decoration:none">📰 Newsletter</a>
-          <button class="btn btn-outline" id="adminLogoutBtn" style="padding: 8px 20px; font-size: 0.85rem;">Log Out</button>
-        </div>
-      </div>
-
-      <!-- Stats -->
-      <div class="admin-stats" id="adminStats">
-        <div class="admin-stat"><div class="count" id="statPending">0</div><div class="label">Pending</div></div>
-        <div class="admin-stat"><div class="count" id="statApproved">0</div><div class="label">Approved</div></div>
-        <div class="admin-stat"><div class="count" id="statDenied">0</div><div class="label">Denied</div></div>
-        <div class="admin-stat"><div class="count" id="statTotal">0</div><div class="label">Total</div></div>
+        <h1>Admin Panel</h1>
+        <button class="btn btn-outline" id="adminLogoutBtn" style="padding: 8px 20px; font-size: 0.85rem;">Log Out</button>
       </div>
 
       <!-- Tabs -->
       <div class="admin-tabs">
-        <button class="admin-tab active" data-filter="pending">Pending Approval</button>
-        <button class="admin-tab" data-filter="approved">Approved</button>
-        <button class="admin-tab" data-filter="denied">Denied</button>
-        <button class="admin-tab" data-filter="all">All Users</button>
+        <div>
+          <div class="admin-tab-group-label">Members</div>
+          <div class="admin-tab-group">
+            <button class="admin-tab active" data-filter="pending">Pending Approval</button>
+            <button class="admin-tab" data-filter="approved">Approved</button>
+            <button class="admin-tab" data-filter="denied">Denied</button>
+            <button class="admin-tab" data-filter="all">All Users</button>
+          </div>
+        </div>
+        <div>
+          <div class="admin-tab-group-label">Management</div>
+          <div class="admin-tab-group">
+            <button class="admin-tab" data-filter="pool">🏊 Pool Management</button>
+            <a href="newsletter-admin.html" class="admin-tab">📰 Newsletter</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div id="adminStats">
+        <div class="admin-stats-group" id="statsMembers">
+          <div class="admin-stats-group-label">Members</div>
+          <div class="admin-stats">
+            <div class="admin-stat"><div class="count" id="statPending">0</div><div class="label">Pending</div></div>
+            <div class="admin-stat"><div class="count" id="statApproved">0</div><div class="label">Approved</div></div>
+            <div class="admin-stat"><div class="count" id="statDenied">0</div><div class="label">Denied</div></div>
+            <div class="admin-stat"><div class="count" id="statTotal">0</div><div class="label">Total</div></div>
+          </div>
+        </div>
+        <div class="admin-stats-group" id="statsPool">
+          <div class="admin-stats-group-label">Pool Activity</div>
+          <div class="admin-stats">
+            <div class="admin-stat"><div class="count" id="statPoolWeek">0</div><div class="label">This Week</div></div>
+            <div class="admin-stat"><div class="count" id="statPoolMonth">0</div><div class="label">This Month</div></div>
+            <div class="admin-stat"><div class="count" id="statPoolHoliday">0</div><div class="label">Holiday</div></div>
+            <div class="admin-stat"><div class="count" id="statPoolDenied">0</div><div class="label">Access Denied</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pool Trend Chart -->
+      <div class="trend-chart-wrapper" id="trendChartWrapper">
+        <div class="trend-chart-header">
+          <h3>📈 Pool Entries — Rolling 30 Days</h3>
+          <span class="trend-total" id="trendTotal"></span>
+        </div>
+        <div class="trend-chart" id="trendChart"></div>
       </div>
 
       <!-- User list -->
@@ -137,6 +262,290 @@
           <p>Loading users...</p>
         </div>
       </div>
+
+      <!-- ========== POOL MANAGEMENT SECTION ========== -->
+      <div class="pool-section" id="poolSection">
+        <h2 style="margin-bottom: 16px;">🏊 Pool Entry Management</h2>
+
+        <div class="pool-sub-tabs">
+          <button class="pool-sub-tab active" data-pool-panel="poolMembers">Pool Members</button>
+          <button class="pool-sub-tab" data-pool-panel="poolSchedules">Schedules</button>
+          <button class="pool-sub-tab" data-pool-panel="poolEntryTypes">Entry Types</button>
+          <button class="pool-sub-tab" data-pool-panel="poolAccessCheck">Access Check</button>
+        </div>
+
+        <!-- ── Pool Members Panel ── -->
+        <div class="pool-panel active" id="poolMembers">
+          <div class="pool-toolbar">
+            <button class="btn btn-primary" id="poolSyncBtn">🔄 Sync Residents</button>
+            <button class="btn btn-outline" id="poolAddMemberBtn">+ Add Non-Resident</button>
+            <span id="poolMemberCount" style="margin-left:auto;font-size:0.85rem;color:var(--text-light);"></span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="pool-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Entry Type</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="poolMembersBody">
+                <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-light);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── Schedules Panel ── -->
+        <div class="pool-panel" id="poolSchedules">
+          <div class="pool-toolbar">
+            <button class="btn btn-primary" id="poolAddScheduleBtn">+ Add Schedule</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="pool-table">
+              <thead>
+                <tr>
+                  <th>Schedule Name</th>
+                  <th>Applies To</th>
+                  <th>Type</th>
+                  <th>Days / Date</th>
+                  <th>Time</th>
+                  <th>Date Range</th>
+                  <th>Active</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="poolSchedulesBody">
+                <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-light);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── Entry Types Panel ── -->
+        <div class="pool-panel" id="poolEntryTypes">
+          <div class="pool-toolbar">
+            <button class="btn btn-outline" id="poolAddTypeBtn">+ Add Entry Type</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="pool-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Members</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="poolTypesBody">
+                <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-light);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── Access Check Panel ── -->
+        <div class="pool-panel" id="poolAccessCheck">
+          <p style="margin-bottom: 12px; color: var(--text-light); font-size: 0.9rem;">Check who is allowed pool access at a specific date and time.</p>
+          <div class="pool-toolbar">
+            <div class="form-group" style="margin:0;">
+              <label for="accessCheckDate" style="font-size:0.82rem;font-weight:600;">Date</label>
+              <input type="date" id="accessCheckDate" style="padding:8px 10px;">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label for="accessCheckTime" style="font-size:0.82rem;font-weight:600;">Time</label>
+              <input type="time" id="accessCheckTime" style="padding:8px 10px;">
+            </div>
+            <button class="btn btn-primary" id="poolCheckAccessBtn">Check Access</button>
+          </div>
+          <div class="pool-access-result" id="poolAccessResult"></div>
+        </div>
+      </div>
+    </div>
+
+      <!-- Admin Footer -->
+      <footer class="admin-footer">
+        <div class="admin-footer-warning">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e65100" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span><strong>Security Notice:</strong> Do not share the admin username or password with unauthorized individuals. Access to this panel should be limited to designated HOA administrators only. If you believe your credentials have been compromised, change them immediately.</span>
+        </div>
+        <p class="admin-footer-copy">&copy; 2026 Glenridge Community HOA &mdash; Admin Panel</p>
+      </footer>
+  </div>
+
+  <!-- ── Pool Modals ── -->
+  <div class="pool-modal-overlay" id="poolMemberModal">
+    <div class="pool-modal">
+      <h3 id="poolMemberModalTitle">Add Pool Member</h3>
+      <form id="poolMemberForm">
+        <input type="hidden" id="pmEditId">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="pmFirstName">First Name *</label>
+            <input type="text" id="pmFirstName" required>
+          </div>
+          <div class="form-group">
+            <label for="pmLastName">Last Name *</label>
+            <input type="text" id="pmLastName" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="pmEntryType">Entry Type *</label>
+          <select id="pmEntryType" required></select>
+        </div>
+        <div class="form-group" id="pmStatusGroup" style="display:none;">
+          <label for="pmStatus">Status</label>
+          <select id="pmStatus">
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="pmNotes">Notes</label>
+          <textarea id="pmNotes" placeholder="Optional notes..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="pmRfid">RFID Tag</label>
+          <input type="text" id="pmRfid" placeholder="Scan or enter RFID tag ID">
+        </div>
+        <div class="modal-error" id="pmError"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closePoolModal('poolMemberModal')">Cancel</button>
+          <button type="submit" class="btn-save" id="pmSaveBtn">Add Member</button>
+        </div>
+      </form>
+
+      <!-- Schedules for this member (shown in edit mode only) -->
+      <div id="pmSchedulesSection" style="display:none; margin-top: 24px; border-top: 2px solid #e0e0e0; padding-top: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+          <h4 style="margin:0; font-size: 1rem;">Associated Schedules</h4>
+          <button type="button" class="btn btn-outline" id="pmAddScheduleBtn" style="padding:5px 12px; font-size:0.8rem;">+ Assign Schedule</button>
+        </div>
+        <div id="pmSchedulesList"></div>
+
+        <!-- Inline assign schedule form -->
+        <div id="pmAssignScheduleForm" style="display:none; margin-top: 12px; padding: 14px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label for="pmAssignExisting" style="font-size:0.82rem;">Assign an existing schedule</label>
+            <select id="pmAssignExisting" style="width:100%;padding:8px 10px;border:1px solid #d0d5dd;border-radius:6px;font-size:0.88rem;font-family:var(--font-body);"></select>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn-save" id="pmAssignBtn" style="padding:6px 14px;font-size:0.82rem;border-radius:5px;border:none;cursor:pointer;font-weight:600;font-family:var(--font-body);background:var(--primary);color:white;">Assign</button>
+            <button type="button" class="btn-cancel" id="pmAssignCancelBtn" style="padding:6px 14px;font-size:0.82rem;border-radius:5px;border:none;cursor:pointer;font-weight:600;font-family:var(--font-body);">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pool-modal-overlay" id="poolScheduleModal">
+    <div class="pool-modal">
+      <h3 id="poolScheduleModalTitle">Add Schedule</h3>
+      <form id="poolScheduleForm">
+        <input type="hidden" id="psEditId">
+        <div class="form-group">
+          <label for="psName">Schedule Name *</label>
+          <input type="text" id="psName" required placeholder="e.g. Summer Weekday Hours">
+        </div>
+        <div class="form-group">
+          <label for="psAssignType">Assign To</label>
+          <select id="psAssignType">
+            <option value="entry_type">Entry Type (applies to all of that type)</option>
+            <option value="member">Specific Member</option>
+          </select>
+        </div>
+        <div class="form-group" id="psEntryTypeGroup">
+          <label for="psEntryType">Entry Type *</label>
+          <select id="psEntryType"></select>
+        </div>
+        <div class="form-group" id="psMemberGroup" style="display:none;">
+          <label for="psMember">Pool Member *</label>
+          <select id="psMember"></select>
+        </div>
+        <div class="form-group">
+          <label for="psScheduleType">Schedule Type *</label>
+          <select id="psScheduleType" required>
+            <option value="recurring">Recurring (weekly)</option>
+            <option value="one_time">One-Time</option>
+            <option value="holiday">Holiday (overrides other schedules)</option>
+            <option value="unlimited">Unlimited (24/7)</option>
+          </select>
+        </div>
+        <div id="psRecurringFields">
+          <div class="form-group">
+            <label>Days of Week *</label>
+            <div class="pool-days-grid" id="psDaysGrid">
+              <button type="button" class="pool-day-btn" data-day="Sun">Sun</button>
+              <button type="button" class="pool-day-btn" data-day="Mon">Mon</button>
+              <button type="button" class="pool-day-btn" data-day="Tue">Tue</button>
+              <button type="button" class="pool-day-btn" data-day="Wed">Wed</button>
+              <button type="button" class="pool-day-btn" data-day="Thu">Thu</button>
+              <button type="button" class="pool-day-btn" data-day="Fri">Fri</button>
+              <button type="button" class="pool-day-btn" data-day="Sat">Sat</button>
+            </div>
+          </div>
+        </div>
+        <div id="psOneTimeFields" style="display:none;">
+          <div class="form-group">
+            <label for="psSpecificDate">Date *</label>
+            <input type="date" id="psSpecificDate">
+          </div>
+        </div>
+        <div id="psTimeFields">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="psStartTime">Start Time *</label>
+              <input type="time" id="psStartTime">
+            </div>
+            <div class="form-group">
+              <label for="psEndTime">End Time *</label>
+              <input type="time" id="psEndTime">
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="psStartDate">Effective From</label>
+            <input type="date" id="psStartDate">
+          </div>
+          <div class="form-group">
+            <label for="psEndDate">Effective Until</label>
+            <input type="date" id="psEndDate">
+          </div>
+        </div>
+        <div class="modal-error" id="psError"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closePoolModal('poolScheduleModal')">Cancel</button>
+          <button type="submit" class="btn-save" id="psSaveBtn">Add Schedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="pool-modal-overlay" id="poolTypeModal">
+    <div class="pool-modal">
+      <h3>Add Entry Type</h3>
+      <form id="poolTypeForm">
+        <div class="form-group">
+          <label for="ptName">Type Name *</label>
+          <input type="text" id="ptName" required placeholder="e.g. Guest">
+        </div>
+        <div class="form-group">
+          <label for="ptDesc">Description</label>
+          <textarea id="ptDesc" placeholder="Optional description..."></textarea>
+        </div>
+        <div class="modal-error" id="ptError"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closePoolModal('poolTypeModal')">Cancel</button>
+          <button type="submit" class="btn-save">Add Type</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -205,17 +614,61 @@
       loginSection.style.display = 'none';
       adminPanel.style.display = 'block';
       loadUsers();
+      loadPoolStats();
+      loadPoolTrend();
     }
 
-    // Tabs
-    document.querySelectorAll('.admin-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        currentFilter = tab.dataset.filter;
-        renderUsers();
-      });
-    });
+    async function loadPoolStats() {
+      try {
+        const res = await fetch('/api/admin/pool/stats');
+        const data = await res.json();
+        document.getElementById('statPoolWeek').textContent = data.week_attendance;
+        document.getElementById('statPoolMonth').textContent = data.month_attendance;
+        document.getElementById('statPoolHoliday').textContent = data.holiday_attendance;
+        document.getElementById('statPoolDenied').textContent = data.access_denied;
+      } catch (e) { /* stats will show 0 */ }
+    }
+
+    async function loadPoolTrend() {
+      try {
+        const res = await fetch('/api/admin/pool/trend?days=30');
+        const trend = await res.json();
+        renderTrendChart(trend);
+      } catch (e) { /* chart stays empty */ }
+    }
+
+    function renderTrendChart(trend) {
+      const chart = document.getElementById('trendChart');
+      const totalEl = document.getElementById('trendTotal');
+      if (!trend || trend.length === 0) {
+        chart.innerHTML = '<span style="color:var(--text-light);font-size:0.85rem;margin:auto;">No pool entry data yet.</span>';
+        totalEl.textContent = '';
+        return;
+      }
+
+      const maxVal = Math.max(...trend.map(d => d.allowed + d.denied), 1);
+      const totalAllowed = trend.reduce((s, d) => s + d.allowed, 0);
+      const totalDenied = trend.reduce((s, d) => s + d.denied, 0);
+      totalEl.textContent = `${totalAllowed} entries, ${totalDenied} denied`;
+
+      const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      chart.innerHTML = trend.map((d, i) => {
+        const total = d.allowed + d.denied;
+        const pctAllowed = (d.allowed / maxVal) * 100;
+        const pctDenied = (d.denied / maxVal) * 100;
+        const dt = new Date(d.date + 'T12:00:00');
+        const dayLabel = dayNames[dt.getDay()];
+        const showLabel = i === 0 || i === trend.length - 1 || dt.getDay() === 0;
+        const dateStr = (dt.getMonth()+1) + '/' + dt.getDate();
+        const tip = `${dateStr}: ${d.allowed} in, ${d.denied} denied`;
+
+        return `<div class="trend-bar-group" data-tip="${tip}">
+          ${d.denied > 0 ? `<div class="trend-bar denied" style="height:${Math.max(pctDenied, 2)}%;"></div>` : ''}
+          <div class="trend-bar" style="height:${total > 0 ? Math.max(pctAllowed, 2) : 0}%;"></div>
+          ${showLabel ? `<span class="trend-bar-label">${dateStr}</span>` : ''}
+        </div>`;
+      }).join('');
+    }
 
     async function loadUsers() {
       try {
@@ -326,6 +779,633 @@
       document.body.appendChild(note);
       setTimeout(() => { note.style.animation = 'slideOutRight 0.3s ease'; setTimeout(() => note.remove(), 300); }, 5000);
     }
+
+    // ══════════════════════════════════════════════════════
+    //  POOL MANAGEMENT
+    // ══════════════════════════════════════════════════════
+
+    const poolSection = document.getElementById('poolSection');
+    const userListSection = document.getElementById('userList');
+    const statsSection = document.getElementById('adminStats');
+    const statsMembersGroup = document.getElementById('statsMembers');
+    const statsPoolGroup = document.getElementById('statsPool');
+    const trendChartWrapper = document.getElementById('trendChartWrapper');
+    let poolEntryTypes = [];
+    let poolMembers = [];
+    let poolSchedules = [];
+
+    // Tab switching — handle pool tab
+    document.querySelectorAll('.admin-tab[data-filter]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        if (tab.dataset.filter === 'pool') {
+          userListSection.style.display = 'none';
+          statsMembersGroup.style.display = 'none';
+          statsPoolGroup.style.display = '';
+          trendChartWrapper.style.display = '';
+          poolSection.classList.add('active');
+          loadPoolData();
+          loadPoolStats();
+          loadPoolTrend();
+        } else {
+          poolSection.classList.remove('active');
+          userListSection.style.display = '';
+          statsMembersGroup.style.display = '';
+          statsPoolGroup.style.display = '';
+          trendChartWrapper.style.display = '';
+          currentFilter = tab.dataset.filter;
+          renderUsers();
+        }
+      });
+    });
+
+    // Pool sub-tabs
+    document.querySelectorAll('.pool-sub-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.pool-sub-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.pool-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.poolPanel).classList.add('active');
+      });
+    });
+
+    async function loadPoolData() {
+      try {
+        const [typesRes, membersRes, schedulesRes] = await Promise.all([
+          fetch('/api/admin/pool/entry-types'),
+          fetch('/api/admin/pool/members'),
+          fetch('/api/admin/pool/schedules')
+        ]);
+        poolEntryTypes = await typesRes.json();
+        poolMembers = await membersRes.json();
+        poolSchedules = await schedulesRes.json();
+        renderPoolMembers();
+        renderPoolSchedules();
+        renderPoolEntryTypes();
+      } catch (e) {
+        console.error('Failed to load pool data:', e);
+      }
+    }
+
+    // ── Pool Members ──
+    function renderPoolMembers() {
+      const body = document.getElementById('poolMembersBody');
+      document.getElementById('poolMemberCount').textContent = `${poolMembers.length} member(s)`;
+
+      if (poolMembers.length === 0) {
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-light);">No pool members yet. Click "Sync Residents" to import approved members.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = poolMembers.map(m => `
+        <tr>
+          <td><strong>${m.first_name} ${m.last_name}</strong></td>
+          <td>${m.entry_type_name}</td>
+          <td>${m.source === 'member' ? 'Auto (member)' : m.source === 'family' ? 'Auto (family)' : 'Manual'}</td>
+          <td><span class="pool-badge pool-badge-${m.status}">${m.status}</span></td>
+          <td>${m.notes || '—'}</td>
+          <td class="actions">
+            <button class="btn-approve" onclick="editPoolMember('${m.id}')">Edit</button>
+            <button class="btn-delete" onclick="deletePoolMember('${m.id}', '${m.first_name} ${m.last_name}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Sync residents
+    document.getElementById('poolSyncBtn').addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/admin/pool/sync-residents', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showAdminNotification(data.message, 'success');
+          await loadPoolData();
+        } else {
+          showAdminNotification(data.error, 'error');
+        }
+      } catch (e) {
+        showAdminNotification('Failed to sync residents.', 'error');
+      }
+    });
+
+    // Add non-resident member
+    document.getElementById('poolAddMemberBtn').addEventListener('click', () => {
+      document.getElementById('pmEditId').value = '';
+      document.getElementById('poolMemberForm').reset();
+      document.getElementById('pmStatusGroup').style.display = 'none';
+      document.getElementById('pmSchedulesSection').style.display = 'none';
+      document.getElementById('poolMemberModalTitle').textContent = 'Add Non-Resident Pool Member';
+      document.getElementById('pmSaveBtn').textContent = 'Add Member';
+      populateEntryTypeSelect('pmEntryType');
+      openPoolModal('poolMemberModal');
+    });
+
+    window.editPoolMember = (id) => {
+      const m = poolMembers.find(x => x.id === id);
+      if (!m) return;
+      document.getElementById('pmEditId').value = m.id;
+      document.getElementById('pmFirstName').value = m.first_name;
+      document.getElementById('pmLastName').value = m.last_name;
+      document.getElementById('pmNotes').value = m.notes || '';
+      document.getElementById('pmRfid').value = m.rfid_tag || '';
+      document.getElementById('pmStatus').value = m.status;
+      document.getElementById('pmStatusGroup').style.display = '';
+      document.getElementById('poolMemberModalTitle').textContent = 'Edit Pool Member';
+      document.getElementById('pmSaveBtn').textContent = 'Save Changes';
+      populateEntryTypeSelect('pmEntryType', m.entry_type_id);
+      document.getElementById('pmSchedulesSection').style.display = '';
+      document.getElementById('pmAssignScheduleForm').style.display = 'none';
+      renderMemberSchedules(m);
+      openPoolModal('poolMemberModal');
+    };
+
+    // ── Member Schedules sub-section ──
+    function renderMemberSchedules(member) {
+      const container = document.getElementById('pmSchedulesList');
+
+      // Find schedules that apply: by entry type OR directly assigned to this member
+      const typeSchedules = poolSchedules.filter(s => s.entry_type_id === member.entry_type_id && !s.pool_member_id);
+      const individualSchedules = poolSchedules.filter(s => s.pool_member_id === member.id);
+
+      if (typeSchedules.length === 0 && individualSchedules.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-light);font-size:0.88rem;margin:0;">No schedules associated. This member has no pool access times defined.</p>';
+        return;
+      }
+
+      let html = '';
+
+      if (typeSchedules.length > 0) {
+        html += '<p style="font-size:0.82rem;color:var(--text-light);margin:0 0 6px;">Via entry type <strong>' + (member.entry_type_name) + '</strong>:</p>';
+        html += typeSchedules.map(s => buildScheduleRow(s, 'type')).join('');
+      }
+
+      if (individualSchedules.length > 0) {
+        html += '<p style="font-size:0.82rem;color:var(--text-light);margin:' + (typeSchedules.length ? '12px' : '0') + ' 0 6px;">Individually assigned:</p>';
+        html += individualSchedules.map(s => buildScheduleRow(s, 'individual')).join('');
+      }
+
+      container.innerHTML = html;
+    }
+
+    function buildScheduleRow(s, origin) {
+      const typeBadge = s.schedule_type === 'holiday'
+        ? '<span class="pool-badge pool-badge-holiday">🎄 holiday</span>'
+        : `<span class="pool-badge pool-badge-${s.schedule_type}">${s.schedule_type.replace('_', ' ')}</span>`;
+      const time = s.schedule_type === 'unlimited' ? '24/7'
+        : `${formatTime12(s.start_time)} – ${formatTime12(s.end_time)}`;
+      const daysOrDate = (s.schedule_type === 'one_time' || s.schedule_type === 'holiday') ? (s.specific_date || '')
+        : s.schedule_type === 'recurring' ? (s.days_of_week || '') : '';
+      const dateRange = (s.start_date || s.end_date)
+        ? `<span style="font-size:0.78rem;color:var(--text-light);"> (${s.start_date || '∞'} to ${s.end_date || '∞'})</span>` : '';
+      const actions = origin === 'individual'
+        ? `<button type="button" class="btn-delete" style="padding:3px 8px;font-size:0.75rem;" onclick="unassignScheduleFromMember('${s.id}')">Remove</button>`
+        : '<span style="font-size:0.75rem;color:var(--text-light);">(via type)</span>';
+
+      return `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1px solid #eee;border-radius:6px;margin-bottom:6px;flex-wrap:wrap;">
+          <strong style="font-size:0.88rem;">${s.name}</strong>
+          ${typeBadge}
+          <span style="font-size:0.84rem;">${daysOrDate ? daysOrDate + ' · ' : ''}${time}</span>
+          ${dateRange}
+          <span style="margin-left:auto;">${actions}</span>
+        </div>
+      `;
+    }
+
+    // Assign existing schedule to this member
+    document.getElementById('pmAddScheduleBtn').addEventListener('click', () => {
+      const memberId = document.getElementById('pmEditId').value;
+      const member = poolMembers.find(x => x.id === memberId);
+      if (!member) return;
+
+      // Show schedules that are NOT already individually assigned to this member
+      const assignedIds = poolSchedules.filter(s => s.pool_member_id === memberId).map(s => s.id);
+      const available = poolSchedules.filter(s => !assignedIds.includes(s.id) && !s.pool_member_id);
+
+      const sel = document.getElementById('pmAssignExisting');
+      if (available.length === 0) {
+        sel.innerHTML = '<option value="">No available schedules to assign</option>';
+      } else {
+        sel.innerHTML = available.map(s => {
+          const label = `${s.name} (${s.entry_type_name || 'type'} · ${s.schedule_type.replace('_',' ')})`;
+          return `<option value="${s.id}">${label}</option>`;
+        }).join('');
+      }
+      // Also add option to create a new individual schedule
+      sel.innerHTML += '<option value="__new__">+ Create new schedule for this member...</option>';
+
+      document.getElementById('pmAssignScheduleForm').style.display = '';
+    });
+
+    document.getElementById('pmAssignCancelBtn').addEventListener('click', () => {
+      document.getElementById('pmAssignScheduleForm').style.display = 'none';
+    });
+
+    document.getElementById('pmAssignBtn').addEventListener('click', async () => {
+      const memberId = document.getElementById('pmEditId').value;
+      const scheduleId = document.getElementById('pmAssignExisting').value;
+      if (!scheduleId) return;
+
+      if (scheduleId === '__new__') {
+        // Open the schedule modal pre-filled for this member
+        const member = poolMembers.find(x => x.id === memberId);
+        document.getElementById('psEditId').value = '';
+        document.getElementById('poolScheduleForm').reset();
+        document.getElementById('poolScheduleModalTitle').textContent = 'New Schedule for ' + (member ? member.first_name + ' ' + member.last_name : 'Member');
+        document.getElementById('psSaveBtn').textContent = 'Create Schedule';
+        document.getElementById('psAssignType').value = 'member';
+        handleAssignTypeChange();
+        populateEntryTypeSelect('psEntryType');
+        populateMemberSelect('psMember', memberId);
+        document.querySelectorAll('.pool-day-btn').forEach(b => b.classList.remove('selected'));
+        handleScheduleTypeChange();
+        document.getElementById('pmAssignScheduleForm').style.display = 'none';
+        openPoolModal('poolScheduleModal');
+        return;
+      }
+
+      // Duplicate the selected schedule as an individual one for this member
+      const sourceSchedule = poolSchedules.find(s => s.id === scheduleId);
+      if (!sourceSchedule) return;
+
+      try {
+        const res = await fetch('/api/admin/pool/schedules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: sourceSchedule.name,
+            entry_type_id: null,
+            pool_member_id: memberId,
+            schedule_type: sourceSchedule.schedule_type,
+            days_of_week: sourceSchedule.days_of_week,
+            start_time: sourceSchedule.start_time,
+            end_time: sourceSchedule.end_time,
+            specific_date: sourceSchedule.specific_date,
+            start_date: sourceSchedule.start_date,
+            end_date: sourceSchedule.end_date
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showAdminNotification('Schedule assigned to member.', 'success');
+          await loadPoolData();
+          const updated = poolMembers.find(x => x.id === memberId);
+          if (updated) renderMemberSchedules(updated);
+          document.getElementById('pmAssignScheduleForm').style.display = 'none';
+        } else {
+          showAdminNotification(data.error, 'error');
+        }
+      } catch (e) { showAdminNotification('Error assigning schedule.', 'error'); }
+    });
+
+    window.unassignScheduleFromMember = async (scheduleId) => {
+      if (!confirm('Remove this schedule from the member?')) return;
+      try {
+        const res = await fetch(`/api/admin/pool/schedules/${scheduleId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          showAdminNotification('Schedule removed from member.', 'success');
+          await loadPoolData();
+          const memberId = document.getElementById('pmEditId').value;
+          const updated = poolMembers.find(x => x.id === memberId);
+          if (updated) renderMemberSchedules(updated);
+        }
+      } catch (e) { showAdminNotification('Error removing schedule.', 'error'); }
+    };
+
+    window.deletePoolMember = async (id, name) => {
+      if (!confirm(`Remove ${name} from pool access? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/api/admin/pool/members/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          showAdminNotification('Pool member removed.', 'success');
+          await loadPoolData();
+        }
+      } catch (e) { showAdminNotification('Error removing member.', 'error'); }
+    };
+
+    document.getElementById('poolMemberForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const editId = document.getElementById('pmEditId').value;
+      const payload = {
+        first_name: document.getElementById('pmFirstName').value,
+        last_name: document.getElementById('pmLastName').value,
+        entry_type_id: document.getElementById('pmEntryType').value,
+        status: document.getElementById('pmStatus').value,
+        notes: document.getElementById('pmNotes').value,
+        rfid_tag: document.getElementById('pmRfid').value
+      };
+
+      try {
+        const url = editId ? `/api/admin/pool/members/${editId}` : '/api/admin/pool/members';
+        const method = editId ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (data.success) {
+          closePoolModal('poolMemberModal');
+          showAdminNotification(editId ? 'Member updated.' : 'Member added.', 'success');
+          await loadPoolData();
+        } else {
+          document.getElementById('pmError').textContent = data.error;
+        }
+      } catch (e) { document.getElementById('pmError').textContent = 'Connection error.'; }
+    });
+
+    // ── Pool Schedules ──
+    function renderPoolSchedules() {
+      const body = document.getElementById('poolSchedulesBody');
+      if (poolSchedules.length === 0) {
+        body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-light);">No schedules created yet.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = poolSchedules.map(s => {
+        const appliesTo = s.member_first_name
+          ? `${s.member_first_name} ${s.member_last_name}`
+          : (s.entry_type_name || '—');
+        const daysOrDate = (s.schedule_type === 'one_time' || s.schedule_type === 'holiday') ? (s.specific_date || '—')
+          : s.schedule_type === 'recurring' ? (s.days_of_week || '—')
+          : 'All';
+        const time = s.schedule_type === 'unlimited' ? '24/7'
+          : `${formatTime12(s.start_time)} – ${formatTime12(s.end_time)}`;
+        const dateRange = (s.start_date || s.end_date)
+          ? `${s.start_date || '∞'} to ${s.end_date || '∞'}` : '—';
+        const typeBadge = s.schedule_type === 'holiday'
+          ? '<span class="pool-badge pool-badge-holiday">🎄 holiday</span>'
+          : `<span class="pool-badge pool-badge-${s.schedule_type}">${s.schedule_type.replace('_',' ')}</span>`;
+
+        return `
+          <tr>
+            <td><strong>${s.name}</strong></td>
+            <td>${appliesTo}${s.member_first_name ? ' <em style="color:var(--text-light)">(individual)</em>' : ''}</td>
+            <td>${typeBadge}</td>
+            <td>${daysOrDate}</td>
+            <td>${time}</td>
+            <td style="font-size:0.82rem;">${dateRange}</td>
+            <td><span class="pool-badge pool-badge-${s.is_active ? 'active' : 'inactive'}">${s.is_active ? 'Yes' : 'No'}</span></td>
+            <td class="actions">
+              <button class="btn-approve" onclick="editPoolSchedule('${s.id}')">Edit</button>
+              <button class="btn-delete" onclick="deletePoolSchedule('${s.id}', '${s.name}')">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function formatTime12(t) {
+      if (!t) return '';
+      const [h, m] = t.split(':').map(Number);
+      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
+
+    document.getElementById('poolAddScheduleBtn').addEventListener('click', () => {
+      document.getElementById('psEditId').value = '';
+      document.getElementById('poolScheduleForm').reset();
+      document.getElementById('poolScheduleModalTitle').textContent = 'Add Schedule';
+      document.getElementById('psSaveBtn').textContent = 'Add Schedule';
+      document.querySelectorAll('.pool-day-btn').forEach(b => b.classList.remove('selected'));
+      populateEntryTypeSelect('psEntryType');
+      populateMemberSelect('psMember');
+      handleScheduleTypeChange();
+      handleAssignTypeChange();
+      openPoolModal('poolScheduleModal');
+    });
+
+    // Schedule type toggle
+    document.getElementById('psScheduleType').addEventListener('change', handleScheduleTypeChange);
+    function handleScheduleTypeChange() {
+      const type = document.getElementById('psScheduleType').value;
+      document.getElementById('psRecurringFields').style.display = type === 'recurring' ? '' : 'none';
+      document.getElementById('psOneTimeFields').style.display = (type === 'one_time' || type === 'holiday') ? '' : 'none';
+      document.getElementById('psTimeFields').style.display = type === 'unlimited' ? 'none' : '';
+    }
+
+    // Assign type toggle
+    document.getElementById('psAssignType').addEventListener('change', handleAssignTypeChange);
+    function handleAssignTypeChange() {
+      const val = document.getElementById('psAssignType').value;
+      document.getElementById('psEntryTypeGroup').style.display = val === 'entry_type' ? '' : 'none';
+      document.getElementById('psMemberGroup').style.display = val === 'member' ? '' : 'none';
+    }
+
+    // Day buttons
+    document.querySelectorAll('.pool-day-btn').forEach(btn => {
+      btn.addEventListener('click', () => btn.classList.toggle('selected'));
+    });
+
+    window.editPoolSchedule = (id) => {
+      const s = poolSchedules.find(x => x.id === id);
+      if (!s) return;
+      document.getElementById('psEditId').value = s.id;
+      document.getElementById('psName').value = s.name;
+      document.getElementById('psScheduleType').value = s.schedule_type;
+      document.getElementById('psStartTime').value = s.start_time || '';
+      document.getElementById('psEndTime').value = s.end_time || '';
+      document.getElementById('psSpecificDate').value = s.specific_date || '';
+      document.getElementById('psStartDate').value = s.start_date || '';
+      document.getElementById('psEndDate').value = s.end_date || '';
+      document.getElementById('poolScheduleModalTitle').textContent = 'Edit Schedule';
+      document.getElementById('psSaveBtn').textContent = 'Save Changes';
+
+      // Set assign type
+      if (s.pool_member_id) {
+        document.getElementById('psAssignType').value = 'member';
+      } else {
+        document.getElementById('psAssignType').value = 'entry_type';
+      }
+      handleAssignTypeChange();
+      populateEntryTypeSelect('psEntryType', s.entry_type_id);
+      populateMemberSelect('psMember', s.pool_member_id);
+
+      // Set days
+      document.querySelectorAll('.pool-day-btn').forEach(b => b.classList.remove('selected'));
+      if (s.days_of_week) {
+        s.days_of_week.split(',').forEach(d => {
+          const btn = document.querySelector(`.pool-day-btn[data-day="${d}"]`);
+          if (btn) btn.classList.add('selected');
+        });
+      }
+
+      handleScheduleTypeChange();
+      openPoolModal('poolScheduleModal');
+    };
+
+    window.deletePoolSchedule = async (id, name) => {
+      if (!confirm(`Delete schedule "${name}"?`)) return;
+      try {
+        const res = await fetch(`/api/admin/pool/schedules/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          showAdminNotification('Schedule deleted.', 'success');
+          await loadPoolData();
+        }
+      } catch (e) { showAdminNotification('Error deleting schedule.', 'error'); }
+    };
+
+    document.getElementById('poolScheduleForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const editId = document.getElementById('psEditId').value;
+      const assignType = document.getElementById('psAssignType').value;
+      const selectedDays = Array.from(document.querySelectorAll('.pool-day-btn.selected')).map(b => b.dataset.day).join(',');
+
+      const payload = {
+        name: document.getElementById('psName').value,
+        entry_type_id: assignType === 'entry_type' ? document.getElementById('psEntryType').value : null,
+        pool_member_id: assignType === 'member' ? document.getElementById('psMember').value : null,
+        schedule_type: document.getElementById('psScheduleType').value,
+        days_of_week: selectedDays || null,
+        start_time: document.getElementById('psStartTime').value || null,
+        end_time: document.getElementById('psEndTime').value || null,
+        specific_date: document.getElementById('psSpecificDate').value || null,
+        start_date: document.getElementById('psStartDate').value || null,
+        end_date: document.getElementById('psEndDate').value || null
+      };
+
+      try {
+        const url = editId ? `/api/admin/pool/schedules/${editId}` : '/api/admin/pool/schedules';
+        const method = editId ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (data.success) {
+          closePoolModal('poolScheduleModal');
+          showAdminNotification(editId ? 'Schedule updated.' : 'Schedule created.', 'success');
+          await loadPoolData();
+        } else {
+          document.getElementById('psError').textContent = data.error;
+        }
+      } catch (e) { document.getElementById('psError').textContent = 'Connection error.'; }
+    });
+
+    // ── Entry Types ──
+    function renderPoolEntryTypes() {
+      const body = document.getElementById('poolTypesBody');
+      body.innerHTML = poolEntryTypes.map(t => {
+        const memberCount = poolMembers.filter(m => m.entry_type_id === t.id).length;
+        return `
+          <tr>
+            <td><strong>${t.name}</strong></td>
+            <td>${t.description || '—'}</td>
+            <td>${t.is_system ? '<span class="pool-badge pool-badge-system">System</span>' : 'Custom'}</td>
+            <td>${memberCount}</td>
+            <td class="actions">
+              ${t.is_system ? '' : `<button class="btn-delete" onclick="deletePoolEntryType('${t.id}', '${t.name}')">Delete</button>`}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('poolAddTypeBtn').addEventListener('click', () => {
+      document.getElementById('poolTypeForm').reset();
+      openPoolModal('poolTypeModal');
+    });
+
+    document.getElementById('poolTypeForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('ptName').value,
+        description: document.getElementById('ptDesc').value
+      };
+      try {
+        const res = await fetch('/api/admin/pool/entry-types', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          closePoolModal('poolTypeModal');
+          showAdminNotification('Entry type added.', 'success');
+          await loadPoolData();
+        } else {
+          document.getElementById('ptError').textContent = data.error;
+        }
+      } catch (e) { document.getElementById('ptError').textContent = 'Connection error.'; }
+    });
+
+    window.deletePoolEntryType = async (id, name) => {
+      if (!confirm(`Delete entry type "${name}"?`)) return;
+      try {
+        const res = await fetch(`/api/admin/pool/entry-types/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          showAdminNotification('Entry type deleted.', 'success');
+          await loadPoolData();
+        } else {
+          showAdminNotification(data.error, 'error');
+        }
+      } catch (e) { showAdminNotification('Error.', 'error'); }
+    };
+
+    // ── Access Check ──
+    // Set default date/time to now
+    const now = new Date();
+    document.getElementById('accessCheckDate').value = now.toISOString().split('T')[0];
+    document.getElementById('accessCheckTime').value = now.toTimeString().slice(0, 5);
+
+    document.getElementById('poolCheckAccessBtn').addEventListener('click', async () => {
+      const date = document.getElementById('accessCheckDate').value;
+      const time = document.getElementById('accessCheckTime').value;
+      if (!date || !time) { showAdminNotification('Please select date and time.', 'error'); return; }
+
+      try {
+        const res = await fetch(`/api/admin/pool/access-check?date=${date}&time=${time}`);
+        const data = await res.json();
+        const resultDiv = document.getElementById('poolAccessResult');
+
+        const allowed = data.members.filter(m => m.allowed);
+        const denied = data.members.filter(m => !m.allowed);
+
+        resultDiv.innerHTML = `
+          <p style="margin-bottom:12px;font-weight:600;">${data.day}, ${date} at ${formatTime12(data.time)} — ${allowed.length} allowed, ${denied.length} denied</p>
+          <table class="pool-table">
+            <thead>
+              <tr><th>Name</th><th>Entry Type</th><th>Access</th><th>Schedule / Reason</th></tr>
+            </thead>
+            <tbody>
+              ${data.members.map(m => `
+                <tr>
+                  <td>${m.first_name} ${m.last_name}</td>
+                  <td>${m.entry_type_name}</td>
+                  <td><span class="pool-badge pool-badge-${m.allowed ? 'yes' : 'no'}">${m.allowed ? 'Allowed' : 'Denied'}</span></td>
+                  <td>${m.reason}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (e) { showAdminNotification('Error checking access.', 'error'); }
+    });
+
+    // ── Helpers ──
+    function populateEntryTypeSelect(selectId, selectedId) {
+      const sel = document.getElementById(selectId);
+      sel.innerHTML = poolEntryTypes.map(t =>
+        `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${t.name}</option>`
+      ).join('');
+    }
+
+    function populateMemberSelect(selectId, selectedId) {
+      const sel = document.getElementById(selectId);
+      sel.innerHTML = poolMembers.map(m =>
+        `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${m.first_name} ${m.last_name} (${m.entry_type_name})</option>`
+      ).join('');
+    }
+
+    window.openPoolModal = (id) => { document.getElementById(id).classList.add('open'); };
+    window.closePoolModal = (id) => {
+      document.getElementById(id).classList.remove('open');
+      // Clear errors
+      document.querySelectorAll('.modal-error').forEach(el => el.textContent = '');
+    };
+
+    // Close modals on overlay click
+    document.querySelectorAll('.pool-modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.classList.remove('open');
+      });
+    });
   });
   </script>
 </body>

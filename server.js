@@ -11,6 +11,7 @@ const bcrypt = require('bcryptjs');
 const initSqlJs = require('sql.js');
 const nodemailer = require('nodemailer');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -218,6 +219,130 @@ async function initDb() {
       occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Password reset tokens table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // ── Pool Management tables ─────────────────────────────
+  db.run(`
+    CREATE TABLE IF NOT EXISTS pool_entry_types (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      description TEXT,
+      is_system INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS pool_members (
+      id TEXT PRIMARY KEY,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      entry_type_id TEXT NOT NULL,
+      user_id TEXT,
+      rfid_tag TEXT UNIQUE,
+      source TEXT DEFAULT 'manual',
+      status TEXT DEFAULT 'active' CHECK(status IN ('active','suspended','inactive')),
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS pool_schedules (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      entry_type_id TEXT,
+      pool_member_id TEXT,
+      schedule_type TEXT NOT NULL CHECK(schedule_type IN ('recurring','one_time','unlimited','holiday')),
+      days_of_week TEXT,
+      start_time TEXT,
+      end_time TEXT,
+      specific_date TEXT,
+      start_date TEXT,
+      end_date TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Pool check-in log (attendance tracking)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS pool_checkins (
+      id TEXT PRIMARY KEY,
+      pool_member_id TEXT NOT NULL,
+      entry_type_id TEXT NOT NULL,
+      check_in_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      check_out_time DATETIME,
+      status TEXT DEFAULT 'allowed' CHECK(status IN ('allowed','denied')),
+      is_holiday INTEGER DEFAULT 0,
+      notes TEXT
+    )
+  `);
+
+  // Migration: update pool_schedules CHECK constraint to allow 'holiday' type
+  try {
+    const tableInfo = dbGet("SELECT sql FROM sqlite_master WHERE type='table' AND name='pool_schedules'");
+    if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'holiday'")) {
+      db.run(`ALTER TABLE pool_schedules RENAME TO pool_schedules_old`);
+      db.run(`
+        CREATE TABLE pool_schedules (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          entry_type_id TEXT,
+          pool_member_id TEXT,
+          schedule_type TEXT NOT NULL CHECK(schedule_type IN ('recurring','one_time','unlimited','holiday')),
+          days_of_week TEXT,
+          start_time TEXT,
+          end_time TEXT,
+          specific_date TEXT,
+          start_date TEXT,
+          end_date TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.run(`INSERT INTO pool_schedules SELECT * FROM pool_schedules_old`);
+      db.run(`DROP TABLE pool_schedules_old`);
+      saveDb();
+      console.log('  ✓ Migrated pool_schedules to support holiday schedule type');
+    }
+  } catch (e) { /* table may not exist yet — that's fine, CREATE TABLE above handles it */ }
+
+  // Migration: add rfid_tag column to pool_members if missing
+  try {
+    const pmInfo = dbGet("SELECT sql FROM sqlite_master WHERE type='table' AND name='pool_members'");
+    if (pmInfo && pmInfo.sql && !pmInfo.sql.includes('rfid_tag')) {
+      db.run(`ALTER TABLE pool_members ADD COLUMN rfid_tag TEXT UNIQUE`);
+      saveDb();
+      console.log('  ✓ Added rfid_tag column to pool_members');
+    }
+  } catch (e) { /* column may already exist */ }
+
+  // Seed default entry types if empty
+  const typeCount = dbGet('SELECT COUNT(*) as c FROM pool_entry_types');
+  if (typeCount && typeCount.c === 0) {
+    const defaults = [
+      { name: 'Resident', desc: 'HOA members and their family members', system: 1 },
+      { name: 'Lifeguard', desc: 'Pool lifeguards', system: 1 },
+      { name: 'Vendor', desc: 'Service vendors and contractors', system: 1 },
+      { name: 'Admin', desc: 'HOA administrators', system: 1 }
+    ];
+    defaults.forEach(d => {
+      dbRun('INSERT INTO pool_entry_types (id, name, description, is_system) VALUES (?, ?, ?, ?)',
+        [uuidv4(), d.name, d.desc, d.system]);
+    });
+  }
 
   saveDb();
 }
@@ -632,6 +757,118 @@ app.post('/api/login', async (req, res) => {
 
   } catch (err) {
     console.error('Login error:', err);
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
+  }
+});
+
+// ---------- Forgot Password ----------
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email address is required.' });
+    }
+
+    const user = dbGet('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+
+    // Always return success to avoid email enumeration
+    if (!user || !user.password_hash) {
+      return res.json({ success: true, message: 'If an account with that email exists, a password reset link has been sent.' });
+    }
+
+    // Invalidate any existing unused tokens for this user
+    dbRun('UPDATE password_resets SET used = 1 WHERE user_id = ? AND used = 0', [user.id]);
+
+    // Generate a secure random token
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+
+    dbRun(`
+      INSERT INTO password_resets (id, user_id, token_hash, expires_at)
+      VALUES (?, ?, ?, ?)
+    `, [uuidv4(), user.id, tokenHash, expiresAt]);
+
+    const resetUrl = `${process.env.SITE_URL || 'http://localhost:3000'}/reset-password.html?token=${token}`;
+
+    await sendEmail(
+      user.email,
+      'Glenridge Community HOA — Password Reset',
+      `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #2d6a4f; color: white; padding: 24px; border-radius: 12px 12px 0 0;">
+          <h1 style="margin: 0; font-size: 20px;">Password Reset Request</h1>
+        </div>
+        <div style="background: #f8f9fa; padding: 24px; border: 1px solid #e0e0e0;">
+          <p>Hi ${user.first_name},</p>
+          <p>We received a request to reset the password for your Glenridge Community HOA account.</p>
+          <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
+          <div style="margin: 24px 0; text-align: center;">
+            <a href="${resetUrl}" style="background: #2d6a4f; color: white; padding: 14px 36px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: bold;">Reset My Password</a>
+          </div>
+          <p style="color: #666; font-size: 13px;">If you didn't request this, you can safely ignore this email. Your password will not be changed.</p>
+          <p style="color: #666; font-size: 13px;">If the button doesn't work, copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; color: #2d6a4f; font-size: 13px;">${resetUrl}</p>
+        </div>
+        <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">Glenridge Community HOA</div>
+      </div>
+      `
+    );
+
+    res.json({ success: true, message: 'If an account with that email exists, a password reset link has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
+  }
+});
+
+// ---------- Reset Password ----------
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { token, password, confirmPassword } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required.' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const resetRecord = dbGet(
+      'SELECT * FROM password_resets WHERE token_hash = ? AND used = 0',
+      [tokenHash]
+    );
+
+    if (!resetRecord) {
+      return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+    }
+
+    if (new Date(resetRecord.expires_at) < new Date()) {
+      dbRun('UPDATE password_resets SET used = 1 WHERE id = ?', [resetRecord.id]);
+      return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' });
+    }
+
+    const user = dbGet('SELECT * FROM users WHERE id = ?', [resetRecord.user_id]);
+    if (!user) {
+      return res.status(400).json({ error: 'Account not found.' });
+    }
+
+    // Update the password
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, user.id]);
+
+    // Mark the token as used
+    dbRun('UPDATE password_resets SET used = 1 WHERE id = ?', [resetRecord.id]);
+
+    res.json({ success: true, message: 'Your password has been reset successfully. You can now log in with your new password.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
     res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
   }
 });
@@ -1335,6 +1572,460 @@ app.get('/api/nl/unsubscribe', (req, res) => {
   if (sub.status !== 'unsubscribed')
     dbRun(`UPDATE nl_subscribers SET status='unsubscribed',unsubscribed_at=CURRENT_TIMESTAMP WHERE id=?`, [sub.id]);
   res.json({ success: true });
+});
+
+// ── Pool Management Routes ───────────────────────────────
+
+// Sync approved members + family into pool_members as Residents
+app.post('/api/admin/pool/sync-residents', requireAdmin, (req, res) => {
+  try {
+    const residentType = dbGet("SELECT id FROM pool_entry_types WHERE name='Resident'");
+    if (!residentType) return res.status(500).json({ error: 'Resident entry type not found.' });
+
+    const approvedUsers = dbAll("SELECT id, first_name, last_name FROM users WHERE status='approved'");
+    let added = 0;
+
+    approvedUsers.forEach(user => {
+      // Add the member themselves
+      const existing = dbGet('SELECT id FROM pool_members WHERE user_id = ? AND source = ?', [user.id, 'member']);
+      if (!existing) {
+        dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, user_id, source)
+               VALUES (?, ?, ?, ?, ?, 'member')`,
+          [uuidv4(), user.first_name, user.last_name, residentType.id, user.id]);
+        added++;
+      }
+
+      // Add directory adults (family members)
+      const adults = dbAll('SELECT id, name FROM dir_adults WHERE user_id = ?', [user.id]);
+      adults.forEach(adult => {
+        const existingAdult = dbGet('SELECT id FROM pool_members WHERE user_id = ? AND source = ?',
+          [`family_adult_${adult.id}`, 'family']);
+        if (!existingAdult) {
+          const parts = adult.name.split(' ');
+          const firstName = parts[0] || adult.name;
+          const lastName = parts.slice(1).join(' ') || user.last_name;
+          dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, user_id, source)
+                 VALUES (?, ?, ?, ?, ?, 'family')`,
+            [uuidv4(), firstName, lastName, residentType.id, `family_adult_${adult.id}`]);
+          added++;
+        }
+      });
+
+      // Add directory children
+      const children = dbAll('SELECT id, first_name FROM dir_children WHERE user_id = ?', [user.id]);
+      children.forEach(child => {
+        const existingChild = dbGet('SELECT id FROM pool_members WHERE user_id = ? AND source = ?',
+          [`family_child_${child.id}`, 'family']);
+        if (!existingChild) {
+          dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, user_id, source)
+                 VALUES (?, ?, ?, ?, ?, 'family')`,
+            [uuidv4(), child.first_name, user.last_name, residentType.id, `family_child_${child.id}`]);
+          added++;
+        }
+      });
+    });
+
+    res.json({ success: true, added, message: `Synced residents. ${added} new pool member(s) added.` });
+  } catch (err) {
+    console.error('Pool sync error:', err);
+    res.status(500).json({ error: 'Failed to sync residents.' });
+  }
+});
+
+// GET entry types
+app.get('/api/admin/pool/entry-types', requireAdmin, (req, res) => {
+  const types = dbAll('SELECT * FROM pool_entry_types ORDER BY is_system DESC, name ASC');
+  res.json(types);
+});
+
+// POST new entry type
+app.post('/api/admin/pool/entry-types', requireAdmin, (req, res) => {
+  const { name, description } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  const existing = dbGet('SELECT id FROM pool_entry_types WHERE name = ?', [name.trim()]);
+  if (existing) return res.status(409).json({ error: 'An entry type with this name already exists.' });
+  const id = uuidv4();
+  dbRun('INSERT INTO pool_entry_types (id, name, description) VALUES (?, ?, ?)',
+    [id, name.trim(), description?.trim() || null]);
+  res.json({ success: true, id });
+});
+
+// DELETE entry type (not system ones)
+app.delete('/api/admin/pool/entry-types/:id', requireAdmin, (req, res) => {
+  const type = dbGet('SELECT * FROM pool_entry_types WHERE id = ?', [req.params.id]);
+  if (!type) return res.status(404).json({ error: 'Entry type not found.' });
+  if (type.is_system) return res.status(400).json({ error: 'Cannot delete a system entry type.' });
+  const memberCount = dbGet('SELECT COUNT(*) as c FROM pool_members WHERE entry_type_id = ?', [req.params.id]);
+  if (memberCount && memberCount.c > 0) return res.status(400).json({ error: 'Cannot delete — there are pool members using this entry type.' });
+  dbRun('DELETE FROM pool_schedules WHERE entry_type_id = ?', [req.params.id]);
+  dbRun('DELETE FROM pool_entry_types WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
+});
+
+// GET pool members
+app.get('/api/admin/pool/members', requireAdmin, (req, res) => {
+  const members = dbAll(`
+    SELECT pm.*, pet.name as entry_type_name
+    FROM pool_members pm
+    JOIN pool_entry_types pet ON pm.entry_type_id = pet.id
+    ORDER BY pet.name, pm.last_name, pm.first_name
+  `);
+  res.json(members);
+});
+
+// POST new pool member (manual — for non-residents)
+app.post('/api/admin/pool/members', requireAdmin, (req, res) => {
+  const { first_name, last_name, entry_type_id, notes, rfid_tag } = req.body;
+  if (!first_name || !last_name || !entry_type_id) {
+    return res.status(400).json({ error: 'First name, last name, and entry type are required.' });
+  }
+  const type = dbGet('SELECT id FROM pool_entry_types WHERE id = ?', [entry_type_id]);
+  if (!type) return res.status(400).json({ error: 'Invalid entry type.' });
+  if (rfid_tag) {
+    const existing = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ?', [rfid_tag.trim()]);
+    if (existing) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+  }
+  const id = uuidv4();
+  dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, source, notes, rfid_tag)
+         VALUES (?, ?, ?, ?, 'manual', ?, ?)`,
+    [id, first_name.trim(), last_name.trim(), entry_type_id, notes?.trim() || null, rfid_tag?.trim() || null]);
+  res.json({ success: true, id });
+});
+
+// PUT update pool member
+app.put('/api/admin/pool/members/:id', requireAdmin, (req, res) => {
+  const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
+  if (!member) return res.status(404).json({ error: 'Pool member not found.' });
+  const { first_name, last_name, entry_type_id, status, notes, rfid_tag } = req.body;
+  if (rfid_tag !== undefined && rfid_tag) {
+    const existing = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ? AND id != ?', [rfid_tag.trim(), req.params.id]);
+    if (existing) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+  }
+  dbRun(`UPDATE pool_members SET first_name=?, last_name=?, entry_type_id=?, status=?, notes=?, rfid_tag=? WHERE id=?`,
+    [first_name || member.first_name, last_name || member.last_name,
+     entry_type_id || member.entry_type_id, status || member.status,
+     notes !== undefined ? notes : member.notes,
+     rfid_tag !== undefined ? (rfid_tag?.trim() || null) : member.rfid_tag, req.params.id]);
+  res.json({ success: true });
+});
+
+// DELETE pool member
+app.delete('/api/admin/pool/members/:id', requireAdmin, (req, res) => {
+  dbRun('DELETE FROM pool_schedules WHERE pool_member_id = ?', [req.params.id]);
+  dbRun('DELETE FROM pool_members WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
+});
+
+// GET schedules
+app.get('/api/admin/pool/schedules', requireAdmin, (req, res) => {
+  const schedules = dbAll(`
+    SELECT ps.*,
+           pet.name as entry_type_name,
+           pm.first_name as member_first_name,
+           pm.last_name as member_last_name
+    FROM pool_schedules ps
+    LEFT JOIN pool_entry_types pet ON ps.entry_type_id = pet.id
+    LEFT JOIN pool_members pm ON ps.pool_member_id = pm.id
+    ORDER BY ps.created_at DESC
+  `);
+  res.json(schedules);
+});
+
+// POST new schedule
+app.post('/api/admin/pool/schedules', requireAdmin, (req, res) => {
+  const { name, entry_type_id, pool_member_id, schedule_type, days_of_week, start_time, end_time, specific_date, start_date, end_date } = req.body;
+  if (!name || !schedule_type) {
+    return res.status(400).json({ error: 'Name and schedule type are required.' });
+  }
+  if (!entry_type_id && !pool_member_id) {
+    return res.status(400).json({ error: 'Must assign to an entry type or a specific member.' });
+  }
+  if (schedule_type === 'recurring') {
+    if (!days_of_week || !start_time || !end_time) {
+      return res.status(400).json({ error: 'Recurring schedules need days, start time, and end time.' });
+    }
+  }
+  if (schedule_type === 'one_time') {
+    if (!specific_date || !start_time || !end_time) {
+      return res.status(400).json({ error: 'One-time schedules need a date, start time, and end time.' });
+    }
+  }
+  if (schedule_type === 'holiday') {
+    if (!specific_date || !start_time || !end_time) {
+      return res.status(400).json({ error: 'Holiday schedules need a date, start time, and end time.' });
+    }
+  }
+  const id = uuidv4();
+  dbRun(`INSERT INTO pool_schedules (id, name, entry_type_id, pool_member_id, schedule_type, days_of_week, start_time, end_time, specific_date, start_date, end_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, name.trim(), entry_type_id || null, pool_member_id || null, schedule_type,
+     days_of_week || null, start_time || null, end_time || null,
+     specific_date || null, start_date || null, end_date || null]);
+  res.json({ success: true, id });
+});
+
+// PUT update schedule
+app.put('/api/admin/pool/schedules/:id', requireAdmin, (req, res) => {
+  const sched = dbGet('SELECT * FROM pool_schedules WHERE id = ?', [req.params.id]);
+  if (!sched) return res.status(404).json({ error: 'Schedule not found.' });
+  const { name, entry_type_id, pool_member_id, schedule_type, days_of_week, start_time, end_time, specific_date, start_date, end_date, is_active } = req.body;
+  dbRun(`UPDATE pool_schedules SET name=?, entry_type_id=?, pool_member_id=?, schedule_type=?, days_of_week=?, start_time=?, end_time=?, specific_date=?, start_date=?, end_date=?, is_active=? WHERE id=?`,
+    [name || sched.name, entry_type_id !== undefined ? entry_type_id : sched.entry_type_id,
+     pool_member_id !== undefined ? pool_member_id : sched.pool_member_id,
+     schedule_type || sched.schedule_type, days_of_week !== undefined ? days_of_week : sched.days_of_week,
+     start_time !== undefined ? start_time : sched.start_time, end_time !== undefined ? end_time : sched.end_time,
+     specific_date !== undefined ? specific_date : sched.specific_date,
+     start_date !== undefined ? start_date : sched.start_date, end_date !== undefined ? end_date : sched.end_date,
+     is_active !== undefined ? is_active : sched.is_active, req.params.id]);
+  res.json({ success: true });
+});
+
+// DELETE schedule
+app.delete('/api/admin/pool/schedules/:id', requireAdmin, (req, res) => {
+  dbRun('DELETE FROM pool_schedules WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
+});
+
+// GET pool access check — who can enter now or at a given time
+app.get('/api/admin/pool/access-check', requireAdmin, (req, res) => {
+  const checkDate = req.query.date || new Date().toISOString().split('T')[0];
+  const checkTime = req.query.time || new Date().toTimeString().slice(0, 5);
+  const dayOfWeek = new Date(checkDate + 'T12:00:00').getDay(); // 0=Sun..6=Sat
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayName = dayNames[dayOfWeek];
+
+  const members = dbAll(`
+    SELECT pm.*, pet.name as entry_type_name
+    FROM pool_members pm
+    JOIN pool_entry_types pet ON pm.entry_type_id = pet.id
+    WHERE pm.status = 'active'
+  `);
+
+  const results = members.map(member => {
+    // Find applicable schedules (by entry type or specific member)
+    const schedules = dbAll(`
+      SELECT * FROM pool_schedules
+      WHERE is_active = 1
+        AND (entry_type_id = ? OR pool_member_id = ?)
+        AND (start_date IS NULL OR start_date <= ?)
+        AND (end_date IS NULL OR end_date >= ?)
+    `, [member.entry_type_id, member.id, checkDate, checkDate]);
+
+    let allowed = false;
+    let reason = 'No schedule';
+
+    // Check if a holiday schedule exists for this date — it overrides all others
+    const holidaySchedules = schedules.filter(s => s.schedule_type === 'holiday' && s.specific_date === checkDate);
+    if (holidaySchedules.length > 0) {
+      for (const h of holidaySchedules) {
+        if (checkTime >= h.start_time && checkTime <= h.end_time) {
+          allowed = true;
+          reason = h.name + ' (holiday)';
+          break;
+        }
+      }
+      if (!allowed) reason = 'Outside holiday hours';
+      return { ...member, allowed, reason };
+    }
+
+    for (const s of schedules) {
+      if (s.schedule_type === 'unlimited') {
+        allowed = true;
+        reason = s.name;
+        break;
+      }
+      if (s.schedule_type === 'recurring' && s.days_of_week) {
+        const days = s.days_of_week.split(',');
+        if (days.includes(dayName) && checkTime >= s.start_time && checkTime <= s.end_time) {
+          allowed = true;
+          reason = s.name;
+          break;
+        }
+      }
+      if (s.schedule_type === 'one_time' && s.specific_date === checkDate) {
+        if (checkTime >= s.start_time && checkTime <= s.end_time) {
+          allowed = true;
+          reason = s.name;
+          break;
+        }
+      }
+    }
+
+    return { ...member, allowed, reason };
+  });
+
+  res.json({ date: checkDate, time: checkTime, day: dayName, members: results });
+});
+
+// POST pool check-in (record attendance)
+app.post('/api/admin/pool/checkin', requireAdmin, (req, res) => {
+  const { pool_member_id, status, is_holiday, notes } = req.body;
+  if (!pool_member_id) return res.status(400).json({ error: 'Pool member is required.' });
+  const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [pool_member_id]);
+  if (!member) return res.status(404).json({ error: 'Pool member not found.' });
+  const id = uuidv4();
+  dbRun(`INSERT INTO pool_checkins (id, pool_member_id, entry_type_id, status, is_holiday, notes)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, pool_member_id, member.entry_type_id, status || 'allowed', is_holiday ? 1 : 0, notes || null]);
+  res.json({ success: true, id });
+});
+
+// GET pool attendance stats
+app.get('/api/admin/pool/stats', requireAdmin, (req, res) => {
+  const now = new Date();
+
+  // Week boundaries: Sunday to Saturday
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - dayOfWeek);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekStartStr = weekStart.toISOString().replace('T', ' ').slice(0, 19);
+
+  // Month boundaries
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthStartStr = monthStart.toISOString().replace('T', ' ').slice(0, 19);
+
+  const weekAttendance = dbGet(
+    "SELECT COUNT(*) as c FROM pool_checkins WHERE status='allowed' AND check_in_time >= ?",
+    [weekStartStr]
+  );
+
+  const monthAttendance = dbGet(
+    "SELECT COUNT(*) as c FROM pool_checkins WHERE status='allowed' AND check_in_time >= ?",
+    [monthStartStr]
+  );
+
+  const holidayAttendance = dbGet(
+    "SELECT COUNT(*) as c FROM pool_checkins WHERE status='allowed' AND is_holiday = 1 AND check_in_time >= ?",
+    [monthStartStr]
+  );
+
+  const accessDenied = dbGet(
+    "SELECT COUNT(*) as c FROM pool_checkins WHERE status='denied' AND check_in_time >= ?",
+    [monthStartStr]
+  );
+
+  res.json({
+    week_attendance: weekAttendance?.c || 0,
+    month_attendance: monthAttendance?.c || 0,
+    holiday_attendance: holidayAttendance?.c || 0,
+    access_denied: accessDenied?.c || 0
+  });
+});
+
+// GET pool trend — rolling 30-day daily entry counts
+app.get('/api/admin/pool/trend', requireAdmin, (req, res) => {
+  const days = parseInt(req.query.days) || 30;
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - days + 1);
+  start.setHours(0, 0, 0, 0);
+  const startStr = start.toISOString().replace('T', ' ').slice(0, 19);
+
+  // Get daily counts grouped by date
+  const rows = dbAll(`
+    SELECT DATE(check_in_time) as date,
+           SUM(CASE WHEN status='allowed' THEN 1 ELSE 0 END) as allowed,
+           SUM(CASE WHEN status='denied' THEN 1 ELSE 0 END) as denied
+    FROM pool_checkins
+    WHERE check_in_time >= ?
+    GROUP BY DATE(check_in_time)
+    ORDER BY date
+  `, [startStr]);
+
+  // Build full date range with zeros for missing days
+  const trend = [];
+  const dateMap = {};
+  for (const r of rows) {
+    dateMap[r.date] = { allowed: r.allowed, denied: r.denied };
+  }
+  for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().split('T')[0];
+    trend.push({
+      date: dateStr,
+      allowed: dateMap[dateStr]?.allowed || 0,
+      denied: dateMap[dateStr]?.denied || 0
+    });
+  }
+
+  res.json(trend);
+});
+
+// GET pool check-in log
+app.get('/api/admin/pool/checkins', requireAdmin, (req, res) => {
+  const limit = parseInt(req.query.limit) || 50;
+  const rows = dbAll(`
+    SELECT pc.*, pm.first_name, pm.last_name, pet.name as entry_type_name
+    FROM pool_checkins pc
+    JOIN pool_members pm ON pc.pool_member_id = pm.id
+    JOIN pool_entry_types pet ON pc.entry_type_id = pet.id
+    ORDER BY pc.check_in_time DESC
+    LIMIT ?
+  `, [limit]);
+  res.json(rows);
+});
+
+// ── Gate Sync API (for Raspberry Pi gate controller) ─────────────
+const GATE_API_KEY = process.env.GATE_API_KEY || 'change-this-gate-api-key';
+
+function requireGateKey(req, res, next) {
+  const key = req.headers['x-gate-api-key'];
+  if (key && key === GATE_API_KEY) return next();
+  return res.status(403).json({ error: 'Invalid gate API key.' });
+}
+
+// Pull full pool data snapshot for local DB sync
+app.get('/api/gate/sync/pull', requireGateKey, (req, res) => {
+  const since = req.query.since; // ISO timestamp — return only changes after this time (optional)
+  
+  const entry_types = dbAll('SELECT * FROM pool_entry_types');
+  
+  let members, schedules;
+  if (since) {
+    members = dbAll('SELECT * FROM pool_members');
+    schedules = dbAll('SELECT * FROM pool_schedules');
+  } else {
+    members = dbAll('SELECT * FROM pool_members');
+    schedules = dbAll('SELECT * FROM pool_schedules');
+  }
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    entry_types,
+    members,
+    schedules
+  });
+});
+
+// Receive batch check-in reports from gate controller
+app.post('/api/gate/sync/checkins', requireGateKey, (req, res) => {
+  const { checkins } = req.body;
+  if (!Array.isArray(checkins) || checkins.length === 0) {
+    return res.status(400).json({ error: 'checkins array is required.' });
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  for (const ci of checkins) {
+    // Skip if already exists (idempotent)
+    const existing = dbGet('SELECT id FROM pool_checkins WHERE id = ?', [ci.id]);
+    if (existing) { skipped++; continue; }
+    
+    dbRun(`INSERT INTO pool_checkins (id, pool_member_id, entry_type_id, check_in_time, check_out_time, status, is_holiday, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [ci.id, ci.pool_member_id, ci.entry_type_id, ci.check_in_time, ci.check_out_time || null,
+       ci.status || 'allowed', ci.is_holiday ? 1 : 0, ci.notes || null]);
+    imported++;
+  }
+
+  res.json({ success: true, imported, skipped });
+});
+
+// Gate heartbeat — lets the Pi report its status
+app.post('/api/gate/heartbeat', requireGateKey, (req, res) => {
+  const { device_id, uptime, last_sync, pending_checkins, version } = req.body;
+  console.log(`  🚪 Gate heartbeat: device=${device_id} uptime=${uptime}s pending=${pending_checkins} v=${version}`);
+  res.json({ success: true, server_time: new Date().toISOString() });
 });
 
 // ── Start Server ────────────────────────────────────────

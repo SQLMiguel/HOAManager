@@ -1,0 +1,23 @@
+{
+  "name": "glenridge-gate-entry",
+  "version": "1.0.0",
+  "description": "Raspberry Pi pool gate entry controller for Glenridge Community HOA",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node src/test-rfid.js",
+    "sync": "node src/manual-sync.js",
+    "setup-db": "node src/setup-db.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "mfrc522-rpi": "^0.2.0",
+    "onoff": "^6.0.3",
+    "node-fetch": "^2.7.0",
+    "uuid": "^9.0.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
