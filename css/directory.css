@@ -147,6 +147,15 @@
   padding: .15rem .6rem;
   font-size: .78rem;
   font-weight: 500;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+.dir-badge-email {
+  font-size: .68rem;
+  font-weight: 400;
+  color: var(--text-light);
+  line-height: 1.2;
 }
 .dir-badge-child { background: #fef3e2; color: #b86a00; }
 .dir-badge-pet   { background: #f0ecfc; color: #6843c4; }

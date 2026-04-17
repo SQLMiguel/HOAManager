@@ -147,7 +147,10 @@
 
   function buildFamilyBadges(m) {
     const parts = [];
-    (m.adults   || []).forEach(a => parts.push(`<span class="dir-badge">${e(a.name)}</span>`));
+    (m.adults   || []).forEach(a => {
+      const emailLine = a.email ? `<span class="dir-badge-email">${e(a.email)}</span>` : '';
+      parts.push(`<span class="dir-badge">${e(a.name)}${emailLine}</span>`);
+    });
     (m.children || []).forEach(c => parts.push(`<span class="dir-badge dir-badge-child">${e(c.first_name)}</span>`));
     (m.pets     || []).forEach(p => parts.push(`<span class="dir-badge dir-badge-pet">🐾 ${e(p.name)}</span>`));
     return parts.join('');
@@ -220,7 +223,12 @@
         const prof = m.profile || {};
         const name = displayName(m);
 
-        const adultNames   = (m.adults   || []).filter(a => a.name).map(a => e(a.name));
+        const adultLines   = (m.adults   || []).filter(a => a.name).map(a => {
+          let line = e(a.name);
+          const contact = [a.email ? e(a.email) : '', a.phone ? e(a.phone) : ''].filter(Boolean).join(' · ');
+          if (contact) line += ` — ${contact}`;
+          return line;
+        });
         const childNames   = (m.children || []).filter(c => c.first_name).map(c => e(c.first_name));
         const petNames     = (m.pets     || []).filter(p => p.name)
           .map(p => `${e(p.name)}${p.pet_type ? ` (${e(p.pet_type)})` : ''}`);
@@ -229,7 +237,7 @@
         if (user.address)                       rows.push(`<span class="dpl">Address</span> ${e(user.address)}`);
         if (user.email)                         rows.push(`<span class="dpl">Email</span> ${e(user.email)}`);
         if (prof.show_phone && prof.phone)      rows.push(`<span class="dpl">Phone</span> ${e(prof.phone)}`);
-        if (adultNames.length)                  rows.push(`<span class="dpl">Adults</span> ${adultNames.join(', ')}`);
+        if (adultLines.length)                  rows.push(`<span class="dpl">Adults</span> ${adultLines.join('; ')}`);
         if (childNames.length)                  rows.push(`<span class="dpl">Children</span> ${childNames.join(', ')}`);
         if (petNames.length)                    rows.push(`<span class="dpl">Pets</span> ${petNames.join(', ')}`);
         if (prof.show_interests && prof.interests) rows.push(`<span class="dpl">Interests</span> ${e(prof.interests)}`);
@@ -367,12 +375,17 @@
   }
 
   function renderAdults(list) {
-    document.getElementById('adultsList').innerHTML = list.map(a =>
-      `<div class="dir-list-item">
-        <span>${e(a.name)}${a.birthday ? ` · ${e(a.birthday)}` : ''}</span>
+    document.getElementById('adultsList').innerHTML = list.map(a => {
+      const details = [
+        a.birthday ? e(a.birthday) : '',
+        a.phone ? `📞 ${e(a.phone)}` : '',
+        a.email ? `✉ ${e(a.email)}` : ''
+      ].filter(Boolean).join(' · ');
+      return `<div class="dir-list-item">
+        <span>${e(a.name)}${details ? ` · ${details}` : ''}</span>
         <button class="dir-del-btn" data-id="${a.id}" data-type="adult" title="Remove">✕</button>
-      </div>`
-    ).join('');
+      </div>`;
+    }).join('');
     document.querySelectorAll('#adultsList .dir-del-btn').forEach(btn =>
       btn.addEventListener('click', () => deleteItem('adults', btn.dataset.id)));
   }
@@ -405,8 +418,12 @@
     const name         = val('adultName');  if (!name) return;
     const birthday     = val('adultBirthday');
     const show_birthday = chk('adultShowBday') ? 1 : 0;
-    const [ok] = await apiPost('/api/directory/adults', { name, birthday, show_birthday });
-    if (ok) { clearInputs('adultName', 'adultBirthday'); await refreshProfile(); }
+    const phone        = val('adultPhone');
+    const email        = val('adultEmail');
+    if (phone && !FormValidation.isValidPhone(phone)) return;
+    if (email && !FormValidation.isValidEmail(email)) return;
+    const [ok] = await apiPost('/api/directory/adults', { name, birthday, show_birthday, phone, email });
+    if (ok) { clearInputs('adultName', 'adultBirthday', 'adultPhone', 'adultEmail'); await refreshProfile(); }
   }
 
   async function addChild() {

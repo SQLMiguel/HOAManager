@@ -106,6 +106,8 @@ async function initDb() {
       name TEXT NOT NULL,
       birthday TEXT,
       show_birthday INTEGER DEFAULT 0,
+      phone TEXT,
+      email TEXT,
       is_visible INTEGER DEFAULT 1
     )
   `);
@@ -333,6 +335,22 @@ async function initDb() {
       console.log('  ✓ Added rfid_tag column to pool_members');
     }
   } catch (e) { /* column may already exist */ }
+
+  // Migration: add phone and email columns to dir_adults if missing
+  try {
+    const adultInfo = dbGet("SELECT sql FROM sqlite_master WHERE type='table' AND name='dir_adults'");
+    if (adultInfo && adultInfo.sql) {
+      if (!adultInfo.sql.includes('phone')) {
+        db.run(`ALTER TABLE dir_adults ADD COLUMN phone TEXT`);
+        console.log('  ✓ Added phone column to dir_adults');
+      }
+      if (!adultInfo.sql.includes('email')) {
+        db.run(`ALTER TABLE dir_adults ADD COLUMN email TEXT`);
+        console.log('  ✓ Added email column to dir_adults');
+      }
+      saveDb();
+    }
+  } catch (e) { /* columns may already exist */ }
 
   // Seed default entry types if empty
   const typeCount = dbGet('SELECT COUNT(*) as c FROM pool_entry_types');
@@ -1129,11 +1147,13 @@ app.post('/api/directory/profile', requireAuth, (req, res) => {
 
 // POST /api/directory/adults
 app.post('/api/directory/adults', requireAuth, (req, res) => {
-  const { name, birthday, show_birthday, is_visible } = req.body;
+  const { name, birthday, show_birthday, phone, email, is_visible } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required.' });
+  if (email && !isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
+  if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
   const id = uuidv4();
-  dbRun('INSERT INTO dir_adults (id,user_id,name,birthday,show_birthday,is_visible) VALUES (?,?,?,?,?,?)',
-    [id, req.session.userId, name.trim(), birthday||null, show_birthday?1:0, is_visible!==false?1:0]);
+  dbRun('INSERT INTO dir_adults (id,user_id,name,birthday,show_birthday,phone,email,is_visible) VALUES (?,?,?,?,?,?,?,?)',
+    [id, req.session.userId, name.trim(), birthday||null, show_birthday?1:0, phone?.trim()||null, email?.trim()||null, is_visible!==false?1:0]);
   res.json({ success: true, adult: dbGet('SELECT * FROM dir_adults WHERE id=?', [id]) });
 });
 app.delete('/api/directory/adults/:id', requireAuth, (req, res) => {
