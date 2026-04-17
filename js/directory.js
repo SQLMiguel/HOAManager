@@ -34,6 +34,14 @@
     initInfoTab();
     loadDirectory();
     loadMyProfile();
+
+    // Auto-open profile editor when linked with #edit-profile
+    if (window.location.hash === '#edit-profile') {
+      const sec = document.getElementById('profileSection');
+      sec.style.display = 'block';
+      sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      history.replaceState(null, '', window.location.pathname);
+    }
   });
 
   // ── Auth Guard ───────────────────────────────────────────────
@@ -320,22 +328,19 @@
   // ── Info Tab ─────────────────────────────────────────────────
   function initInfoTab() {
     document.getElementById('saveInfoBtn').addEventListener('click', saveInfo);
-    // Phone auto-formatter: (XXX) XXX-XXXX
-    const phoneInput = document.getElementById('profPhone');
-    phoneInput.addEventListener('input', function () {
-      const digits = this.value.replace(/\D/g, '').slice(0, 10);
-      let formatted = digits;
-      if (digits.length > 6)       formatted = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
-      else if (digits.length > 3)  formatted = `(${digits.slice(0,3)}) ${digits.slice(3)}`;
-      else if (digits.length > 0)  formatted = `(${digits}`;
-      this.value = formatted;
-    });  }
+    // Phone auto-formatter is handled by validation.js (auto-init)
+  }
 
   async function saveInfo() {
     const displayName = val('profDisplayName');
     if (!displayName) {
       showMsg('saveInfoMsg', 'Display Name is required.', true);
       document.getElementById('profDisplayName').focus();
+      return;
+    }
+    if (!FormValidation.isValidPhone(val('profPhone'))) {
+      showMsg('saveInfoMsg', 'Phone number must be 10 digits.', true);
+      document.getElementById('profPhone').focus();
       return;
     }
     const payload = {

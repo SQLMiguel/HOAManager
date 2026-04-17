@@ -744,6 +744,7 @@ function wireModals() {
   document.getElementById('btnTestConfirm').addEventListener('click', async () => {
     const email = document.getElementById('testEmail').value.trim();
     if (!email) { toast('Enter an email address.', true); return; }
+    if (!FormValidation.isValidEmail(email)) { toast('Please enter a valid email address.', true); return; }
     if (!state.currentNlId) return;
     await saveDraft();
     const d = await apiFetch(`/api/nl/newsletters/${state.currentNlId}/test`, { method: 'POST', body: JSON.stringify({ email }) });
@@ -775,6 +776,7 @@ function wireModals() {
     const first = document.getElementById('addSubFirst').value.trim();
     const last  = document.getElementById('addSubLast').value.trim();
     if (!email) { toast('Email is required.', true); return; }
+    if (!FormValidation.isValidEmail(email)) { toast('Please enter a valid email address.', true); return; }
     const d = await apiFetch('/api/nl/subscribers', { method: 'POST', body: JSON.stringify({ email, first_name: first, last_name: last }) });
     if (d && d.success) {
       closeModal('addSubModal');

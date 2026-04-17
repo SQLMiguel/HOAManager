@@ -134,6 +134,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      if (!FormValidation.isValidEmail(data.email)) {
+        showNotification('Please enter a valid email address.', 'error');
+        return;
+      }
+
       // Simulate form submission
       const submitBtn = contactForm.querySelector('button[type="submit"]');
       const originalText = submitBtn.innerHTML;
@@ -427,6 +432,22 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.disabled = true;
       btn.textContent = 'Creating Account...';
 
+      const emailVal = document.getElementById('signupEmail').value;
+      if (!FormValidation.isValidEmail(emailVal)) {
+        signupError.textContent = 'Please enter a valid email address.';
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+        return;
+      }
+
+      const phoneVal = document.getElementById('signupPhone').value;
+      if (!FormValidation.isValidPhone(phoneVal)) {
+        signupError.textContent = 'Phone number must be 10 digits.';
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+        return;
+      }
+
       const password = document.getElementById('signupPassword').value;
       const confirmPassword = document.getElementById('signupConfirm').value;
 
@@ -490,6 +511,14 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.disabled = true;
         btn.textContent = 'Submitting...';
 
+        const scPhoneVal = document.getElementById('scPhone').value;
+        if (!FormValidation.isValidPhone(scPhoneVal)) {
+          errEl.textContent = 'Phone number must be 10 digits.';
+          btn.disabled = false;
+          btn.textContent = 'Submit for Approval';
+          return;
+        }
+
         try {
           const res = await fetch('/api/auth/social-complete', {
             method: 'POST',
@@ -501,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
               phone:     document.getElementById('scPhone').value
             })
           });
+
           const data = await res.json();
 
           if (data.success) {

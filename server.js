@@ -23,6 +23,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SALT_ROUNDS = 12;
 
+// ── Validation helpers ────────────────────────────────────
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function isValidEmail(v) { return EMAIL_RE.test((v || '').trim()); }
+function isValidPhone(v) { const d = (v || '').replace(/\D/g, ''); return d.length === 0 || d.length === 10; }
+
 // ── Database Setup ──────────────────────────────────────
 const dataDir = path.join(__dirname, 'data');
 const dbPath = path.join(dataDir, 'glenridge.db');
@@ -584,6 +589,10 @@ app.post('/api/auth/social-complete', async (req, res) => {
       return res.status(400).json({ error: 'First name, last name, and address are required.' });
     }
 
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({ error: 'Phone number must be 10 digits.' });
+    }
+
     if (!pending.email) {
       return res.status(400).json({ error: `Your ${pending.provider} account did not share an email address. Please sign up manually.` });
     }
@@ -645,6 +654,14 @@ app.post('/api/signup', async (req, res) => {
     // Validation
     if (!firstName || !lastName || !email || !address || !password) {
       return res.status(400).json({ error: 'All required fields must be filled in.' });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({ error: 'Phone number must be 10 digits.' });
     }
 
     if (password.length < 8) {
@@ -1534,6 +1551,7 @@ app.get('/api/nl/subscribers', requireAdmin, (req, res) => {
 app.post('/api/nl/subscribers', requireAdmin, (req, res) => {
   const { email, first_name, last_name } = req.body;
   if (!email) return res.status(400).json({ error: 'Email required' });
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
   if (dbGet(`SELECT id FROM nl_subscribers WHERE email=?`, [email])) return res.status(409).json({ error: 'Already subscribed' });
   dbRun(`INSERT INTO nl_subscribers (id,email,first_name,last_name,unsubscribe_token,source) VALUES (?,?,?,?,'manual')`,
         [uuidv4(), email, first_name||'', last_name||'', uuidv4()]);
