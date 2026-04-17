@@ -308,7 +308,7 @@
           const user = m.user || {};
           const prof = m.profile || {};
 
-          const adults   = (m.adults   || []).filter(a => a.name).map(a => esc(a.name));
+          const adultList = (m.adults   || []).filter(a => a.name && a.is_visible !== 0);
           const children = (m.children || []).filter(c => c.first_name).map(c => esc(c.first_name));
           const pets     = (m.pets     || []).filter(p => p.name)
             .map(p => esc(p.name) + (p.pet_type ? ` (${esc(p.pet_type)})` : ''));
@@ -317,7 +317,10 @@
           if (user.address)                           rows.push(`<div class="entry-row"><span class="entry-label">Address</span><span class="entry-val"><a href="https://maps.google.com/?q=${encodeURIComponent(user.address)}" target="_blank" rel="noopener">${esc(user.address)}</a></span></div>`);
           if (user.email)                             rows.push(row('Email', user.email));
           if (prof.show_phone && prof.phone)          rows.push(row('Phone', prof.phone));
-          if (adults.length)                          rows.push(`<div class="entry-row"><span class="entry-label">Adults</span><span class="entry-val">${adults.join(', ')}</span></div>`);
+          adultList.forEach(a => {
+            const contact = [a.phone ? esc(a.phone) : '', a.email ? esc(a.email) : ''].filter(Boolean).join(' · ');
+            rows.push(`<div class="entry-row"><span class="entry-label">Adult</span><span class="entry-val">${esc(a.name)}${contact ? ' — ' + contact : ''}</span></div>`);
+          });
           if (children.length)                        rows.push(`<div class="entry-row"><span class="entry-label">Children</span><span class="entry-val">${children.join(', ')}</span></div>`);
           if (pets.length)                            rows.push(`<div class="entry-row"><span class="entry-label">Pets</span><span class="entry-val">${pets.join(', ')}</span></div>`);
           if (prof.show_anniversary && prof.anniversary) rows.push(row('Anniv.', prof.anniversary));

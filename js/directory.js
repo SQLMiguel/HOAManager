@@ -147,9 +147,9 @@
 
   function buildFamilyBadges(m) {
     const parts = [];
-    (m.adults   || []).forEach(a => {
-      const emailLine = a.email ? `<span class="dir-badge-email">${e(a.email)}</span>` : '';
-      parts.push(`<span class="dir-badge">${e(a.name)}${emailLine}</span>`);
+    (m.adults   || []).filter(a => a.is_visible !== 0).forEach(a => {
+      const contact = [a.email, a.phone].filter(Boolean).map(v => `<span class="dir-badge-email">${e(v)}</span>`).join('');
+      parts.push(`<span class="dir-badge">${e(a.name)}${contact}</span>`);
     });
     (m.children || []).forEach(c => parts.push(`<span class="dir-badge dir-badge-child">${e(c.first_name)}</span>`));
     (m.pets     || []).forEach(p => parts.push(`<span class="dir-badge dir-badge-pet">🐾 ${e(p.name)}</span>`));
@@ -223,12 +223,7 @@
         const prof = m.profile || {};
         const name = displayName(m);
 
-        const adultLines   = (m.adults   || []).filter(a => a.name).map(a => {
-          let line = e(a.name);
-          const contact = [a.email ? e(a.email) : '', a.phone ? e(a.phone) : ''].filter(Boolean).join(' · ');
-          if (contact) line += ` — ${contact}`;
-          return line;
-        });
+        const adults = (m.adults || []).filter(a => a.name && a.is_visible !== 0);
         const childNames   = (m.children || []).filter(c => c.first_name).map(c => e(c.first_name));
         const petNames     = (m.pets     || []).filter(p => p.name)
           .map(p => `${e(p.name)}${p.pet_type ? ` (${e(p.pet_type)})` : ''}`);
@@ -237,7 +232,10 @@
         if (user.address)                       rows.push(`<span class="dpl">Address</span> ${e(user.address)}`);
         if (user.email)                         rows.push(`<span class="dpl">Email</span> ${e(user.email)}`);
         if (prof.show_phone && prof.phone)      rows.push(`<span class="dpl">Phone</span> ${e(prof.phone)}`);
-        if (adultLines.length)                  rows.push(`<span class="dpl">Adults</span> ${adultLines.join('; ')}`);
+        adults.forEach(a => {
+          const details = [a.phone ? e(a.phone) : '', a.email ? e(a.email) : ''].filter(Boolean).join(' · ');
+          rows.push(`<span class="dpl">Adult</span> ${e(a.name)}${details ? ' — ' + details : ''}`);
+        });
         if (childNames.length)                  rows.push(`<span class="dpl">Children</span> ${childNames.join(', ')}`);
         if (petNames.length)                    rows.push(`<span class="dpl">Pets</span> ${petNames.join(', ')}`);
         if (prof.show_interests && prof.interests) rows.push(`<span class="dpl">Interests</span> ${e(prof.interests)}`);
