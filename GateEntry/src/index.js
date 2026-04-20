@@ -14,6 +14,8 @@ const db = require('./database');
 const rfid = require('./rfid');
 const gate = require('./gate');
 const sync = require('./sync');
+const viewer = require('./viewer');
+const scanHandler = require('./scanHandler');
 
 const startTime = Date.now();
 
@@ -38,51 +40,27 @@ rfid.init();
 // 4. Start periodic sync with website
 sync.startPeriodicSync();
 
-// ── RFID Scan Handler ───────────────────────────────────
+// 5. Start read-only viewer for local database visibility
+const viewerServer = viewer.startViewer();
+
+// ── Unified Scan Handler ───────────────────────────────
+// Same pipeline for physical cards, iPhone NFC Wallet passes,
+// Android HCE tags, BLE tokens, and QR codes (static + rolling TOTP).
+// Implementation lives in ./scanHandler so the phone-unlock HTTP
+// endpoint (see viewer.js) can reuse the exact same logic.
 
 function handleRfidScan(tagId) {
-  const scanStart = Date.now();
-  console.log(`\n┌─ RFID Scan: ${tagId}`);
-
-  // Step 1: Look up the tag in local database
-  const member = db.lookupByRfid(tagId);
-
-  if (!member) {
-    console.log('│  ✗ Unknown RFID tag');
-    console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
-    gate.unknownTag();
-
-    // Record as denied with unknown tag note
-    // We can't record without a member ID, so just log it
-    return;
-  }
-
-  console.log(`│  Member: ${member.first_name} ${member.last_name} (${member.entry_type_name})`);
-
-  // Step 2: Check if member is active
-  if (member.status !== 'active') {
-    console.log(`│  ✗ Member status: ${member.status}`);
-    console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
-    gate.denyAccess();
-    db.recordCheckin(member.id, member.entry_type_id, 'denied', false, `Status: ${member.status}`);
-    return;
-  }
-
-  // Step 3: Check schedule-based access
-  const access = db.checkAccess(member);
-
-  if (access.allowed) {
-    console.log(`│  ✓ ACCESS GRANTED — ${access.reason}`);
-    console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
-    gate.openGate();
-    db.recordCheckin(member.id, member.entry_type_id, 'allowed', access.isHoliday, access.reason);
-  } else {
-    console.log(`│  ✗ ACCESS DENIED — ${access.reason}`);
-    console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
-    gate.denyAccess();
-    db.recordCheckin(member.id, member.entry_type_id, 'denied', access.isHoliday, access.reason);
-  }
+  // The MFRC522 reader returns a UID regardless of whether the source
+  // is a physical card, an Apple Wallet NFC pass, or an Android HCE tag.
+  // lookupByCredential('rfid', ...) internally also checks nfc_phone.
+  return scanHandler.handleScan('rfid', tagId, {
+    source: 'rfid-reader',
+    device_platform: 'card'
+  });
 }
+
+// Expose the unified handler to other modules (e.g., phone unlock HTTP endpoint).
+module.exports = { handleScan: scanHandler.handleScan };
 
 // ── Start RFID Polling ──────────────────────────────────
 
@@ -121,6 +99,11 @@ function shutdown(signal) {
     poller.close(); // readline interface
   } else if (poller) {
     clearInterval(poller); // hardware polling interval
+  }
+
+  // Stop viewer server
+  if (viewerServer && typeof viewerServer.close === 'function') {
+    try { viewerServer.close(); } catch (_) {}
   }
 
   // Lock gate and cleanup GPIO

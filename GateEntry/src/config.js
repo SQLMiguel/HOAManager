@@ -26,7 +26,15 @@ const config = {
 
   // SPI for RFID reader
   spiBus: parseInt(process.env.SPI_BUS) || 0,
-  spiDevice: parseInt(process.env.SPI_DEVICE) || 0
+  spiDevice: parseInt(process.env.SPI_DEVICE) || 0,
+
+  // Read-only viewer UI (hosted on Raspberry Pi)
+  viewerPort: parseInt(process.env.VIEWER_PORT) || 8080,
+  viewerHost: process.env.VIEWER_HOST || '0.0.0.0',
+
+  // Phone unlock endpoint — optional pre-shared key (leave blank to disable check).
+  // Clients must send this in header X-Gate-Phone-Key or body.gate_key.
+  phoneUnlockKey: process.env.PHONE_UNLOCK_KEY || ''
 };
 
 module.exports = config;

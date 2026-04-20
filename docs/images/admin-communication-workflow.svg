@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780">
+  <defs>
+    <style>
+      .title { font: 700 34px Arial, sans-serif; fill: #16395d; }
+      .lane { fill: #ffffff; stroke: #8db5d8; stroke-width: 2; rx: 16; }
+      .h { font: 700 22px Arial, sans-serif; fill: #16456c; }
+      .t { font: 400 16px Arial, sans-serif; fill: #334b5f; }
+      .step { fill: #eef6fc; stroke: #7ba9cf; stroke-width: 1.5; rx: 10; }
+      .stepT { font: 600 15px Arial, sans-serif; fill: #173f63; }
+      .note { fill: #fff8e7; stroke: #e7c574; stroke-width: 1.5; rx: 10; }
+      .noteT { font: 600 14px Arial, sans-serif; fill: #6a4c16; }
+      .arrow { stroke: #3f79aa; stroke-width: 2.5; marker-end: url(#ar); fill: none; }
+    </style>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3f79aa" />
+    </marker>
+  </defs>
+
+  <rect width="1200" height="780" fill="#f6fbff"/>
+  <text x="70" y="70" class="title">Admin Communications Workflow (Newsletter + SMS)</text>
+
+  <rect x="70" y="110" width="510" height="600" class="lane"/>
+  <text x="100" y="155" class="h">Newsletter Process</text>
+  <rect x="100" y="185" width="450" height="58" class="step"/><text x="118" y="220" class="stepT">1. Open Newsletter Manager (admin → Newsletter)</text>
+  <rect x="100" y="255" width="450" height="58" class="step"/><text x="118" y="290" class="stepT">2. Create newsletter + subject/preview</text>
+  <rect x="100" y="325" width="450" height="58" class="step"/><text x="118" y="360" class="stepT">3. Build content blocks (text, image, button, etc.)</text>
+  <rect x="100" y="395" width="450" height="58" class="step"/><text x="118" y="430" class="stepT">4. Save Draft, then send Test Email</text>
+  <rect x="100" y="465" width="450" height="58" class="step"/><text x="118" y="500" class="stepT">5. Send to All active subscribers</text>
+  <rect x="100" y="535" width="450" height="58" class="step"/><text x="118" y="570" class="stepT">6. Review analytics (opens, clicks, top links)</text>
+
+  <rect x="620" y="110" width="510" height="600" class="lane"/>
+  <text x="650" y="155" class="h">SMS Alert Process</text>
+  <rect x="650" y="185" width="450" height="58" class="step"/><text x="668" y="220" class="stepT">1. Admin panel → SMS Alerts tab</text>
+  <rect x="650" y="255" width="450" height="58" class="step"/><text x="668" y="290" class="stepT">2. Click “Refresh Recipients”</text>
+  <rect x="650" y="325" width="450" height="58" class="step"/><text x="668" y="360" class="stepT">3. Confirm eligible member count</text>
+  <rect x="650" y="395" width="450" height="58" class="step"/><text x="668" y="430" class="stepT">4. Type clear message (emergency/announcement)</text>
+  <rect x="650" y="465" width="450" height="58" class="step"/><text x="668" y="500" class="stepT">5. Click send + confirm prompt</text>
+  <rect x="650" y="535" width="450" height="58" class="step"/><text x="668" y="570" class="stepT">6. Check sent/failed summary</text>
+
+  <path d="M550 494 L640 494" class="arrow"/>
+
+  <rect x="70" y="725" width="1060" height="40" class="note"/>
+  <text x="92" y="751" class="noteT">Note: SMS automatically appends an unsubscribe link. Only approved members with valid phone numbers who have not opted out receive SMS.</text>
+</svg>

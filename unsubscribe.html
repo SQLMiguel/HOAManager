@@ -42,6 +42,7 @@
     (async function () {
       const card = document.getElementById('unsubCard');
       const params = new URLSearchParams(window.location.search);
+      const channel = (params.get('channel') || 'newsletter').toLowerCase();
       const token = params.get('token');
 
       if (!token) {
@@ -54,13 +55,21 @@
       }
 
       try {
-        const res = await fetch(`/api/nl/unsubscribe?token=${encodeURIComponent(token)}`);
+        const endpoint = channel === 'sms'
+          ? `/api/sms/unsubscribe?token=${encodeURIComponent(token)}`
+          : `/api/nl/unsubscribe?token=${encodeURIComponent(token)}`;
+
+        const res = await fetch(endpoint);
         const data = await res.json();
         if (res.ok && data.success) {
+          const title = channel === 'sms' ? 'You have opted out of text messages' : 'You have been unsubscribed';
+          const body = channel === 'sms'
+            ? 'You will no longer receive HOA text messages. You can opt back in from your member profile page at any time.'
+            : 'You will no longer receive newsletters from Glenridge Community HOA. If this was a mistake, contact your HOA administrator to be re-added.';
           card.innerHTML = `
             <div class="unsub-icon">✅</div>
-            <h2>You have been unsubscribed</h2>
-            <p>You will no longer receive newsletters from Glenridge Community HOA. If this was a mistake, contact your HOA administrator to be re-added.</p>
+            <h2>${title}</h2>
+            <p>${body}</p>
             <a href="index.html">Return Home</a>`;
         } else {
           throw new Error(data.error || 'Failed');

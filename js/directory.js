@@ -19,6 +19,7 @@
   // ── State ────────────────────────────────────────────────────
   let myProfile  = null;   // raw buildProfile() object for current user
   let allMembers = [];
+  let smsPrefs   = null;
 
   // ── Init ─────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', async () => {
@@ -31,7 +32,9 @@
     initSocialTab();
     initPhotosTab();
     initPublishTab();
+    initSmsPreferences();
     initInfoTab();
+    initPoolPhones();
     loadDirectory();
     loadMyProfile();
 
@@ -284,7 +287,48 @@
       const res  = await fetch('/api/directory/me');
       myProfile  = await res.json();
       populateEditor(myProfile);
+      await loadSmsPreferences();
     } catch { /* profile doesn't exist yet */ }
+  }
+
+  async function loadSmsPreferences() {
+    try {
+      const res = await fetch('/api/sms/preferences');
+      if (!res.ok) return;
+      smsPrefs = await res.json();
+      renderSmsPreferences();
+    } catch {}
+  }
+
+  function renderSmsPreferences() {
+    if (!smsPrefs) return;
+
+    const phoneEl = document.getElementById('smsPhoneDisplay');
+    const outBtn = document.getElementById('smsOptOutBtn');
+    const inBtn = document.getElementById('smsOptInBtn');
+    const status = document.getElementById('smsPrefStatus');
+
+    if (phoneEl) phoneEl.textContent = smsPrefs.phoneMasked || 'No valid phone number on file';
+
+    if (!smsPrefs.hasPhone) {
+      outBtn.classList.add('dir-hidden');
+      inBtn.classList.add('dir-hidden');
+      status.textContent = 'Add a phone number in Household Info to enable SMS alerts.';
+      status.className = 'dir-publish-status';
+      return;
+    }
+
+    if (smsPrefs.optedOut) {
+      outBtn.classList.add('dir-hidden');
+      inBtn.classList.remove('dir-hidden');
+      status.textContent = 'You are currently opted out of HOA SMS messages.';
+      status.className = 'dir-publish-status';
+    } else {
+      outBtn.classList.remove('dir-hidden');
+      inBtn.classList.add('dir-hidden');
+      status.textContent = 'You are currently subscribed to HOA SMS messages.';
+      status.className = 'dir-publish-status dir-status-live';
+    }
   }
 
   function populateEditor(bp) {
@@ -329,6 +373,7 @@
     renderPets(bp.pets       || []);
     renderSocial(bp.social   || []);
     renderPhotos(bp.photos   || []);
+    refreshPoolPhones();
   }
 
   // ── Info Tab ─────────────────────────────────────────────────
@@ -382,7 +427,8 @@
       return `<div class="dir-list-item">
         <span>${e(a.name)}${details ? ` · ${details}` : ''}</span>
         <button class="dir-del-btn" data-id="${a.id}" data-type="adult" title="Remove">✕</button>
-      </div>`;
+      </div>
+      <div class="dir-pool-phone-row" data-pp-person-type="adult" data-pp-person-id="${a.id}" data-pp-person-name="${e(a.name)}"></div>`;
     }).join('');
     document.querySelectorAll('#adultsList .dir-del-btn').forEach(btn =>
       btn.addEventListener('click', () => deleteItem('adults', btn.dataset.id)));
@@ -394,7 +440,8 @@
       return `<div class="dir-list-item">
         <span>${e(c.first_name)}${bday}</span>
         <button class="dir-del-btn" data-id="${c.id}" data-type="child" title="Remove">✕</button>
-      </div>`;
+      </div>
+      <div class="dir-pool-phone-row" data-pp-person-type="child" data-pp-person-id="${c.id}" data-pp-person-name="${e(c.first_name)}"></div>`;
     }).join('');
     document.querySelectorAll('#childrenList .dir-del-btn').forEach(btn =>
       btn.addEventListener('click', () => deleteItem('children', btn.dataset.id)));
@@ -553,6 +600,31 @@
     document.getElementById('profDoNotList').addEventListener('change', saveDoNotList);
   }
 
+  function initSmsPreferences() {
+    const outBtn = document.getElementById('smsOptOutBtn');
+    const inBtn = document.getElementById('smsOptInBtn');
+
+    if (outBtn) {
+      outBtn.addEventListener('click', async () => {
+        const [ok, msg] = await apiPost('/api/sms/preferences', { opted_out: 1 });
+        showNotif(msg, !ok);
+        if (ok) {
+          await loadSmsPreferences();
+        }
+      });
+    }
+
+    if (inBtn) {
+      inBtn.addEventListener('click', async () => {
+        const [ok, msg] = await apiPost('/api/sms/preferences', { opted_out: 0 });
+        showNotif(msg, !ok);
+        if (ok) {
+          await loadSmsPreferences();
+        }
+      });
+    }
+  }
+
   async function publishProfile() {
     if (!chk('consentCheck')) { showNotif('Please accept the terms to publish your profile.', true); return; }
     const [ok, msg] = await apiPost('/api/directory/profile', { consent_given: 1, is_published: 1 });
@@ -569,6 +641,193 @@
   async function saveDoNotList() {
     await apiPost('/api/directory/profile', { do_not_list: chk('profDoNotList') ? 1 : 0 });
     loadDirectory();
+  }
+
+  // ── Pool Phone Access ────────────────────────────────────────
+  let _poolPhones = [];
+  let _ppmCtx = null; // { person_type, person_id, person_name }
+
+  function initPoolPhones() {
+    const modal = document.getElementById('poolPhoneModal');
+    if (!modal) return;
+    document.getElementById('ppmCloseBtn').addEventListener('click', closePoolPhoneModal);
+    modal.querySelector('.dir-modal-backdrop').addEventListener('click', closePoolPhoneModal);
+    document.getElementById('ppmDoneBtn').addEventListener('click', closePoolPhoneModal);
+    document.getElementById('ppmRegIosBtn').addEventListener('click', () => submitPoolPhoneRegistration('ios'));
+    document.getElementById('ppmRegAndroidBtn').addEventListener('click', () => submitPoolPhoneRegistration('android'));
+    document.getElementById('ppmCopyBtn').addEventListener('click', copyTokenToClipboard);
+    document.getElementById('ppmDownloadBtn').addEventListener('click', downloadQrImage);
+  }
+
+  async function refreshPoolPhones() {
+    try {
+      const r = await fetch('/api/directory/me/pool-phones');
+      if (!r.ok) return;
+      const data = await r.json();
+      _poolPhones = data.phones || [];
+      renderPoolPhoneRows();
+    } catch (err) {
+      console.warn('refreshPoolPhones failed', err);
+    }
+  }
+
+  function findPhoneFor(personType, personId) {
+    return _poolPhones.find(p =>
+      p.status === 'active' &&
+      p.person_type === personType &&
+      ((personType === 'self' && !p.person_id) ||
+       (p.person_id && String(p.person_id) === String(personId)))
+    );
+  }
+
+  function renderPoolPhoneRows() {
+    const selfBox = document.getElementById('poolPhoneSelf');
+    if (selfBox) {
+      const me = myProfile && myProfile.user;
+      const myName = me ? `${me.first_name} ${me.last_name}` : 'Me';
+      selfBox.dataset.ppPersonType = 'self';
+      selfBox.dataset.ppPersonId = '';
+      selfBox.dataset.ppPersonName = myName;
+      selfBox.innerHTML = buildPhoneRowInner('self', null, myName);
+      attachRowHandlers(selfBox);
+    }
+    document.querySelectorAll('.dir-pool-phone-row[data-pp-person-type]').forEach(box => {
+      const pt = box.dataset.ppPersonType;
+      if (pt === 'self') return;
+      const pid = box.dataset.ppPersonId;
+      const pname = box.dataset.ppPersonName || '';
+      box.innerHTML = buildPhoneRowInner(pt, pid, pname);
+      attachRowHandlers(box);
+    });
+  }
+
+  function buildPhoneRowInner(personType, personId, personName) {
+    const phone = findPhoneFor(personType, personId);
+    let info, actionsHtml;
+    if (phone) {
+      const platform = phone.device_platform === 'ios' ? 'iPhone' : 'Android';
+      const label = phone.device_label ? ` &mdash; ${e(phone.device_label)}` : '';
+      const guestStatus = phone.is_active_guest
+        ? `<span class="dir-pp-status-active">✓ Active pool guest</span>`
+        : `<span class="dir-pp-status-pending">⏳ Awaiting admin to activate as pool guest</span>`;
+      info = `<div class="dir-pp-info">
+        <span class="dir-pp-platform-badge">${e(platform)}</span>
+        <strong>${e(personName)}</strong>${label}<br>
+        ${guestStatus}
+      </div>`;
+      actionsHtml = `<div class="dir-pp-actions">
+        <button class="btn btn-outline dir-pp-replace-btn" type="button">Replace Phone</button>
+        <button class="btn btn-outline dir-pp-revoke-btn" data-pp-id="${e(phone.id)}" type="button">Remove</button>
+      </div>`;
+    } else {
+      info = `<div class="dir-pp-info">
+        <strong>${e(personName)}</strong><br>
+        <span class="dir-pp-status-none">No phone registered for pool gate access</span>
+      </div>`;
+      actionsHtml = `<div class="dir-pp-actions">
+        <button class="btn btn-primary dir-pp-register-btn" type="button">Register Phone</button>
+      </div>`;
+    }
+    return info + actionsHtml;
+  }
+
+  function attachRowHandlers(box) {
+    const pt = box.dataset.ppPersonType;
+    const pid = box.dataset.ppPersonId || null;
+    const pname = box.dataset.ppPersonName || '';
+    const reg = box.querySelector('.dir-pp-register-btn');
+    if (reg) reg.addEventListener('click', () => openPoolPhoneModal(pt, pid, pname));
+    const rep = box.querySelector('.dir-pp-replace-btn');
+    if (rep) rep.addEventListener('click', () => openPoolPhoneModal(pt, pid, pname));
+    const rev = box.querySelector('.dir-pp-revoke-btn');
+    if (rev) rev.addEventListener('click', () => revokePoolPhone(rev.dataset.ppId));
+  }
+
+  function openPoolPhoneModal(personType, personId, personName) {
+    _ppmCtx = { person_type: personType, person_id: personId, person_name: personName };
+    document.getElementById('ppmPersonName').textContent = personName;
+    document.getElementById('ppmDeviceLabel').value = '';
+    document.getElementById('ppmStepChoose').style.display = '';
+    document.getElementById('ppmStepShow').style.display = 'none';
+    const phone = findPhoneFor(personType, personId);
+    const status = document.getElementById('ppmGuestStatus');
+    if (phone && phone.is_active_guest) {
+      status.textContent = '✓ This person is currently an active pool guest. Their new phone will work immediately at the gate.';
+      status.className = 'dir-pp-guest-status is-active';
+    } else {
+      status.textContent = 'ⓘ This person is not yet listed as an active pool guest. The admin must add them in the pool member list before the phone will open the gate.';
+      status.className = 'dir-pp-guest-status';
+    }
+    document.getElementById('poolPhoneModal').style.display = 'flex';
+  }
+
+  function closePoolPhoneModal() {
+    document.getElementById('poolPhoneModal').style.display = 'none';
+    _ppmCtx = null;
+  }
+
+  async function submitPoolPhoneRegistration(platform) {
+    if (!_ppmCtx) return;
+    const label = document.getElementById('ppmDeviceLabel').value.trim();
+    const payload = {
+      person_type: _ppmCtx.person_type,
+      person_id: _ppmCtx.person_id || null,
+      device_platform: platform,
+      device_label: label
+    };
+    const r = await fetch('/api/directory/me/pool-phones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok || !data.success) {
+      alert(data.error || 'Registration failed.');
+      return;
+    }
+    showEnrollmentResult(data.enrollment_token, data.qr_payload);
+    await refreshPoolPhones();
+  }
+
+  function showEnrollmentResult(token, qrPayload) {
+    document.getElementById('ppmStepChoose').style.display = 'none';
+    document.getElementById('ppmStepShow').style.display = '';
+    document.getElementById('ppmTokenText').textContent = token;
+    const canvas = document.getElementById('ppmQrCanvas');
+    if (window.QRCode && canvas) {
+      window.QRCode.toCanvas(canvas, qrPayload, { width: 240, margin: 1 }, function (err) {
+        if (err) console.warn('QR render failed', err);
+      });
+    }
+  }
+
+  function copyTokenToClipboard() {
+    const txt = document.getElementById('ppmTokenText').textContent;
+    if (!txt) return;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(txt).then(() => {
+        const btn = document.getElementById('ppmCopyBtn');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      });
+    }
+  }
+
+  function downloadQrImage() {
+    const canvas = document.getElementById('ppmQrCanvas');
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = 'glenridge-pool-pass.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }
+
+  async function revokePoolPhone(id) {
+    if (!confirm('Remove this phone? It will no longer open the pool gate.')) return;
+    const r = await fetch(`/api/directory/me/pool-phones/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (r.ok) await refreshPoolPhones();
+    else alert('Failed to remove phone.');
   }
 
   // ── Shared Helpers ───────────────────────────────────────────

@@ -19,6 +19,52 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const FacebookStrategy = require('passport-facebook').Strategy;
 
+const JSZip = require('jszip');
+
+// Build a minimal valid PNG buffer (solid color, no external libs)
+function makeSolidPng(width, height, r, g, b) {
+  const zlib = require('zlib');
+  // CRC32 table
+  const crcTable = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    crcTable[n] = c;
+  }
+  function crc32(buf) {
+    let c = 0xFFFFFFFF;
+    for (const byte of buf) c = crcTable[(c ^ byte) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function chunk(type, data) {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const t = Buffer.from(type, 'ascii');
+    const crcBuf = Buffer.alloc(4); crcBuf.writeUInt32BE(crc32(Buffer.concat([t, data])));
+    return Buffer.concat([len, t, data, crcBuf]);
+  }
+  const sig = Buffer.from([137,80,78,71,13,10,26,10]);
+  const ihdrData = Buffer.alloc(13);
+  ihdrData.writeUInt32BE(width, 0); ihdrData.writeUInt32BE(height, 4);
+  ihdrData[8]=8; ihdrData[9]=2; // 8-bit RGB
+  const rowLen = 1 + width*3;
+  const raw = Buffer.alloc(height * rowLen);
+  for (let y=0; y<height; y++) {
+    raw[y*rowLen] = 0;
+    for (let x=0; x<width; x++) {
+      raw[y*rowLen+1+x*3]=r; raw[y*rowLen+2+x*3]=g; raw[y*rowLen+3+x*3]=b;
+    }
+  }
+  const compressed = zlib.deflateSync(raw);
+  return Buffer.concat([sig, chunk('IHDR',ihdrData), chunk('IDAT',compressed), chunk('IEND',Buffer.alloc(0))]);
+}
+
+let twilioLib = null;
+try {
+  twilioLib = require('twilio');
+} catch (_) {
+  twilioLib = null;
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SALT_ROUNDS = 12;
@@ -27,6 +73,17 @@ const SALT_ROUNDS = 12;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 function isValidEmail(v) { return EMAIL_RE.test((v || '').trim()); }
 function isValidPhone(v) { const d = (v || '').replace(/\D/g, ''); return d.length === 0 || d.length === 10; }
+function normalizeUSPhone(v) {
+  const d = (v || '').replace(/\D/g, '');
+  if (d.length === 10) return `+1${d}`;
+  if (d.length === 11 && d.startsWith('1')) return `+${d}`;
+  return null;
+}
+function maskPhone(v) {
+  const d = (v || '').replace(/\D/g, '');
+  if (d.length < 4) return '';
+  return `***-***-${d.slice(-4)}`;
+}
 
 // ── Database Setup ──────────────────────────────────────
 const dataDir = path.join(__dirname, 'data');
@@ -58,6 +115,8 @@ async function initDb() {
       email TEXT UNIQUE NOT NULL,
       address TEXT NOT NULL,
       phone TEXT,
+      sms_opt_out INTEGER DEFAULT 0,
+      sms_unsubscribe_token TEXT UNIQUE,
       password_hash TEXT,
       oauth_provider TEXT,
       oauth_provider_id TEXT,
@@ -77,6 +136,23 @@ async function initDb() {
   if (!colNames.includes('oauth_provider_id')) {
     db.run(`ALTER TABLE users ADD COLUMN oauth_provider_id TEXT`);
   }
+  if (!colNames.includes('sms_opt_out')) {
+    db.run(`ALTER TABLE users ADD COLUMN sms_opt_out INTEGER DEFAULT 0`);
+  }
+  if (!colNames.includes('sms_unsubscribe_token')) {
+    db.run(`ALTER TABLE users ADD COLUMN sms_unsubscribe_token TEXT`);
+  }
+
+  // Ensure all users have an SMS unsubscribe token
+  const usersMissingSmsToken = dbAll(`SELECT id FROM users WHERE sms_unsubscribe_token IS NULL OR TRIM(sms_unsubscribe_token) = ''`);
+  usersMissingSmsToken.forEach(u => {
+    db.run(`UPDATE users SET sms_unsubscribe_token = ? WHERE id = ?`, [uuidv4(), u.id]);
+  });
+
+  // Best-effort unique index for SMS unsubscribe token
+  try {
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_sms_unsubscribe_token ON users(sms_unsubscribe_token)`);
+  } catch (e) {}
 
   // ── Directory tables ───────────────────────────────
   db.run(`
@@ -352,6 +428,46 @@ async function initDb() {
     }
   } catch (e) { /* columns may already exist */ }
 
+  // ── Pool phone-access credentials (per household person) ─────────
+  // A member registers a phone (iPhone/Android) for themselves OR for a
+  // family member (adult or child). The phone presents a QR token at the
+  // pool gate. Access is granted only when an admin has the matching
+  // pool_member set to status='active'.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS dir_pool_phones (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      person_type TEXT NOT NULL CHECK(person_type IN ('self','adult','child')),
+      person_id TEXT,
+      person_name TEXT NOT NULL,
+      device_platform TEXT NOT NULL CHECK(device_platform IN ('ios','android')),
+      device_label TEXT,
+      credential_token_hash TEXT NOT NULL,
+      pool_member_id TEXT,
+      status TEXT DEFAULT 'active' CHECK(status IN ('active','revoked')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      revoked_at DATETIME
+    )
+  `);
+
+  // Pool NFC credentials (Apple Wallet passes for iPhones)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS pool_nfc_credentials (
+      id TEXT PRIMARY KEY,
+      pool_member_id TEXT NOT NULL,
+      credential_hash TEXT NOT NULL UNIQUE,
+      credential_type TEXT DEFAULT 'nfc_phone' CHECK(credential_type IN ('nfc_phone','rfid','ble_token')),
+      device_platform TEXT CHECK(device_platform IN ('ios','android','card','other')),
+      device_name TEXT,
+      pass_serial TEXT UNIQUE,
+      pass_generated_at DATETIME,
+      status TEXT DEFAULT 'active' CHECK(status IN ('active','revoked')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      revoked_at DATETIME
+    )
+  `);
+
   // Seed default entry types if empty
   const typeCount = dbGet('SELECT COUNT(*) as c FROM pool_entry_types');
   if (typeCount && typeCount.c === 0) {
@@ -398,6 +514,102 @@ function dbRun(sql, params = []) {
   saveDb();
 }
 
+function normalizeStreetAddress(address) {
+  if (!address) return null;
+  let street = String(address).split(',')[0].trim();
+  // Remove unit/apartment/suite details so we keep only number + street name
+  street = street.replace(/\s+(apt|apartment|unit|suite|ste|#)\s*[\w-]+.*$/i, '');
+  street = street.replace(/\s+/g, ' ').trim();
+  return street || null;
+}
+
+function getPoolMemberStreetAddress(poolMember) {
+  if (!poolMember) return null;
+
+  // Standard approved resident row: pool_members.user_id points at users.id
+  if (poolMember.source === 'member' && poolMember.user_id) {
+    const user = dbGet('SELECT address FROM users WHERE id = ?', [poolMember.user_id]);
+    return normalizeStreetAddress(user?.address);
+  }
+
+  // Family adult rows use pseudo user_id: family_adult_<dir_adults.id>
+  if (poolMember.source === 'family' && poolMember.user_id && poolMember.user_id.startsWith('family_adult_')) {
+    const adultId = poolMember.user_id.replace('family_adult_', '');
+    const row = dbGet(`
+      SELECT u.address
+      FROM dir_adults da
+      JOIN users u ON u.id = da.user_id
+      WHERE da.id = ?
+      LIMIT 1
+    `, [adultId]);
+    return normalizeStreetAddress(row?.address);
+  }
+
+  // Family child rows use pseudo user_id: family_child_<dir_children.id>
+  if (poolMember.source === 'family' && poolMember.user_id && poolMember.user_id.startsWith('family_child_')) {
+    const childId = poolMember.user_id.replace('family_child_', '');
+    const row = dbGet(`
+      SELECT u.address
+      FROM dir_children dc
+      JOIN users u ON u.id = dc.user_id
+      WHERE dc.id = ?
+      LIMIT 1
+    `, [childId]);
+    return normalizeStreetAddress(row?.address);
+  }
+
+  return null;
+}
+
+function normalizeRfidCredentialValue(rawValue) {
+  if (rawValue == null) return '';
+  return String(rawValue).trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+}
+
+function hashPoolCredential(type, rawValue) {
+  const normalized = (type === 'rfid' || type === 'nfc_phone')
+    ? normalizeRfidCredentialValue(rawValue)
+    : String(rawValue || '').trim();
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+function upsertRfidCredentialForMember(poolMemberId, rfidTag, deviceName) {
+  const normalized = normalizeRfidCredentialValue(rfidTag);
+  if (!normalized) {
+    return { ok: false, error: 'RFID tag is invalid.' };
+  }
+
+  const hash = hashPoolCredential('rfid', normalized);
+  const existing = dbGet('SELECT * FROM pool_nfc_credentials WHERE credential_hash = ?', [hash]);
+
+  if (existing) {
+    if (existing.status === 'active' && existing.pool_member_id !== poolMemberId) {
+      return { ok: false, error: 'This RFID tag is already assigned to another member.' };
+    }
+
+    dbRun(`
+      UPDATE pool_nfc_credentials
+      SET pool_member_id = ?,
+          credential_type = 'rfid',
+          device_platform = 'card',
+          device_name = ?,
+          status = 'active',
+          revoked_at = NULL
+      WHERE id = ?
+    `, [poolMemberId, deviceName || 'RFID Card', existing.id]);
+
+    return { ok: true, id: existing.id, normalized };
+  }
+
+  const id = uuidv4();
+  dbRun(`
+    INSERT INTO pool_nfc_credentials (id, pool_member_id, credential_hash, credential_type, device_platform, device_name, status)
+    VALUES (?, ?, ?, 'rfid', 'card', ?, 'active')
+  `, [id, poolMemberId, hash, deviceName || 'RFID Card']);
+
+  return { ok: true, id, normalized };
+}
+
 // ── Email Setup ─────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -408,6 +620,16 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS,
   },
 });
+
+const hasValidTwilioSid = /^AC[a-zA-Z0-9]{32}$/.test((process.env.TWILIO_ACCOUNT_SID || '').trim());
+const hasValidTwilioAuthToken = !!(process.env.TWILIO_AUTH_TOKEN || '').trim() &&
+  !/^your-/i.test((process.env.TWILIO_AUTH_TOKEN || '').trim());
+const hasValidTwilioFromNumber = /^\+\d{10,15}$/.test((process.env.TWILIO_PHONE_NUMBER || '').trim());
+
+const twilioClient = (twilioLib && hasValidTwilioSid && hasValidTwilioAuthToken)
+  ? twilioLib(process.env.TWILIO_ACCOUNT_SID.trim(), process.env.TWILIO_AUTH_TOKEN.trim())
+  : null;
+const twilioFromNumber = process.env.TWILIO_PHONE_NUMBER || '';
 
 // Verify email config on startup (non-blocking)
 transporter.verify().then(() => {
@@ -436,6 +658,27 @@ async function sendEmail(to, subject, html) {
     console.log(`  Body: ${html.replace(/<[^>]*>/g, '').substring(0, 200)}...`);
     console.log('───────────────────────────────────────────────');
   }
+}
+
+async function sendSms(to, body) {
+  const normalized = normalizeUSPhone(to);
+  if (!normalized) throw new Error('Invalid recipient phone number.');
+
+  if (twilioClient && twilioFromNumber) {
+    await twilioClient.messages.create({
+      body,
+      from: twilioFromNumber,
+      to: normalized
+    });
+    return { sent: true, provider: 'twilio' };
+  }
+
+  // Fallback for local/dev environments without SMS provider
+  console.log('─── SMS (not sent — Twilio not configured) ───');
+  console.log(`  To: ${normalized}`);
+  console.log(`  Body: ${body}`);
+  console.log('──────────────────────────────────────────────');
+  return { sent: false, provider: 'log-only' };
 }
 
 // ── Middleware ───────────────────────────────────────────
@@ -626,6 +869,7 @@ app.post('/api/auth/social-complete', async (req, res) => {
       INSERT INTO users (id, first_name, last_name, email, address, phone, password_hash, oauth_provider, oauth_provider_id, status)
       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'pending')
     `, [userId, firstName.trim(), lastName.trim(), email, address.trim(), phone?.trim() || null, pending.provider, pending.providerId]);
+    dbRun(`UPDATE users SET sms_opt_out = 0, sms_unsubscribe_token = COALESCE(sms_unsubscribe_token, ?) WHERE id = ?`, [uuidv4(), userId]);
 
     delete req.session.pendingSocial;
     saveDb();
@@ -704,6 +948,7 @@ app.post('/api/signup', async (req, res) => {
       INSERT INTO users (id, first_name, last_name, email, address, phone, password_hash, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
     `, [userId, firstName.trim(), lastName.trim(), email.toLowerCase().trim(), address.trim(), phone?.trim() || null, passwordHash]);
+    dbRun(`UPDATE users SET sms_opt_out = 0, sms_unsubscribe_token = COALESCE(sms_unsubscribe_token, ?) WHERE id = ?`, [uuidv4(), userId]);
 
     // Send notification email to admin
     const adminUrl = `${process.env.SITE_URL || 'http://localhost:3000'}/admin.html`;
@@ -928,6 +1173,50 @@ app.get('/api/me', (req, res) => {
   } else {
     res.json({ authenticated: false });
   }
+});
+
+// ── SMS Preference Routes (member-facing) ──────────────────
+app.get('/api/sms/preferences', requireAuth, (req, res) => {
+  const user = dbGet(`SELECT id, status, phone, sms_opt_out FROM users WHERE id = ?`, [req.session.userId]);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+
+  const hasPhone = !!normalizeUSPhone(user.phone);
+  const optedOut = !!user.sms_opt_out;
+  const canReceiveSms = user.status === 'approved' && hasPhone && !optedOut;
+
+  res.json({
+    hasPhone,
+    phoneMasked: hasPhone ? maskPhone(user.phone) : null,
+    optedOut,
+    canReceiveSms
+  });
+});
+
+app.post('/api/sms/preferences', requireAuth, (req, res) => {
+  const optedOut = !!req.body.opted_out;
+  dbRun(`
+    UPDATE users
+    SET sms_opt_out = ?,
+        sms_unsubscribe_token = COALESCE(sms_unsubscribe_token, ?)
+    WHERE id = ?
+  `, [optedOut ? 1 : 0, uuidv4(), req.session.userId]);
+
+  res.json({ success: true, message: optedOut ? 'You have opted out of HOA text messages.' : 'You are now subscribed to HOA text messages.' });
+});
+
+// Public SMS unsubscribe link endpoint
+app.get('/api/sms/unsubscribe', (req, res) => {
+  const token = (req.query.token || '').toString().trim();
+  if (!token) return res.status(400).json({ error: 'Missing token.' });
+
+  const user = dbGet(`SELECT id, sms_opt_out FROM users WHERE sms_unsubscribe_token = ?`, [token]);
+  if (!user) return res.status(404).json({ error: 'Invalid unsubscribe token.' });
+
+  if (!user.sms_opt_out) {
+    dbRun(`UPDATE users SET sms_opt_out = 1 WHERE id = ?`, [user.id]);
+  }
+
+  res.json({ success: true });
 });
 
 // ── Community Events Routes ──────────────────────────────
@@ -1253,6 +1542,176 @@ app.get('/api/directory/print', requireAuth, (req, res) => {
   res.json(result);
 });
 
+// ── Pool Phone Access (per-person phone credentials) ────────────
+//
+// A household member may register one phone (iPhone or Android) for
+// themselves and for each adult / child on their profile. The phone is
+// the access method at the pool gate. Access is only granted when an
+// admin has added the matching person to pool_members with status=active.
+
+function hashPoolPhoneToken(token) {
+  return crypto.createHash('sha256').update(String(token || '').trim()).digest('hex');
+}
+
+function generatePoolPhoneToken() {
+  // 22-char URL-safe token (~128 bits of entropy)
+  return crypto.randomBytes(16).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Map a (user_id, person_type, person_id) to the corresponding pool_members
+// row. Returns the pool_member object or null when admin has not enrolled
+// the person as an active pool guest yet.
+function findPoolMemberForPerson(userId, personType, personId) {
+  if (personType === 'self') {
+    return dbGet(
+      `SELECT * FROM pool_members WHERE user_id=? AND status='active' LIMIT 1`,
+      [userId]);
+  }
+  if (personType === 'adult' && personId) {
+    return dbGet(
+      `SELECT * FROM pool_members WHERE notes=? AND status='active' LIMIT 1`,
+      [`family_adult_${personId}`]);
+  }
+  if (personType === 'child' && personId) {
+    return dbGet(
+      `SELECT * FROM pool_members WHERE notes=? AND status='active' LIMIT 1`,
+      [`family_child_${personId}`]);
+  }
+  return null;
+}
+
+// Resolve a friendly display name for the registered person.
+function resolvePersonName(userId, personType, personId) {
+  if (personType === 'self') {
+    const u = dbGet('SELECT first_name, last_name FROM users WHERE id=?', [userId]);
+    return u ? `${u.first_name} ${u.last_name}` : 'Member';
+  }
+  if (personType === 'adult' && personId) {
+    const a = dbGet('SELECT name FROM dir_adults WHERE id=? AND user_id=?', [personId, userId]);
+    return a ? a.name : null;
+  }
+  if (personType === 'child' && personId) {
+    const c = dbGet('SELECT first_name FROM dir_children WHERE id=? AND user_id=?', [personId, userId]);
+    return c ? c.first_name : null;
+  }
+  return null;
+}
+
+// Decorate a phone row with active-guest status (recomputed on read so the
+// UI always reflects the admin's current pool_members state).
+function decoratePhone(row) {
+  if (!row) return null;
+  const pm = findPoolMemberForPerson(row.user_id, row.person_type, row.person_id);
+  return {
+    id: row.id,
+    person_type: row.person_type,
+    person_id: row.person_id,
+    person_name: row.person_name,
+    device_platform: row.device_platform,
+    device_label: row.device_label,
+    status: row.status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    revoked_at: row.revoked_at,
+    is_active_guest: !!pm,
+    pool_member_id: pm ? pm.id : null
+  };
+}
+
+// GET /api/directory/me/pool-phones — list all phones for my household
+app.get('/api/directory/me/pool-phones', requireAuth, (req, res) => {
+  try {
+    const rows = dbAll(
+      `SELECT * FROM dir_pool_phones WHERE user_id=? ORDER BY created_at`,
+      [req.session.userId]);
+    res.json({ phones: rows.map(decoratePhone) });
+  } catch (err) {
+    console.error('GET /api/directory/me/pool-phones error:', err.message);
+    res.status(500).json({ error: 'Failed to load pool phones.' });
+  }
+});
+
+// POST /api/directory/me/pool-phones — register or replace the phone for
+// a specific household person. Only one active phone per person. Returns
+// a one-time enrollment_token — the user must save it to their phone now;
+// only the SHA-256 hash is retained on the server.
+app.post('/api/directory/me/pool-phones', requireAuth, (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const { person_type, person_id, device_platform, device_label } = req.body || {};
+
+    if (!['self', 'adult', 'child'].includes(person_type)) {
+      return res.status(400).json({ error: 'person_type must be self, adult, or child.' });
+    }
+    if (!['ios', 'android'].includes(device_platform)) {
+      return res.status(400).json({ error: 'device_platform must be ios or android.' });
+    }
+    if (person_type !== 'self' && !person_id) {
+      return res.status(400).json({ error: 'person_id is required for adult/child registrations.' });
+    }
+
+    const personName = resolvePersonName(uid, person_type, person_type === 'self' ? null : person_id);
+    if (!personName) {
+      return res.status(404).json({ error: 'Household person not found.' });
+    }
+
+    // Revoke any prior active phone for this person (one phone per person)
+    dbRun(
+      `UPDATE dir_pool_phones SET status='revoked', revoked_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+       WHERE user_id=? AND person_type=? AND ((person_id IS NULL AND ? IS NULL) OR person_id=?) AND status='active'`,
+      [uid, person_type, person_type === 'self' ? null : person_id, person_type === 'self' ? null : person_id]);
+
+    const token = generatePoolPhoneToken();
+    const hash  = hashPoolPhoneToken(token);
+    const id    = uuidv4();
+    const pm    = findPoolMemberForPerson(uid, person_type, person_type === 'self' ? null : person_id);
+
+    dbRun(
+      `INSERT INTO dir_pool_phones
+        (id, user_id, person_type, person_id, person_name, device_platform, device_label,
+         credential_token_hash, pool_member_id, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [id, uid, person_type, person_type === 'self' ? null : person_id, personName,
+       device_platform, (device_label || '').trim() || null, hash, pm ? pm.id : null]);
+
+    dirAudit(uid, 'pool_phone_registered',
+      `${personName} (${person_type}) — ${device_platform}${device_label ? ' / ' + device_label : ''}`);
+
+    const row = dbGet('SELECT * FROM dir_pool_phones WHERE id=?', [id]);
+    res.json({
+      success: true,
+      phone: decoratePhone(row),
+      enrollment_token: token,            // shown ONCE — never returned again
+      qr_payload: `GLENRIDGE-POOL:${token}`
+    });
+  } catch (err) {
+    console.error('POST /api/directory/me/pool-phones error:', err.message);
+    res.status(500).json({ error: 'Failed to register phone.' });
+  }
+});
+
+// DELETE /api/directory/me/pool-phones/:id — revoke a phone
+app.delete('/api/directory/me/pool-phones/:id', requireAuth, (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const row = dbGet('SELECT * FROM dir_pool_phones WHERE id=? AND user_id=?',
+      [req.params.id, uid]);
+    if (!row) return res.status(404).json({ error: 'Phone not found.' });
+
+    dbRun(
+      `UPDATE dir_pool_phones SET status='revoked', revoked_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+       WHERE id=? AND user_id=?`,
+      [req.params.id, uid]);
+
+    dirAudit(uid, 'pool_phone_revoked', `${row.person_name} — ${row.device_platform}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/directory/me/pool-phones error:', err.message);
+    res.status(500).json({ error: 'Failed to revoke phone.' });
+  }
+});
+
 // ── Admin Routes ────────────────────────────────────────
 
 // Admin login
@@ -1303,6 +1762,78 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
     ORDER BY created_at DESC
   `);
   res.json(users);
+});
+
+// SMS recipient preview (admin-only)
+app.get('/api/admin/sms/recipients', requireAdmin, (req, res) => {
+  const users = dbAll(`
+    SELECT id, first_name, last_name, phone, status, sms_opt_out
+    FROM users
+    WHERE status = 'approved'
+    ORDER BY last_name ASC, first_name ASC
+  `);
+
+  const recipients = users
+    .map(u => ({
+      ...u,
+      normalized_phone: normalizeUSPhone(u.phone)
+    }))
+    .filter(u => !!u.normalized_phone && !u.sms_opt_out)
+    .map(u => ({
+      id: u.id,
+      name: `${u.first_name} ${u.last_name}`,
+      phoneMasked: maskPhone(u.phone)
+    }));
+
+  res.json({
+    eligibleCount: recipients.length,
+    recipients
+  });
+});
+
+// Send SMS broadcast (admin-only)
+app.post('/api/admin/sms/send', requireAdmin, async (req, res) => {
+  try {
+    const message = (req.body.message || '').toString().trim();
+    if (!message) return res.status(400).json({ error: 'Message is required.' });
+    if (message.length > 1200) return res.status(400).json({ error: 'Message is too long.' });
+
+    const users = dbAll(`
+      SELECT id, first_name, last_name, phone, sms_unsubscribe_token, sms_opt_out
+      FROM users
+      WHERE status = 'approved'
+    `);
+
+    const eligible = users.filter(u => !u.sms_opt_out && normalizeUSPhone(u.phone));
+    if (!eligible.length) {
+      return res.status(400).json({ error: 'No eligible recipients with valid phone numbers.' });
+    }
+
+    let sent = 0;
+    let failed = 0;
+    for (const u of eligible) {
+      const unsubUrl = `${siteUrl()}/unsubscribe.html?channel=sms&token=${encodeURIComponent(u.sms_unsubscribe_token || '')}`;
+      const finalMessage = `${message}\n\nOpt out: ${unsubUrl}`;
+      try {
+        await sendSms(u.phone, finalMessage);
+        sent++;
+      } catch (err) {
+        failed++;
+        console.warn(`SMS send failed for ${u.first_name} ${u.last_name}:`, err.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      sent,
+      failed,
+      totalEligible: eligible.length,
+      note: (twilioClient && twilioFromNumber) ? null : 'Twilio is not configured. Messages were logged to the server console.'
+    });
+  } catch (err) {
+    console.error('Admin SMS send error:', err);
+    res.status(500).json({ error: 'Failed to send SMS broadcast.' });
+  }
 });
 
 // Approve user
@@ -1708,7 +2239,15 @@ app.get('/api/admin/pool/members', requireAdmin, (req, res) => {
     JOIN pool_entry_types pet ON pm.entry_type_id = pet.id
     ORDER BY pet.name, pm.last_name, pm.first_name
   `);
-  res.json(members);
+  const enriched = members.map(m => {
+    const street_address = getPoolMemberStreetAddress(m);
+    return {
+      ...m,
+      street_address,
+      household_key: street_address ? street_address.toLowerCase() : null
+    };
+  });
+  res.json(enriched);
 });
 
 // POST new pool member (manual — for non-residents)
@@ -1719,14 +2258,25 @@ app.post('/api/admin/pool/members', requireAdmin, (req, res) => {
   }
   const type = dbGet('SELECT id FROM pool_entry_types WHERE id = ?', [entry_type_id]);
   if (!type) return res.status(400).json({ error: 'Invalid entry type.' });
-  if (rfid_tag) {
-    const existing = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ?', [rfid_tag.trim()]);
-    if (existing) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+  const normalizedRfid = rfid_tag ? normalizeRfidCredentialValue(rfid_tag) : null;
+  if (normalizedRfid) {
+    const existingLegacy = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ?', [normalizedRfid]);
+    if (existingLegacy) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+    const existingCredential = dbGet('SELECT pool_member_id, status FROM pool_nfc_credentials WHERE credential_hash = ?', [hashPoolCredential('rfid', normalizedRfid)]);
+    if (existingCredential && existingCredential.status === 'active') {
+      return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+    }
   }
   const id = uuidv4();
   dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, source, notes, rfid_tag)
          VALUES (?, ?, ?, ?, 'manual', ?, ?)`,
-    [id, first_name.trim(), last_name.trim(), entry_type_id, notes?.trim() || null, rfid_tag?.trim() || null]);
+    [id, first_name.trim(), last_name.trim(), entry_type_id, notes?.trim() || null, normalizedRfid || null]);
+
+  if (normalizedRfid) {
+    const assigned = upsertRfidCredentialForMember(id, normalizedRfid, `${first_name.trim()} ${last_name.trim()}'s card`);
+    if (!assigned.ok) return res.status(400).json({ error: assigned.error });
+  }
+
   res.json({ success: true, id });
 });
 
@@ -1735,16 +2285,43 @@ app.put('/api/admin/pool/members/:id', requireAdmin, (req, res) => {
   const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
   if (!member) return res.status(404).json({ error: 'Pool member not found.' });
   const { first_name, last_name, entry_type_id, status, notes, rfid_tag } = req.body;
-  if (rfid_tag !== undefined && rfid_tag) {
-    const existing = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ? AND id != ?', [rfid_tag.trim(), req.params.id]);
+  const normalizedRfid = rfid_tag !== undefined ? normalizeRfidCredentialValue(rfid_tag) : member.rfid_tag;
+  if (rfid_tag !== undefined && normalizedRfid) {
+    const existing = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ? AND id != ?', [normalizedRfid, req.params.id]);
     if (existing) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+    const existingCredential = dbGet('SELECT pool_member_id, status FROM pool_nfc_credentials WHERE credential_hash = ?', [hashPoolCredential('rfid', normalizedRfid)]);
+    if (existingCredential && existingCredential.status === 'active' && existingCredential.pool_member_id !== req.params.id) {
+      return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+    }
   }
   dbRun(`UPDATE pool_members SET first_name=?, last_name=?, entry_type_id=?, status=?, notes=?, rfid_tag=? WHERE id=?`,
     [first_name || member.first_name, last_name || member.last_name,
      entry_type_id || member.entry_type_id, status || member.status,
      notes !== undefined ? notes : member.notes,
-     rfid_tag !== undefined ? (rfid_tag?.trim() || null) : member.rfid_tag, req.params.id]);
+     rfid_tag !== undefined ? (normalizedRfid || null) : member.rfid_tag, req.params.id]);
+
+  if (rfid_tag !== undefined && normalizedRfid) {
+    const displayName = `${first_name || member.first_name} ${last_name || member.last_name}'s card`;
+    const assigned = upsertRfidCredentialForMember(req.params.id, normalizedRfid, displayName);
+    if (!assigned.ok) return res.status(400).json({ error: assigned.error });
+  }
+
   res.json({ success: true });
+});
+
+// Add an additional RFID card credential to a pool member
+app.post('/api/admin/pool/members/:id/credentials/rfid', requireAdmin, (req, res) => {
+  const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
+  if (!member) return res.status(404).json({ error: 'Pool member not found.' });
+
+  const rawTag = (req.body?.rfid_tag || '').trim();
+  const deviceName = (req.body?.device_name || '').trim();
+  if (!rawTag) return res.status(400).json({ error: 'RFID tag is required.' });
+
+  const assigned = upsertRfidCredentialForMember(req.params.id, rawTag, deviceName || `${member.first_name} ${member.last_name}'s card`);
+  if (!assigned.ok) return res.status(400).json({ error: assigned.error });
+
+  res.json({ success: true, credential_id: assigned.id, normalized_tag: assigned.normalized });
 });
 
 // DELETE pool member
@@ -1752,6 +2329,211 @@ app.delete('/api/admin/pool/members/:id', requireAdmin, (req, res) => {
   dbRun('DELETE FROM pool_schedules WHERE pool_member_id = ?', [req.params.id]);
   dbRun('DELETE FROM pool_members WHERE id = ?', [req.params.id]);
   res.json({ success: true });
+});
+
+// ── Apple Wallet Pass Generation ────────────────────
+
+// Generate Apple Wallet pass (.pkpass) for a pool member
+app.post('/api/admin/pool/members/:id/generate-apple-pass', requireAdmin, async (req, res) => {
+  const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
+  if (!member) return res.status(404).json({ error: 'Pool member not found.' });
+
+  try {
+    // Always generate a fresh credential for each new pass
+    const credentialToken = crypto.randomBytes(32).toString('hex');
+    const credentialHash = crypto.createHash('sha256').update(credentialToken).digest('hex');
+    const passSerial = uuidv4();
+
+    dbRun(`
+      INSERT INTO pool_nfc_credentials (id, pool_member_id, credential_hash, device_platform, device_name, pass_serial, pass_generated_at)
+      VALUES (?, ?, ?, 'ios', ?, ?, CURRENT_TIMESTAMP)
+    `, [uuidv4(), member.id, credentialHash, `${member.first_name} ${member.last_name}'s iPhone`, passSerial]);
+
+    // Build pass.json
+    const passJson = {
+      formatVersion: 1,
+      passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID || 'pass.glenridge.pool',
+      serialNumber: passSerial,
+      teamIdentifier: process.env.APPLE_TEAM_ID || 'ABCDEFGHIJ',
+      organizationName: 'Glenridge HOA',
+      description: 'Glenridge Pool Access Pass',
+      logoText: 'Glenridge HOA',
+      foregroundColor: 'rgb(255, 255, 255)',
+      backgroundColor: 'rgb(30, 126, 116)',
+      generic: {
+        primaryFields: [{ key: 'member', label: 'MEMBER', value: `${member.first_name} ${member.last_name}` }],
+        secondaryFields: [{ key: 'access', label: 'ACCESS', value: 'Pool Entry' }],
+        auxiliaryFields: [{ key: 'serial', label: 'PASS ID', value: passSerial.substring(0, 8).toUpperCase() }]
+      }
+    };
+
+    // Add NFC if env key is set (requires Apple entitlement in production)
+    if (process.env.APPLE_NFC_PUBKEY) {
+      passJson.nfc = { message: credentialHash, encryptionPublicKey: process.env.APPLE_NFC_PUBKEY };
+    }
+
+    // Generate small PNG icons (29x29 and 58x58) using pure Node.js
+    const icon1x = makeSolidPng(29, 29, 30, 126, 116);
+    const icon2x = makeSolidPng(58, 58, 30, 126, 116);
+
+    // Build manifest (SHA1 of each file)
+    const passJsonBuf = Buffer.from(JSON.stringify(passJson), 'utf8');
+    const manifest = {
+      'pass.json': crypto.createHash('sha1').update(passJsonBuf).digest('hex'),
+      'icon.png': crypto.createHash('sha1').update(icon1x).digest('hex'),
+      'icon@2x.png': crypto.createHash('sha1').update(icon2x).digest('hex')
+    };
+    const manifestBuf = Buffer.from(JSON.stringify(manifest), 'utf8');
+
+    // Signature is required by Apple Wallet; without a real cert the file
+    // will open on device but show an "Invalid Pass" warning.
+    // Use APPLE_CERT_PATH + APPLE_KEY_PATH env vars to enable signing.
+    let signatureBuf = Buffer.alloc(0);
+    if (process.env.APPLE_CERT_PATH && process.env.APPLE_KEY_PATH) {
+      try {
+        const certPem = fs.readFileSync(process.env.APPLE_CERT_PATH);
+        const keyPem = fs.readFileSync(process.env.APPLE_KEY_PATH);
+        const wwdrPem = process.env.APPLE_WWDR_PATH ? fs.readFileSync(process.env.APPLE_WWDR_PATH) : null;
+        // Use openssl via child_process for PKCS7 signing
+        const { execSync } = require('child_process');
+        const tmpDir = require('os').tmpdir();
+        const mPath = path.join(tmpDir, `manifest_${passSerial}.json`);
+        const sPath = path.join(tmpDir, `sig_${passSerial}.der`);
+        fs.writeFileSync(mPath, manifestBuf);
+        const wwdrArg = wwdrPem ? `-certfile ${process.env.APPLE_WWDR_PATH}` : '';
+        execSync(`openssl smime -binary -sign -certfile ${process.env.APPLE_CERT_PATH} -signer ${process.env.APPLE_CERT_PATH} -inkey ${process.env.APPLE_KEY_PATH} ${wwdrArg} -in ${mPath} -out ${sPath} -outform DER`);
+        signatureBuf = fs.readFileSync(sPath);
+        fs.unlinkSync(mPath); fs.unlinkSync(sPath);
+      } catch (sigErr) {
+        console.warn('Pass signing failed (pass will be unsigned):', sigErr.message);
+      }
+    }
+
+    // Build .pkpass ZIP
+    const zip = new JSZip();
+    zip.file('pass.json', passJsonBuf);
+    zip.file('manifest.json', manifestBuf);
+    zip.file('signature', signatureBuf);
+    zip.file('icon.png', icon1x);
+    zip.file('icon@2x.png', icon2x);
+
+    const pkpassBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+
+    res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
+    res.setHeader('Content-Disposition', `attachment; filename="${member.first_name}_${member.last_name}_pool_pass.pkpass"`);
+    res.send(pkpassBuffer);
+
+    console.log(`✓ Generated Apple Wallet pass for ${member.first_name} ${member.last_name} (serial: ${passSerial})`);
+
+  } catch (err) {
+    console.error('Apple Wallet pass generation error:', err);
+    res.status(500).json({ error: 'Failed to generate Apple Wallet pass.', details: err.message });
+  }
+});
+
+// Generate Google Wallet pass (JWT save link) for a pool member
+app.post('/api/admin/pool/members/:id/generate-google-pass', requireAdmin, (req, res) => {
+  const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
+  if (!member) return res.status(404).json({ error: 'Pool member not found.' });
+
+  const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID;
+  const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY; // PEM private key, newlines as \n
+
+  if (!issuerId || !serviceAccountEmail || !serviceAccountKey) {
+    return res.status(503).json({
+      error: 'Google Wallet not configured.',
+      setup: 'Set GOOGLE_WALLET_ISSUER_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_SERVICE_ACCOUNT_KEY in .env'
+    });
+  }
+
+  try {
+    const jwt = require('jsonwebtoken');
+    const credentialToken = crypto.randomBytes(32).toString('hex');
+    const credentialHash = crypto.createHash('sha256').update(credentialToken).digest('hex');
+    const passSerial = uuidv4();
+    const objectId = `${issuerId}.pool_${passSerial.replace(/-/g, '_')}`;
+    const classId = `${issuerId}.glenridge_pool_access`;
+
+    // Store credential
+    dbRun(`
+      INSERT INTO pool_nfc_credentials (id, pool_member_id, credential_hash, device_platform, device_name, pass_serial, pass_generated_at)
+      VALUES (?, ?, ?, 'android', ?, ?, CURRENT_TIMESTAMP)
+    `, [uuidv4(), member.id, credentialHash, `${member.first_name} ${member.last_name}'s Android`, passSerial]);
+
+    const genericObject = {
+      id: objectId,
+      classId: classId,
+      genericType: 'GENERIC_TYPE_UNSPECIFIED',
+      hexBackgroundColor: '#1e7e74',
+      logo: {
+        sourceUri: { uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Pool_icon.svg/120px-Pool_icon.svg.png' },
+        contentDescription: { defaultValue: { language: 'en-US', value: 'Pool' } }
+      },
+      cardTitle: { defaultValue: { language: 'en-US', value: 'Glenridge HOA' } },
+      subheader: { defaultValue: { language: 'en-US', value: 'Pool Access' } },
+      header: { defaultValue: { language: 'en-US', value: `${member.first_name} ${member.last_name}` } },
+      textModulesData: [
+        { id: 'access', header: 'ACCESS LEVEL', body: 'Pool Entry' },
+        { id: 'passid', header: 'PASS ID', body: passSerial.substring(0, 8).toUpperCase() }
+      ],
+      barcode: {
+        type: 'QR_CODE',
+        value: credentialHash,
+        alternateText: 'Pool Access'
+      },
+      state: 'ACTIVE'
+    };
+
+    const claims = {
+      iss: serviceAccountEmail,
+      aud: 'google',
+      origins: ['*'],
+      typ: 'savetowallet',
+      payload: { genericObjects: [genericObject] }
+    };
+
+    const privateKey = serviceAccountKey.replace(/\\n/g, '\n');
+    const token = jwt.sign(claims, privateKey, { algorithm: 'RS256' });
+    const saveUrl = `https://pay.google.com/gp/v/save/${token}`;
+
+    res.json({ saveUrl, passSerial });
+    console.log(`✓ Generated Google Wallet pass for ${member.first_name} ${member.last_name} (serial: ${passSerial})`);
+
+  } catch (err) {
+    console.error('Google Wallet pass generation error:', err);
+    res.status(500).json({ error: 'Failed to generate Google Wallet pass.', details: err.message });
+  }
+});
+
+// GET NFC credentials for a member
+app.get('/api/admin/pool/members/:id/credentials', requireAdmin, (req, res) => {
+  const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
+  if (!member) return res.status(404).json({ error: 'Pool member not found.' });
+
+  // Backfill the legacy single RFID field into the credentials table so
+  // gate sync and admin credential management stay consistent.
+  if (member.rfid_tag) {
+    upsertRfidCredentialForMember(member.id, member.rfid_tag, `${member.first_name} ${member.last_name}'s card`);
+  }
+
+  const credentials = dbAll(`
+    SELECT id, credential_type, credential_hash, device_platform, device_name,
+           pass_serial, pass_generated_at, created_at, status, revoked_at
+    FROM pool_nfc_credentials
+    WHERE pool_member_id = ?
+    ORDER BY created_at DESC
+  `, [req.params.id]);
+  res.json(credentials);
+});
+
+// Revoke NFC credential
+app.post('/api/admin/pool/members/:id/credentials/:credId/revoke', requireAdmin, (req, res) => {
+  const cred = dbGet('SELECT * FROM pool_nfc_credentials WHERE id = ? AND pool_member_id = ?', [req.params.credId, req.params.id]);
+  if (!cred) return res.status(404).json({ error: 'Credential not found.' });
+  
+  dbRun('UPDATE pool_nfc_credentials SET status = ?, revoked_at = CURRENT_TIMESTAMP WHERE id = ?', ['revoked', req.params.credId]);
+  res.json({ success: true, message: 'Credential revoked.' });
 });
 
 // GET schedules
@@ -2027,11 +2809,53 @@ app.get('/api/gate/sync/pull', requireGateKey, (req, res) => {
     schedules = dbAll('SELECT * FROM pool_schedules');
   }
 
+  // Phone credentials — only push to gate when the linked person is an
+  // active pool_member. Re-resolve each time so admin status changes
+  // (active / suspended / removed) take effect on next sync.
+  const credentials = [];
+
+  // Credentials explicitly assigned in admin (RFID + wallet/NFC types)
+  const nfcRows = dbAll(`
+    SELECT pnc.*
+    FROM pool_nfc_credentials pnc
+    JOIN pool_members pm ON pm.id = pnc.pool_member_id
+    WHERE pnc.status = 'active' AND pm.status = 'active'
+  `);
+  for (const c of nfcRows) {
+    credentials.push({
+      id: c.id,
+      pool_member_id: c.pool_member_id,
+      credential_type: c.credential_type || 'nfc_phone',
+      credential_hash: c.credential_hash,
+      device_platform: c.device_platform,
+      device_name: c.device_name,
+      enrolled_at: c.created_at || c.pass_generated_at,
+      status: c.status
+    });
+  }
+
+  const phoneRows = dbAll(`SELECT * FROM dir_pool_phones WHERE status='active'`);
+  for (const p of phoneRows) {
+    const pm = findPoolMemberForPerson(p.user_id, p.person_type, p.person_id);
+    if (!pm) continue; // admin has not made this person an active pool guest
+    credentials.push({
+      id: p.id,
+      pool_member_id: pm.id,
+      credential_type: 'qr_static',
+      credential_hash: p.credential_token_hash,
+      device_platform: p.device_platform,
+      device_name: p.device_label || `${p.person_name}'s phone`,
+      enrolled_at: p.created_at,
+      status: 'active'
+    });
+  }
+
   res.json({
     timestamp: new Date().toISOString(),
     entry_types,
     members,
-    schedules
+    schedules,
+    credentials
   });
 });
 

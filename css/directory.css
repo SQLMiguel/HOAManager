@@ -460,6 +460,9 @@
 .dir-publish-actions { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .dir-publish-status { font-size: .88rem; color: #888; }
 .dir-status-live { color: #276749; font-weight: 600; }
+.dir-sms-pref-row { margin-top: .5rem; }
+.dir-sms-pref-actions { margin-top: .8rem; }
+.dir-hidden { display: none !important; }
 
 .dir-danger-zone {
   border-top: 1px solid #f0e8e8;
@@ -564,3 +567,112 @@
   .dir-photo-upload-area { flex-direction: column; align-items: stretch; }
   .dir-upload-btn { justify-content: center; }
 }
+
+
+/* ── Pool Phone Access ─────────────────────────────────────── */
+.dir-pool-phone-row {
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: .6rem;
+  padding: .75rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  margin-top: .5rem;
+}
+.dir-pool-phone-row .dir-pp-info {
+  flex: 1 1 220px;
+  font-size: .92rem;
+  color: #333;
+}
+.dir-pool-phone-row .dir-pp-info strong { color: var(--primary, #2a3f6f); }
+.dir-pp-platform-badge {
+  display: inline-block;
+  font-size: .72rem;
+  padding: .12rem .55rem;
+  border-radius: 1rem;
+  background: var(--primary, #2a3f6f);
+  color: #fff;
+  margin-right: .35rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.dir-pp-status-active {
+  color: #1e7c3a;
+  font-weight: 600;
+  font-size: .82rem;
+}
+.dir-pp-status-pending {
+  color: #b06a00;
+  font-weight: 600;
+  font-size: .82rem;
+}
+.dir-pp-status-none {
+  color: #888;
+  font-size: .88rem;
+  font-style: italic;
+}
+.dir-pp-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* Modal */
+.dir-modal {
+  position: fixed; inset: 0;
+  z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.dir-modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.55);
+}
+.dir-modal-card {
+  position: relative;
+  background: #fff;
+  border-radius: 1rem;
+  padding: 2rem 1.75rem 1.5rem;
+  max-width: 460px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+.dir-modal-close {
+  position: absolute; top: .65rem; right: .9rem;
+  background: none; border: none;
+  font-size: 1.6rem; line-height: 1; cursor: pointer;
+  color: #555;
+}
+.dir-modal-close:hover { color: #000; }
+
+.dir-pp-platform-row {
+  display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem;
+}
+.dir-pp-qr-box {
+  display: flex; justify-content: center;
+  background: #fff;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: .5rem;
+  margin: 1rem 0;
+}
+.dir-pp-token-row {
+  display: flex; gap: .5rem; align-items: center;
+  margin-bottom: .75rem;
+  flex-wrap: wrap;
+}
+.dir-pp-token {
+  flex: 1 1 220px;
+  background: #f3f3f3;
+  padding: .5rem .65rem;
+  border-radius: .4rem;
+  font-family: monospace;
+  font-size: .82rem;
+  word-break: break-all;
+}
+.dir-pp-guest-status {
+  margin-top: .8rem;
+  font-size: .85rem;
+  color: #b06a00;
+}
+.dir-pp-guest-status.is-active { color: #1e7c3a; }

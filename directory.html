@@ -226,6 +226,16 @@
           <!-- ── TAB: Family & Pets ── -->
           <div class="dir-tab-panel" id="tab-family">
 
+            <!-- Pool Phone Access (primary member) -->
+            <div class="dir-field-group">
+              <h4>Pool Gate — My Phone Access</h4>
+              <p class="dir-field-hint">
+                Register your iPhone or Android phone as your pool gate access method. The pool admin must
+                also list you as an active pool guest for entry to be granted.
+              </p>
+              <div id="poolPhoneSelf" class="dir-pool-phone-row"></div>
+            </div>
+
             <!-- Adults -->
             <div class="dir-field-group">
               <h4>Additional Adults in Household</h4>
@@ -332,6 +342,20 @@
           <!-- ── TAB: Privacy & Publish ── -->
           <div class="dir-tab-panel" id="tab-publish">
             <div class="dir-field-group">
+              <h4>Text Message Preferences</h4>
+              <p class="dir-field-hint">HOA admins may send community text alerts. By default, approved members with a valid phone number are enrolled.</p>
+              <div class="dir-info-row dir-sms-pref-row">
+                <label>SMS Number</label>
+                <span id="smsPhoneDisplay" class="dir-readonly">Not available</span>
+              </div>
+              <div class="dir-publish-actions dir-sms-pref-actions">
+                <button class="btn btn-outline" id="smsOptOutBtn" type="button">Opt Out of SMS</button>
+                <button class="btn btn-primary dir-hidden" id="smsOptInBtn" type="button">Opt Back In</button>
+                <span id="smsPrefStatus" class="dir-publish-status"></span>
+              </div>
+            </div>
+
+            <div class="dir-field-group">
               <h4>Do Not List</h4>
               <p class="dir-field-hint">When enabled, your profile is hidden from all directory listings. Your name and address will not appear.</p>
               <label class="dir-toggle dir-toggle-large">
@@ -384,6 +408,57 @@
 
   </div><!-- /#dirApp -->
 
+  <!-- ========== POOL PHONE ENROLLMENT MODAL ========== -->
+  <div id="poolPhoneModal" class="dir-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="ppmTitle">
+    <div class="dir-modal-backdrop" data-close="1"></div>
+    <div class="dir-modal-card">
+      <button class="dir-modal-close" id="ppmCloseBtn" aria-label="Close">&times;</button>
+
+      <!-- Step 1: choose platform -->
+      <div id="ppmStepChoose">
+        <h3 id="ppmTitle">Register Phone for <span id="ppmPersonName">…</span></h3>
+        <p class="dir-field-hint">Pick the phone type. We will generate a one-time access code that you save to that phone.</p>
+        <div class="dir-field-group">
+          <label for="ppmDeviceLabel" style="display:block;margin-bottom:.4rem;font-weight:500;">Device label (optional)</label>
+          <input type="text" id="ppmDeviceLabel" class="dir-input" placeholder="e.g. Sarah's iPhone" maxlength="40">
+        </div>
+        <div class="dir-pp-platform-row">
+          <button class="btn btn-primary" id="ppmRegIosBtn" type="button">
+            Register iPhone
+          </button>
+          <button class="btn btn-primary" id="ppmRegAndroidBtn" type="button">
+            Register Android
+          </button>
+        </div>
+        <p class="dir-field-hint" style="margin-top:1rem;">
+          <strong>Note:</strong> Registering replaces any phone previously enrolled for this person.
+        </p>
+        <p id="ppmGuestStatus" class="dir-pp-guest-status"></p>
+      </div>
+
+      <!-- Step 2: show QR + token -->
+      <div id="ppmStepShow" style="display:none;">
+        <h3>Save This to Your Phone</h3>
+        <p class="dir-field-hint">
+          This code is your pool-gate pass. <strong>It is shown only once</strong> &mdash; save the QR
+          image to <strong>Apple Wallet</strong> (iPhone) or <strong>Google Wallet / Photos</strong> (Android),
+          then present it at the pool gate scanner.
+        </p>
+        <div id="ppmQrBox" class="dir-pp-qr-box">
+          <canvas id="ppmQrCanvas" width="240" height="240"></canvas>
+        </div>
+        <div class="dir-pp-token-row">
+          <code id="ppmTokenText" class="dir-pp-token"></code>
+          <button class="btn btn-outline" id="ppmCopyBtn" type="button">Copy Code</button>
+        </div>
+        <div class="dir-pp-actions">
+          <button class="btn btn-outline" id="ppmDownloadBtn" type="button">Download QR Image</button>
+          <button class="btn btn-primary" id="ppmDoneBtn" type="button">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== FOOTER ========== -->
   <footer class="footer">
     <div class="container">
@@ -432,6 +507,7 @@
 
   <script src="js/validation.js"></script>
   <script src="js/main.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="js/directory.js"></script>
 </body>
 </html>

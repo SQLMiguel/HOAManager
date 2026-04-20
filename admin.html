@@ -80,6 +80,13 @@
     .pool-table tr:hover td { background: #f8fdf9; }
     .pool-table .actions { display: flex; gap: 6px; }
     .pool-table .actions button { padding: 5px 10px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.78rem; font-weight: 600; font-family: var(--font-body); }
+    .pool-household-summary { margin-top: 14px; padding: 14px; border: 1px solid #dfe4ea; border-radius: 10px; background: #fbfcfd; }
+    .pool-household-summary h4 { margin: 0 0 6px; font-size: 0.95rem; }
+    .pool-household-summary p { margin: 0 0 10px; color: var(--text-light); font-size: 0.82rem; }
+    .pool-household-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+    .pool-household-item { border: 1px solid #e8edf2; background: #fff; border-radius: 8px; padding: 10px 12px; }
+    .pool-household-item .addr { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+    .pool-household-item .meta { color: var(--text-light); font-size: 0.8rem; }
     .pool-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
     .pool-badge-active { background: #d4edda; color: #155724; }
     .pool-badge-suspended { background: #fff3cd; color: #856404; }
@@ -145,6 +152,18 @@
     .trend-bar-group:hover .trend-bar { opacity: 0.8; }
     .trend-bar-group:hover::after { content: attr(data-tip); position: absolute; top: -28px; background: #333; color: #fff;
       padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; white-space: nowrap; z-index: 10; }
+
+    /* SMS management */
+    .sms-title { margin-bottom: 16px; }
+    .sms-subtitle { margin-bottom: 12px; color: var(--text-light); font-size: 0.92rem; }
+    .sms-panel { display: block; }
+    .sms-toolbar { justify-content: space-between; align-items: center; }
+    .sms-count { font-size: 0.88rem; color: var(--text-light); }
+    .sms-card { max-width: 100%; width: 100%; }
+    .sms-card-title { margin-bottom: 10px; }
+    .sms-card-note { margin: 0 0 10px; color: var(--text-light); font-size: 0.85rem; }
+    .sms-card-actions { margin-top: 8px; }
+    .sms-send-status { margin-top: 10px; font-size: 0.85rem; color: var(--text-light); }
   </style>
 </head>
 <body>
@@ -219,6 +238,7 @@
           <div class="admin-tab-group-label">Management</div>
           <div class="admin-tab-group">
             <button class="admin-tab" data-filter="pool">🏊 Pool Management</button>
+            <button class="admin-tab" data-filter="sms">📱 SMS Alerts</button>
             <a href="newsletter-admin.html" class="admin-tab">📰 Newsletter</a>
           </div>
         </div>
@@ -280,6 +300,11 @@
             <button class="btn btn-primary" id="poolSyncBtn">🔄 Sync Residents</button>
             <button class="btn btn-outline" id="poolAddMemberBtn">+ Add Non-Resident</button>
             <span id="poolMemberCount" style="margin-left:auto;font-size:0.85rem;color:var(--text-light);"></span>
+          </div>
+          <div class="pool-household-summary" id="poolHouseholdSummary">
+            <h4>🏠 Family Units by Address</h4>
+            <p>Shows household count using only number + street name.</p>
+            <div class="pool-household-list" id="poolHouseholdList"></div>
           </div>
           <div style="overflow-x:auto;">
             <table class="pool-table">
@@ -366,6 +391,32 @@
           <div class="pool-access-result" id="poolAccessResult"></div>
         </div>
       </div>
+
+      <!-- ========== SMS MANAGEMENT SECTION ========== -->
+      <div class="pool-section" id="smsSection">
+        <h2 class="sms-title">📱 Community SMS Alerts</h2>
+        <p class="sms-subtitle">Only approved members with a valid phone number and active SMS subscription will receive these messages.</p>
+
+        <div class="pool-panel active sms-panel">
+          <div class="pool-toolbar sms-toolbar">
+            <span id="smsEligibleCount" class="sms-count">Loading recipients...</span>
+            <button class="btn btn-outline" id="smsRefreshBtn">Refresh Recipients</button>
+          </div>
+
+          <div class="pool-modal sms-card">
+            <h3 class="sms-card-title">Send SMS Broadcast</h3>
+            <p class="sms-card-note">An opt-out link will be appended automatically to every text.</p>
+            <div class="form-group">
+              <label for="smsMessage">Message</label>
+              <textarea id="smsMessage" rows="5" placeholder="Type your community SMS message here..." maxlength="1200"></textarea>
+            </div>
+            <div class="modal-actions sms-card-actions">
+              <button class="btn btn-primary" id="smsSendBtn" type="button">Send SMS to Eligible Members</button>
+            </div>
+            <p id="smsSendStatus" class="sms-send-status"></p>
+          </div>
+        </div>
+      </div>
     </div>
 
       <!-- Admin Footer -->
@@ -440,6 +491,19 @@
             <button type="button" class="btn-cancel" id="pmAssignCancelBtn" style="padding:6px 14px;font-size:0.82rem;border-radius:5px;border:none;cursor:pointer;font-weight:600;font-family:var(--font-body);">Cancel</button>
           </div>
         </div>
+      </div>
+
+      <!-- Credentials for this member (shown in edit mode only) -->
+      <div id="pmCredentialsSection" style="display:none; margin-top: 20px; border-top: 2px solid #e0e0e0; padding-top: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px; gap: 8px; flex-wrap: wrap;">
+          <h4 style="margin:0; font-size: 1rem;">Access Credentials (RFID / Phones)</h4>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <input type="text" id="pmExtraRfid" placeholder="Scan/add RFID tag (hex UID)" style="flex:1; min-width:220px; padding:8px 10px; border:1px solid #d0d5dd; border-radius:6px; font-size:0.88rem;">
+          <input type="text" id="pmExtraRfidName" placeholder="Card label (optional)" style="flex:1; min-width:180px; padding:8px 10px; border:1px solid #d0d5dd; border-radius:6px; font-size:0.88rem;">
+          <button type="button" class="btn btn-outline" id="pmAddRfidBtn" style="padding:8px 14px; font-size:0.82rem;">+ Add RFID</button>
+        </div>
+        <div id="pmCredentialsList"></div>
       </div>
     </div>
   </div>
@@ -785,6 +849,7 @@
     // ══════════════════════════════════════════════════════
 
     const poolSection = document.getElementById('poolSection');
+    const smsSection = document.getElementById('smsSection');
     const userListSection = document.getElementById('userList');
     const statsSection = document.getElementById('adminStats');
     const statsMembersGroup = document.getElementById('statsMembers');
@@ -801,6 +866,7 @@
         tab.classList.add('active');
 
         if (tab.dataset.filter === 'pool') {
+          smsSection.classList.remove('active');
           userListSection.style.display = 'none';
           statsMembersGroup.style.display = 'none';
           statsPoolGroup.style.display = '';
@@ -809,8 +875,17 @@
           loadPoolData();
           loadPoolStats();
           loadPoolTrend();
+        } else if (tab.dataset.filter === 'sms') {
+          poolSection.classList.remove('active');
+          smsSection.classList.add('active');
+          userListSection.style.display = 'none';
+          statsMembersGroup.style.display = '';
+          statsPoolGroup.style.display = 'none';
+          trendChartWrapper.style.display = 'none';
+          loadSmsRecipients();
         } else {
           poolSection.classList.remove('active');
+          smsSection.classList.remove('active');
           userListSection.style.display = '';
           statsMembersGroup.style.display = '';
           statsPoolGroup.style.display = '';
@@ -849,10 +924,76 @@
       }
     }
 
+    // ── SMS Management ──
+    async function loadSmsRecipients() {
+      const countEl = document.getElementById('smsEligibleCount');
+      const statusEl = document.getElementById('smsSendStatus');
+      if (countEl) countEl.textContent = 'Loading recipients...';
+      if (statusEl) statusEl.textContent = '';
+
+      try {
+        const res = await fetch('/api/admin/sms/recipients');
+        const data = await res.json();
+        if (data && typeof data.eligibleCount === 'number') {
+          countEl.textContent = `${data.eligibleCount} eligible member(s) currently subscribed to SMS`;
+        } else {
+          countEl.textContent = 'Unable to load recipients.';
+        }
+      } catch {
+        countEl.textContent = 'Unable to load recipients.';
+      }
+    }
+
+    document.getElementById('smsRefreshBtn').addEventListener('click', loadSmsRecipients);
+
+    document.getElementById('smsSendBtn').addEventListener('click', async () => {
+      const messageEl = document.getElementById('smsMessage');
+      const statusEl = document.getElementById('smsSendStatus');
+      const sendBtn = document.getElementById('smsSendBtn');
+      const message = messageEl.value.trim();
+
+      if (!message) {
+        showAdminNotification('Please enter a message before sending.', 'error');
+        return;
+      }
+
+      if (!confirm('Send this SMS message to all eligible members?')) return;
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending...';
+      statusEl.textContent = 'Sending SMS broadcast...';
+
+      try {
+        const res = await fetch('/api/admin/sms/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+        if (data.success) {
+          messageEl.value = '';
+          const note = data.note ? ` ${data.note}` : '';
+          statusEl.textContent = `Sent: ${data.sent} · Failed: ${data.failed} · Eligible: ${data.totalEligible}.${note}`;
+          showAdminNotification('SMS broadcast completed.', 'success');
+          await loadSmsRecipients();
+        } else {
+          statusEl.textContent = data.error || 'Failed to send SMS.';
+          showAdminNotification(data.error || 'Failed to send SMS.', 'error');
+        }
+      } catch {
+        statusEl.textContent = 'Connection error while sending SMS.';
+        showAdminNotification('Connection error while sending SMS.', 'error');
+      }
+
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send SMS to Eligible Members';
+    });
+
     // ── Pool Members ──
     function renderPoolMembers() {
       const body = document.getElementById('poolMembersBody');
       document.getElementById('poolMemberCount').textContent = `${poolMembers.length} member(s)`;
+      renderPoolHouseholdSummary();
 
       if (poolMembers.length === 0) {
         body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-light);">No pool members yet. Click "Sync Residents" to import approved members.</td></tr>';
@@ -868,9 +1009,45 @@
           <td>${m.notes || '—'}</td>
           <td class="actions">
             <button class="btn-approve" onclick="editPoolMember('${m.id}')">Edit</button>
+            <button class="btn-approve" onclick="generateApplePass('${m.id}', '${m.first_name} ${m.last_name}')" style="background: #1e7e74; font-size: 0.75rem; padding: 5px 10px;">📱 Apple Pass</button>
+            <button class="btn-approve" onclick="generateGooglePass('${m.id}', '${m.first_name} ${m.last_name}')" style="background: #4285f4; font-size: 0.75rem; padding: 5px 10px;">🤖 Google Pass</button>
             <button class="btn-delete" onclick="deletePoolMember('${m.id}', '${m.first_name} ${m.last_name}')">Delete</button>
           </td>
         </tr>
+      `).join('');
+    }
+
+    function renderPoolHouseholdSummary() {
+      const listEl = document.getElementById('poolHouseholdList');
+      if (!listEl) return;
+
+      const grouped = new Map();
+      for (const member of poolMembers) {
+        if (!member.street_address) continue;
+        const key = member.household_key || member.street_address.toLowerCase();
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            street: member.street_address,
+            members: []
+          });
+        }
+        grouped.get(key).members.push(`${member.first_name} ${member.last_name}`);
+      }
+
+      const households = Array.from(grouped.values())
+        .sort((a, b) => a.street.localeCompare(b.street));
+
+      if (households.length === 0) {
+        listEl.innerHTML = '<div class="pool-household-item"><div class="addr">No resident addresses available yet.</div><div class="meta">Sync residents to populate household groupings.</div></div>';
+        return;
+      }
+
+      listEl.innerHTML = households.map(h => `
+        <div class="pool-household-item">
+          <div class="addr">${h.street}</div>
+          <div class="meta">${h.members.length} family member(s)</div>
+          <div class="meta" style="margin-top:4px;">${h.members.join(', ')}</div>
+        </div>
       `).join('');
     }
 
@@ -896,6 +1073,9 @@
       document.getElementById('poolMemberForm').reset();
       document.getElementById('pmStatusGroup').style.display = 'none';
       document.getElementById('pmSchedulesSection').style.display = 'none';
+      document.getElementById('pmCredentialsSection').style.display = 'none';
+      document.getElementById('pmExtraRfid').value = '';
+      document.getElementById('pmExtraRfidName').value = '';
       document.getElementById('poolMemberModalTitle').textContent = 'Add Non-Resident Pool Member';
       document.getElementById('pmSaveBtn').textContent = 'Add Member';
       populateEntryTypeSelect('pmEntryType');
@@ -916,10 +1096,97 @@
       document.getElementById('pmSaveBtn').textContent = 'Save Changes';
       populateEntryTypeSelect('pmEntryType', m.entry_type_id);
       document.getElementById('pmSchedulesSection').style.display = '';
+      document.getElementById('pmCredentialsSection').style.display = '';
       document.getElementById('pmAssignScheduleForm').style.display = 'none';
       renderMemberSchedules(m);
+      renderMemberCredentials(m.id);
       openPoolModal('poolMemberModal');
     };
+
+    async function renderMemberCredentials(memberId) {
+      const list = document.getElementById('pmCredentialsList');
+      if (!list) return;
+      list.innerHTML = '<p style="margin:0;color:var(--text-light);font-size:0.85rem;">Loading credentials...</p>';
+      try {
+        const res = await fetch(`/api/admin/pool/members/${memberId}/credentials`);
+        const creds = await res.json();
+        if (!Array.isArray(creds) || creds.length === 0) {
+          list.innerHTML = '<p style="margin:0;color:var(--text-light);font-size:0.85rem;">No credentials assigned yet.</p>';
+          return;
+        }
+        list.innerHTML = creds.map(c => {
+          const statusColor = c.status === 'active' ? '#155724' : '#721c24';
+          const statusBg = c.status === 'active' ? '#d4edda' : '#f8d7da';
+          const typeLabel = c.credential_type === 'rfid'
+            ? 'RFID Card'
+            : c.device_platform === 'ios'
+              ? 'iPhone Wallet'
+              : c.device_platform === 'android'
+                ? 'Android Wallet'
+                : (c.credential_type || 'Credential');
+          const label = c.device_name || typeLabel;
+          return `
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border:1px solid #e6e9ef;border-radius:6px;background:#fff;margin-bottom:6px;">
+              <span style="font-size:0.88rem;font-weight:600;">${label}</span>
+              <span style="font-size:0.75rem;padding:2px 8px;border-radius:12px;background:${statusBg};color:${statusColor};text-transform:uppercase;font-weight:700;">${c.status}</span>
+              <span style="font-size:0.78rem;color:var(--text-light);">${typeLabel}</span>
+              ${c.pass_serial ? `<span style="font-size:0.76rem;color:var(--text-light);">Serial: ${c.pass_serial.substring(0, 8).toUpperCase()}</span>` : ''}
+              ${c.status === 'active' ? `<button type="button" onclick="revokeMemberCredential('${memberId}', '${c.id}')" style="margin-left:auto;padding:4px 10px;border:none;border-radius:5px;background:#6c757d;color:#fff;cursor:pointer;font-size:0.76rem;font-weight:600;">Revoke</button>` : ''}
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        list.innerHTML = '<p style="margin:0;color:#c0392b;font-size:0.85rem;">Failed to load credentials.</p>';
+      }
+    }
+
+    window.revokeMemberCredential = async (memberId, credentialId) => {
+      if (!confirm('Revoke this credential? It will stop working immediately after sync.')) return;
+      try {
+        const res = await fetch(`/api/admin/pool/members/${memberId}/credentials/${credentialId}/revoke`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showAdminNotification('Credential revoked.', 'success');
+          await renderMemberCredentials(memberId);
+        } else {
+          showAdminNotification(data.error || 'Unable to revoke credential.', 'error');
+        }
+      } catch (e) {
+        showAdminNotification('Error revoking credential.', 'error');
+      }
+    };
+
+    document.getElementById('pmAddRfidBtn').addEventListener('click', async () => {
+      const memberId = document.getElementById('pmEditId').value;
+      if (!memberId) {
+        showAdminNotification('Save member first, then add additional credentials.', 'error');
+        return;
+      }
+      const rfidTag = document.getElementById('pmExtraRfid').value.trim();
+      const deviceName = document.getElementById('pmExtraRfidName').value.trim();
+      if (!rfidTag) {
+        showAdminNotification('Enter an RFID tag first.', 'error');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/admin/pool/members/${memberId}/credentials/rfid`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rfid_tag: rfidTag, device_name: deviceName })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showAdminNotification(data.error || 'Failed to add RFID credential.', 'error');
+          return;
+        }
+        document.getElementById('pmExtraRfid').value = '';
+        document.getElementById('pmExtraRfidName').value = '';
+        showAdminNotification(`RFID added (${data.normalized_tag}).`, 'success');
+        await renderMemberCredentials(memberId);
+      } catch (e) {
+        showAdminNotification('Error adding RFID credential.', 'error');
+      }
+    });
 
     // ── Member Schedules sub-section ──
     function renderMemberSchedules(member) {
@@ -1085,6 +1352,71 @@
           await loadPoolData();
         }
       } catch (e) { showAdminNotification('Error removing member.', 'error'); }
+    };
+
+    window.generateGooglePass = async (memberId, memberName) => {
+      try {
+        const res = await fetch(`/api/admin/pool/members/${memberId}/generate-google-pass`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          showAdminNotification(data.error + (data.setup ? ' — ' + data.setup : ''), 'error');
+          return;
+        }
+        // Open a dialog with the save link so admin can copy/email it
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+        modal.innerHTML = `
+          <div style="background:#fff;border-radius:12px;padding:32px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+            <h3 style="margin:0 0 8px">🤖 Google Wallet Pass</h3>
+            <p style="color:#555;margin:0 0 16px">Share this link with <strong>${memberName}</strong>. When they open it on their Android phone, Google Wallet will prompt them to add the pass.</p>
+            <input id="gwLink" value="${data.saveUrl}" readonly
+              style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.8rem;margin-bottom:12px;box-sizing:border-box">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button onclick="navigator.clipboard.writeText(document.getElementById('gwLink').value);this.textContent='✓ Copied!'" 
+                style="flex:1;padding:10px;background:#4285f4;color:#fff;border:none;border-radius:6px;cursor:pointer">Copy Link</button>
+              <button onclick="window.open(document.getElementById('gwLink').value,'_blank')" 
+                style="flex:1;padding:10px;background:#1e7e74;color:#fff;border:none;border-radius:6px;cursor:pointer">Open Pass</button>
+              <button onclick="this.closest('[style*=fixed]').remove()" 
+                style="flex:1;padding:10px;background:#eee;color:#333;border:none;border-radius:6px;cursor:pointer">Close</button>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+        if (document.getElementById('pmEditId').value === memberId) {
+          await renderMemberCredentials(memberId);
+        }
+      } catch (e) {
+        showAdminNotification('Error generating Google Wallet pass: ' + e.message, 'error');
+      }
+    };
+
+    window.generateApplePass = async (memberId, memberName) => {
+      try {
+        const res = await fetch(`/api/admin/pool/members/${memberId}/generate-apple-pass`, { method: 'POST' });
+        if (!res.ok) {
+          const data = await res.json();
+          showAdminNotification(data.error || 'Failed to generate Apple Wallet pass.', 'error');
+          return;
+        }
+
+        // Download the .pkpass file
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${memberName.replace(/\s+/g, '_')}_pool_pass.pkpass`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+        showAdminNotification(`✓ Generated Apple Wallet pass for ${memberName}. Share the .pkpass file with them to add to their iPhone.`, 'success');
+        if (document.getElementById('pmEditId').value === memberId) {
+          await renderMemberCredentials(memberId);
+        }
+      } catch (e) {
+        console.error(e);
+        showAdminNotification('Error generating Apple Wallet pass: ' + e.message, 'error');
+      }
     };
 
     document.getElementById('poolMemberForm').addEventListener('submit', async (e) => {

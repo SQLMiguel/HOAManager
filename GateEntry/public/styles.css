@@ -1,0 +1,73 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f7fa;
+  color: #1f2a36;
+}
+.topbar {
+  background: #0f3d2e;
+  color: #fff;
+  padding: 1rem 1.5rem;
+}
+.topbar h1 { margin: 0; font-size: 1.5rem; }
+.topbar p { margin: .25rem 0 0; opacity: .9; }
+.container { padding: 1rem; display: grid; gap: 1rem; }
+.cards { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: .9rem;
+  border: 1px solid #dde4ea;
+}
+.card .label { font-size: .8rem; color: #5a6a79; }
+.card .value { font-size: 1.4rem; font-weight: 700; margin-top: .2rem; }
+.panel {
+  background: #fff;
+  border: 1px solid #dde4ea;
+  border-radius: 10px;
+  padding: .9rem;
+}
+.panel h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+.panel-header { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.filters { display: flex; gap: .5rem; flex-wrap: wrap; }
+input, select, button {
+  border: 1px solid #cbd5df;
+  border-radius: 6px;
+  padding: .45rem .6rem;
+  font-size: .9rem;
+}
+button {
+  background: #1a5b43;
+  color: #fff;
+  border-color: #1a5b43;
+  cursor: pointer;
+}
+.table-wrap { overflow: auto; max-height: 320px; }
+.table-wrap.small { max-height: 280px; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #edf1f5; white-space: nowrap; }
+th { position: sticky; top: 0; background: #f9fbfd; z-index: 1; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.footer {
+  margin: 1rem;
+  background: #fff8dc;
+  border: 1px solid #ead28a;
+  color: #654f1f;
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  font-size: .85rem;
+}
+.status-pill {
+  border-radius: 999px;
+  padding: .2rem .5rem;
+  font-size: .75rem;
+  font-weight: 700;
+  display: inline-block;
+}
+.status-active, .status-allowed, .status-success, .status-yes { background: #d8f3dc; color: #1b5e20; }
+.status-suspended, .status-pending { background: #fff3cd; color: #7a4f01; }
+.status-inactive, .status-denied, .status-error, .status-no { background: #f8d7da; color: #842029; }
+@media (max-width: 920px) {
+  .grid-2 { grid-template-columns: 1fr; }
+}

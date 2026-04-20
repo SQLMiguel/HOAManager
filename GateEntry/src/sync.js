@@ -32,12 +32,15 @@ async function pullFromWebsite() {
   }
 
   const data = await res.json();
-  const { entry_types, members, schedules } = data;
+  const { entry_types, members, schedules, credentials } = data;
 
-  db.replacePoolData(entry_types || [], members || [], schedules || []);
+  db.replacePoolData(entry_types || [], members || [], schedules || [], credentials || []);
 
-  const pulled = (entry_types?.length || 0) + (members?.length || 0) + (schedules?.length || 0);
-  console.log(`  ✓ Pulled ${entry_types?.length || 0} types, ${members?.length || 0} members, ${schedules?.length || 0} schedules`);
+  const pulled = (entry_types?.length || 0)
+    + (members?.length || 0)
+    + (schedules?.length || 0)
+    + (credentials?.length || 0);
+  console.log(`  ✓ Pulled ${entry_types?.length || 0} types, ${members?.length || 0} members, ${schedules?.length || 0} schedules, ${credentials?.length || 0} phone credentials`);
 
   return pulled;
 }

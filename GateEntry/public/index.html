@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GateEntry Read-Only Viewer</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>GateEntry Database Viewer</h1>
+    <p>Read-only dashboard hosted on Raspberry Pi</p>
+  </header>
+
+  <main class="container">
+    <section class="cards" id="summaryCards"></section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Pool Members</h2>
+        <div class="filters">
+          <select id="memberStatus" title="Filter members by status" aria-label="Filter members by status">
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <input id="memberSearch" type="text" placeholder="Search name, tag, type" />
+          <button id="reloadMembers">Reload</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Entry Type</th>
+              <th>Status</th>
+              <th>RFID Tag</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody id="membersBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <section class="panel">
+        <h2>Recent Check-ins</h2>
+        <div class="table-wrap small">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Member</th>
+                <th>Status</th>
+                <th>Type</th>
+                <th>Method</th>
+                <th>Synced</th>
+              </tr>
+            </thead>
+            <tbody id="checkinsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Sync Log</h2>
+        <div class="table-wrap small">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Pulled</th>
+                <th>Pushed</th>
+              </tr>
+            </thead>
+            <tbody id="syncBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <h2>Phone Credentials <small>(iPhone + Android)</small></h2>
+      <div class="panel-header">
+        <div class="filters">
+          <select id="credType" title="Filter by credential type" aria-label="Filter credentials by type">
+            <option value="all">All types</option>
+            <option value="rfid">RFID Card</option>
+            <option value="nfc_phone">NFC Phone</option>
+            <option value="ble_token">BLE Token</option>
+          </select>
+          <select id="credPlatform" title="Filter by platform" aria-label="Filter credentials by platform">
+            <option value="all">All platforms</option>
+            <option value="ios">iOS</option>
+            <option value="android">Android</option>
+            <option value="card">Physical Card</option>
+            <option value="other">Other</option>
+          </select>
+          <button id="reloadCreds">Reload</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>Type</th>
+              <th>Platform</th>
+              <th>Device</th>
+              <th>Status</th>
+              <th>Enrolled</th>
+              <th>Last Used</th>
+            </tr>
+          </thead>
+          <tbody id="credsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Schedules</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Applies To</th>
+              <th>Type</th>
+              <th>Days / Date</th>
+              <th>Time</th>
+              <th>Active</th>
+            </tr>
+          </thead>
+          <tbody id="schedulesBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Read-only mode: edits are intentionally disabled. Manage data on the HOA website admin panel and sync to Pi.
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
