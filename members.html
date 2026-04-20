@@ -391,7 +391,36 @@
             <label for="evDesc">Description</label>
             <textarea id="evDesc" rows="3" placeholder="Details about the event..." maxlength="500"></textarea>
           </div>
+          <div class="form-group cal-form-full">
+            <label>Is this a pool party? <span class="required">*</span></label>
+            <div class="ev-pool-party-radios">
+              <label>
+                <input type="radio" name="evPoolParty" id="evPoolPartyYes" value="yes"> Yes
+              </label>
+              <label>
+                <input type="radio" name="evPoolParty" id="evPoolPartyNo" value="no"> No
+              </label>
+            </div>
+          </div>
         </div>
+
+        <!-- AquaTech notice – shown only when pool party = Yes -->
+        <div id="aquatechNotice" class="aquatech-notice">
+          <strong>&#9888; Pool Party Registration Required</strong>
+          <p>AquaTech Pool Management must be notified for all pool parties so they can schedule the required number of lifeguards for your event. <strong>This step is mandatory — pool parties cannot be held without proper lifeguard staffing arranged through AquaTech.</strong></p>
+          <p>Please click the link below to access and complete the AquaTech pool-party request forms before your event date:</p>
+          <a href="https://aquatechpm.com/pool-parties-information/" target="_blank" rel="noopener noreferrer"
+             class="aquatech-notice-btn">
+            Complete AquaTech Pool Party Forms &rarr;
+          </a>
+          <div class="aquatech-ack">
+            <label class="aquatech-ack-label">
+              <input type="checkbox" id="evAquatechAck">
+              I understand that I must complete the AquaTech pool party forms to ensure the event is properly staffed with lifeguards.
+            </label>
+          </div>
+        </div>
+
         <div id="addEventError" class="auth-error"></div>
         <div class="cal-form-actions">
           <button class="btn btn-primary" id="saveEventBtn" type="button">Save Event</button>

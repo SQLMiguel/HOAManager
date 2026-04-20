@@ -774,9 +774,21 @@ document.addEventListener('DOMContentLoaded', () => {
       addForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
+    // Pool party radio → show/hide AquaTech notice
+    document.querySelectorAll('input[name="evPoolParty"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const notice = document.getElementById('aquatechNotice');
+        const selected = document.querySelector('input[name="evPoolParty"]:checked');
+        notice.style.display = selected && selected.value === 'yes' ? 'block' : 'none';
+      });
+    });
+
     cancelBtn.addEventListener('click', () => {
       addForm.style.display = 'none';
       document.getElementById('addEventError').textContent = '';
+      document.querySelectorAll('input[name="evPoolParty"]').forEach(r => r.checked = false);
+      document.getElementById('aquatechNotice').style.display = 'none';
+      document.getElementById('evAquatechAck').checked = false;
     });
 
     saveBtn.addEventListener('click', async () => {
@@ -787,9 +799,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const time     = document.getElementById('evTime').value;
       const location = document.getElementById('evLocation').value.trim();
       const desc     = document.getElementById('evDesc').value.trim();
+      const poolPartyRadio = document.querySelector('input[name="evPoolParty"]:checked');
 
       if (!title || !date) {
         errEl.textContent = 'Title and date are required.';
+        return;
+      }
+      if (!poolPartyRadio) {
+        errEl.textContent = 'Please indicate whether this is a pool party (Yes or No).';
+        return;
+      }
+      if (poolPartyRadio.value === 'yes' && !document.getElementById('evAquatechAck').checked) {
+        errEl.textContent = 'You must acknowledge the AquaTech pool party requirement before saving.';
+        document.getElementById('aquatechNotice').scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
 
@@ -805,6 +827,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.success) {
           // Reset form
           ['evTitle','evDate','evTime','evLocation','evDesc'].forEach(id => document.getElementById(id).value = '');
+          document.querySelectorAll('input[name="evPoolParty"]').forEach(r => r.checked = false);
+          document.getElementById('aquatechNotice').style.display = 'none';
+          document.getElementById('evAquatechAck').checked = false;
           addForm.style.display = 'none';
           await loadEvents();
           // Navigate to the month of the new event

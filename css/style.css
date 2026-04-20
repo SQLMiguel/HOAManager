@@ -1282,6 +1282,74 @@ p {
   color: var(--text);
 }
 .cal-form-grid .required { color: #e74c3c; }
+
+/* Pool-party radio row */
+.ev-pool-party-radios {
+  display: flex;
+  gap: 24px;
+  margin-top: 6px;
+}
+.ev-pool-party-radios label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+/* AquaTech pool-party notice */
+.aquatech-notice {
+  display: none;
+  background: #fff8e1;
+  border: 1px solid #f9a825;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.aquatech-notice strong {
+  color: #e65100;
+}
+.aquatech-notice p {
+  margin: 8px 0 4px;
+}
+.aquatech-notice p + p {
+  margin: 4px 0;
+}
+.aquatech-notice-btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: #e65100;
+  color: #fff;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+}
+.aquatech-notice-btn:hover {
+  background: #bf360c;
+  color: #fff;
+}
+.aquatech-ack {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f9a825;
+}
+.aquatech-ack-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: normal;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.aquatech-ack-label input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
 .cal-form-grid input,
 .cal-form-grid textarea {
   width: 100%;
