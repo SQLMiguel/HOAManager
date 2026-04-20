@@ -404,9 +404,8 @@ async function initDb() {
 
   // Migration: add rfid_tag column to pool_members if missing
   try {
-    const pmInfo = dbGet("SELECT sql FROM sqlite_master WHERE type='table' AND name='pool_members'");
-    if (pmInfo && pmInfo.sql && !pmInfo.sql.includes('rfid_tag')) {
-      db.run(`ALTER TABLE pool_members ADD COLUMN rfid_tag TEXT UNIQUE`);
+    if (!poolMembersHasRfidTagColumn()) {
+      db.run(`ALTER TABLE pool_members ADD COLUMN rfid_tag TEXT`);
       saveDb();
       console.log('  ✓ Added rfid_tag column to pool_members');
     }
@@ -512,6 +511,15 @@ function dbGet(sql, params = []) {
 function dbRun(sql, params = []) {
   db.run(sql, params);
   saveDb();
+}
+
+function poolMembersHasRfidTagColumn() {
+  try {
+    const columns = dbAll(`PRAGMA table_info(pool_members)`);
+    return columns.some(col => col.name === 'rfid_tag');
+  } catch (e) {
+    return false;
+  }
 }
 
 function normalizeStreetAddress(address) {
@@ -2258,8 +2266,9 @@ app.post('/api/admin/pool/members', requireAdmin, (req, res) => {
   }
   const type = dbGet('SELECT id FROM pool_entry_types WHERE id = ?', [entry_type_id]);
   if (!type) return res.status(400).json({ error: 'Invalid entry type.' });
+  const hasRfidColumn = poolMembersHasRfidTagColumn();
   const normalizedRfid = rfid_tag ? normalizeRfidCredentialValue(rfid_tag) : null;
-  if (normalizedRfid) {
+  if (hasRfidColumn && normalizedRfid) {
     const existingLegacy = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ?', [normalizedRfid]);
     if (existingLegacy) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
     const existingCredential = dbGet('SELECT pool_member_id, status FROM pool_nfc_credentials WHERE credential_hash = ?', [hashPoolCredential('rfid', normalizedRfid)]);
@@ -2268,9 +2277,15 @@ app.post('/api/admin/pool/members', requireAdmin, (req, res) => {
     }
   }
   const id = uuidv4();
-  dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, source, notes, rfid_tag)
-         VALUES (?, ?, ?, ?, 'manual', ?, ?)`,
-    [id, first_name.trim(), last_name.trim(), entry_type_id, notes?.trim() || null, normalizedRfid || null]);
+  if (hasRfidColumn) {
+    dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, source, notes, rfid_tag)
+           VALUES (?, ?, ?, ?, 'manual', ?, ?)`,
+      [id, first_name.trim(), last_name.trim(), entry_type_id, notes?.trim() || null, normalizedRfid || null]);
+  } else {
+    dbRun(`INSERT INTO pool_members (id, first_name, last_name, entry_type_id, source, notes)
+           VALUES (?, ?, ?, ?, 'manual', ?)`,
+      [id, first_name.trim(), last_name.trim(), entry_type_id, notes?.trim() || null]);
+  }
 
   if (normalizedRfid) {
     const assigned = upsertRfidCredentialForMember(id, normalizedRfid, `${first_name.trim()} ${last_name.trim()}'s card`);
@@ -2285,25 +2300,38 @@ app.put('/api/admin/pool/members/:id', requireAdmin, (req, res) => {
   const member = dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
   if (!member) return res.status(404).json({ error: 'Pool member not found.' });
   const { first_name, last_name, entry_type_id, status, notes, rfid_tag } = req.body;
-  const normalizedRfid = rfid_tag !== undefined ? normalizeRfidCredentialValue(rfid_tag) : member.rfid_tag;
-  if (rfid_tag !== undefined && normalizedRfid) {
-    const existing = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ? AND id != ?', [normalizedRfid, req.params.id]);
-    if (existing) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
-    const existingCredential = dbGet('SELECT pool_member_id, status FROM pool_nfc_credentials WHERE credential_hash = ?', [hashPoolCredential('rfid', normalizedRfid)]);
-    if (existingCredential && existingCredential.status === 'active' && existingCredential.pool_member_id !== req.params.id) {
-      return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+  const hasRfidColumn = poolMembersHasRfidTagColumn();
+
+  if (hasRfidColumn && rfid_tag !== undefined) {
+    const normalizedRfid = normalizeRfidCredentialValue(rfid_tag);
+    if (normalizedRfid) {
+      const existing = dbGet('SELECT id FROM pool_members WHERE rfid_tag = ? AND id != ?', [normalizedRfid, req.params.id]);
+      if (existing) return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+      const existingCredential = dbGet('SELECT pool_member_id, status FROM pool_nfc_credentials WHERE credential_hash = ?', [hashPoolCredential('rfid', normalizedRfid)]);
+      if (existingCredential && existingCredential.status === 'active' && existingCredential.pool_member_id !== req.params.id) {
+        return res.status(400).json({ error: 'This RFID tag is already assigned to another member.' });
+      }
     }
   }
-  dbRun(`UPDATE pool_members SET first_name=?, last_name=?, entry_type_id=?, status=?, notes=?, rfid_tag=? WHERE id=?`,
-    [first_name || member.first_name, last_name || member.last_name,
-     entry_type_id || member.entry_type_id, status || member.status,
-     notes !== undefined ? notes : member.notes,
-     rfid_tag !== undefined ? (normalizedRfid || null) : member.rfid_tag, req.params.id]);
 
-  if (rfid_tag !== undefined && normalizedRfid) {
-    const displayName = `${first_name || member.first_name} ${last_name || member.last_name}'s card`;
-    const assigned = upsertRfidCredentialForMember(req.params.id, normalizedRfid, displayName);
-    if (!assigned.ok) return res.status(400).json({ error: assigned.error });
+  if (hasRfidColumn) {
+    const normalizedRfid = rfid_tag !== undefined ? normalizeRfidCredentialValue(rfid_tag) : (member.rfid_tag || null);
+    dbRun(`UPDATE pool_members SET first_name=?, last_name=?, entry_type_id=?, status=?, notes=?, rfid_tag=? WHERE id=?`,
+      [first_name || member.first_name, last_name || member.last_name,
+       entry_type_id || member.entry_type_id, status || member.status,
+       notes !== undefined ? notes : member.notes,
+       rfid_tag !== undefined ? (normalizedRfid || null) : (member.rfid_tag || null), req.params.id]);
+
+    if (rfid_tag !== undefined && normalizedRfid) {
+      const displayName = `${first_name || member.first_name} ${last_name || member.last_name}'s card`;
+      const assigned = upsertRfidCredentialForMember(req.params.id, normalizedRfid, displayName);
+      if (!assigned.ok) return res.status(400).json({ error: assigned.error });
+    }
+  } else {
+    dbRun(`UPDATE pool_members SET first_name=?, last_name=?, entry_type_id=?, status=?, notes=? WHERE id=?`,
+      [first_name || member.first_name, last_name || member.last_name,
+       entry_type_id || member.entry_type_id, status || member.status,
+       notes !== undefined ? notes : member.notes, req.params.id]);
   }
 
   res.json({ success: true });
@@ -2513,7 +2541,7 @@ app.get('/api/admin/pool/members/:id/credentials', requireAdmin, (req, res) => {
 
   // Backfill the legacy single RFID field into the credentials table so
   // gate sync and admin credential management stay consistent.
-  if (member.rfid_tag) {
+  if (poolMembersHasRfidTagColumn() && member.rfid_tag) {
     upsertRfidCredentialForMember(member.id, member.rfid_tag, `${member.first_name} ${member.last_name}'s card`);
   }
 

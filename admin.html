@@ -83,10 +83,37 @@
     .pool-household-summary { margin-top: 14px; padding: 14px; border: 1px solid #dfe4ea; border-radius: 10px; background: #fbfcfd; }
     .pool-household-summary h4 { margin: 0 0 6px; font-size: 0.95rem; }
     .pool-household-summary p { margin: 0 0 10px; color: var(--text-light); font-size: 0.82rem; }
-    .pool-household-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
-    .pool-household-item { border: 1px solid #e8edf2; background: #fff; border-radius: 8px; padding: 10px 12px; }
-    .pool-household-item .addr { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+    .pool-household-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+    .pool-household-count { color: var(--text-light); font-size: 0.8rem; font-weight: 600; }
+    .pool-household-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pool-household-controls button { padding: 6px 12px; border: 1px solid #cdd6df; border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; font-size: 0.8rem; font-weight: 600; font-family: var(--font-body); }
+    .pool-household-controls button:hover { border-color: var(--primary); color: var(--primary); }
+    .pool-household-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+    .pool-household-item { border: 1px solid #e8edf2; background: #fff; border-radius: 8px; overflow: hidden; }
+    .pool-household-item.empty { padding: 10px 12px; }
+    .pool-household-toggle { width: 100%; border: none; background: transparent; cursor: pointer; text-align: left; padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+    .pool-household-toggle:hover { background: #f8fdf9; }
+    .pool-household-chevron { font-size: 0.9rem; color: var(--primary); width: 16px; text-align: center; transition: transform 0.2s ease; }
+    .pool-household-item.expanded .pool-household-chevron { transform: rotate(90deg); }
+    .pool-household-head { flex: 1; min-width: 0; }
+    .pool-household-item .addr { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; color: var(--text); }
     .pool-household-item .meta { color: var(--text-light); font-size: 0.8rem; }
+    .pool-household-body { display: none; border-top: 1px solid #eef2f6; padding: 10px 14px 12px; background: #fcfdfd; }
+    .pool-household-item.expanded .pool-household-body { display: block; }
+    .pool-household-member { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #edf1f5; flex-wrap: wrap; }
+    .pool-household-member:last-child { border-bottom: none; padding-bottom: 0; }
+    .pool-household-member-name { font-weight: 600; font-size: 0.84rem; color: var(--text); }
+    .pool-household-member-detail { color: var(--text-light); font-size: 0.78rem; }
+    .pool-household-member-main { display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
+    .pool-household-member-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: auto; }
+    .pool-household-member-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .pool-household-member-actions button { padding: 5px 10px; border-radius: 5px; border: none; cursor: pointer; font-size: 0.76rem; font-weight: 600; font-family: var(--font-body); }
+    .pool-household-btn-edit { background: var(--primary); color: #fff; }
+    .pool-household-btn-apple { background: #1e7e74; color: #fff; }
+    .pool-household-btn-google { background: #4285f4; color: #fff; }
+    .pool-household-btn-inactive { background: #fff3cd; color: #856404; }
+    .pool-household-btn-delete { background: #6c757d; color: #fff; }
+    .pool-household-manage-note { color: var(--text-light); font-size: 0.8rem; }
     .pool-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
     .pool-badge-active { background: #d4edda; color: #155724; }
     .pool-badge-suspended { background: #fff3cd; color: #856404; }
@@ -304,24 +331,14 @@
           <div class="pool-household-summary" id="poolHouseholdSummary">
             <h4>🏠 Family Units by Address</h4>
             <p>Shows household count using only number + street name.</p>
+            <div class="pool-household-toolbar">
+              <span class="pool-household-count" id="poolHouseholdCount">0 households</span>
+              <div class="pool-household-controls">
+                <button type="button" id="poolExpandAllHouseholds">Expand All</button>
+                <button type="button" id="poolCollapseAllHouseholds">Collapse All</button>
+              </div>
+            </div>
             <div class="pool-household-list" id="poolHouseholdList"></div>
-          </div>
-          <div style="overflow-x:auto;">
-            <table class="pool-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Entry Type</th>
-                  <th>Source</th>
-                  <th>Status</th>
-                  <th>Notes</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="poolMembersBody">
-                <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-light);">Loading...</td></tr>
-              </tbody>
-            </table>
           </div>
         </div>
 
@@ -858,6 +875,7 @@
     let poolEntryTypes = [];
     let poolMembers = [];
     let poolSchedules = [];
+    let expandedPoolHouseholds = new Set();
 
     // Tab switching — handle pool tab
     document.querySelectorAll('.admin-tab[data-filter]').forEach(tab => {
@@ -991,65 +1009,139 @@
 
     // ── Pool Members ──
     function renderPoolMembers() {
-      const body = document.getElementById('poolMembersBody');
       document.getElementById('poolMemberCount').textContent = `${poolMembers.length} member(s)`;
       renderPoolHouseholdSummary();
-
-      if (poolMembers.length === 0) {
-        body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-light);">No pool members yet. Click "Sync Residents" to import approved members.</td></tr>';
-        return;
-      }
-
-      body.innerHTML = poolMembers.map(m => `
-        <tr>
-          <td><strong>${m.first_name} ${m.last_name}</strong></td>
-          <td>${m.entry_type_name}</td>
-          <td>${m.source === 'member' ? 'Auto (member)' : m.source === 'family' ? 'Auto (family)' : 'Manual'}</td>
-          <td><span class="pool-badge pool-badge-${m.status}">${m.status}</span></td>
-          <td>${m.notes || '—'}</td>
-          <td class="actions">
-            <button class="btn-approve" onclick="editPoolMember('${m.id}')">Edit</button>
-            <button class="btn-approve" onclick="generateApplePass('${m.id}', '${m.first_name} ${m.last_name}')" style="background: #1e7e74; font-size: 0.75rem; padding: 5px 10px;">📱 Apple Pass</button>
-            <button class="btn-approve" onclick="generateGooglePass('${m.id}', '${m.first_name} ${m.last_name}')" style="background: #4285f4; font-size: 0.75rem; padding: 5px 10px;">🤖 Google Pass</button>
-            <button class="btn-delete" onclick="deletePoolMember('${m.id}', '${m.first_name} ${m.last_name}')">Delete</button>
-          </td>
-        </tr>
-      `).join('');
     }
 
     function renderPoolHouseholdSummary() {
       const listEl = document.getElementById('poolHouseholdList');
+      const countEl = document.getElementById('poolHouseholdCount');
       if (!listEl) return;
 
       const grouped = new Map();
       for (const member of poolMembers) {
-        if (!member.street_address) continue;
-        const key = member.household_key || member.street_address.toLowerCase();
+        const hasStreetAddress = !!member.street_address;
+        const key = hasStreetAddress
+          ? (member.household_key || member.street_address.toLowerCase())
+          : '__no_household_address__';
+        const streetLabel = hasStreetAddress ? member.street_address : 'No Household Address';
         if (!grouped.has(key)) {
           grouped.set(key, {
-            street: member.street_address,
+            key,
+            street: streetLabel,
             members: []
           });
         }
-        grouped.get(key).members.push(`${member.first_name} ${member.last_name}`);
+        grouped.get(key).members.push({
+          id: member.id,
+          firstName: member.first_name,
+          lastName: member.last_name,
+          name: `${member.first_name} ${member.last_name}`,
+          entryTypeName: member.entry_type_name || '—',
+          status: member.status || 'active',
+          source: member.source || 'manual',
+          notes: member.notes || ''
+        });
       }
 
       const households = Array.from(grouped.values())
         .sort((a, b) => a.street.localeCompare(b.street));
 
+      if (countEl) {
+        countEl.textContent = `${households.length} household${households.length === 1 ? '' : 's'}`;
+      }
+
       if (households.length === 0) {
-        listEl.innerHTML = '<div class="pool-household-item"><div class="addr">No resident addresses available yet.</div><div class="meta">Sync residents to populate household groupings.</div></div>';
+        listEl.innerHTML = '<div class="pool-household-item empty"><div class="addr">No resident addresses available yet.</div><div class="meta">Sync residents to populate household groupings.</div></div>';
         return;
       }
 
+      expandedPoolHouseholds.forEach(key => {
+        if (!grouped.has(key)) expandedPoolHouseholds.delete(key);
+      });
+
       listEl.innerHTML = households.map(h => `
-        <div class="pool-household-item">
-          <div class="addr">${h.street}</div>
-          <div class="meta">${h.members.length} family member(s)</div>
-          <div class="meta" style="margin-top:4px;">${h.members.join(', ')}</div>
+        <div class="pool-household-item ${expandedPoolHouseholds.has(h.key) ? 'expanded' : ''}">
+          <button type="button" class="pool-household-toggle" data-household-key="${encodeURIComponent(h.key)}">
+            <span class="pool-household-chevron">▶</span>
+            <div class="pool-household-head">
+              <div class="addr">${h.street}</div>
+              <div class="meta">${h.members.length} family member(s) · Click to ${expandedPoolHouseholds.has(h.key) ? 'collapse' : 'expand'} details</div>
+            </div>
+          </button>
+          <div class="pool-household-body">
+            ${h.members
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(member => `
+                <div class="pool-household-member">
+                  <div class="pool-household-member-main">
+                    <div class="pool-household-member-name">${member.name}</div>
+                    <div class="pool-household-member-detail">Entry type: ${member.entryTypeName}</div>
+                    ${member.notes ? `<div class="pool-household-member-detail">Notes: ${member.notes}</div>` : ''}
+                  </div>
+                  <div class="pool-household-member-side">
+                    <div class="pool-household-member-detail">${member.source} · ${member.status}</div>
+                    <div class="pool-household-member-actions">
+                      <button type="button" class="pool-household-btn-edit" data-household-action="edit" data-member-id="${member.id}">Edit</button>
+                      <button type="button" class="pool-household-btn-apple" data-household-action="apple" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">📱 Apple Pass</button>
+                      <button type="button" class="pool-household-btn-google" data-household-action="google" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">🤖 Google Pass</button>
+                      ${member.status !== 'inactive'
+                        ? `<button type="button" class="pool-household-btn-inactive" data-household-action="inactive" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">Inactivate</button>`
+                        : ''}
+                      <button type="button" class="pool-household-btn-delete" data-household-action="delete" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">Delete</button>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+          </div>
         </div>
       `).join('');
+
+      listEl.querySelectorAll('.pool-household-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = decodeURIComponent(btn.dataset.householdKey || '');
+          if (!key) return;
+          if (expandedPoolHouseholds.has(key)) expandedPoolHouseholds.delete(key);
+          else expandedPoolHouseholds.add(key);
+          renderPoolHouseholdSummary();
+        });
+      });
+
+      listEl.querySelectorAll('[data-household-action]').forEach(btn => {
+        btn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const action = btn.dataset.householdAction;
+          const memberId = btn.dataset.memberId;
+          const memberName = decodeURIComponent(btn.dataset.memberName || '');
+          if (!memberId || !action) return;
+
+          if (action === 'edit') {
+            window.editPoolMember(memberId);
+          } else if (action === 'apple') {
+            window.generateApplePass(memberId, memberName);
+          } else if (action === 'google') {
+            window.generateGooglePass(memberId, memberName);
+          } else if (action === 'delete') {
+            window.deletePoolMember(memberId, memberName);
+          } else if (action === 'inactive') {
+            window.inactivatePoolMember(memberId, memberName);
+          }
+        });
+      });
     }
+
+    document.getElementById('poolExpandAllHouseholds').addEventListener('click', () => {
+      expandedPoolHouseholds = new Set(
+        poolMembers
+          .map(member => member.street_address ? (member.household_key || member.street_address.toLowerCase()) : '__no_household_address__')
+      );
+      renderPoolHouseholdSummary();
+    });
+
+    document.getElementById('poolCollapseAllHouseholds').addEventListener('click', () => {
+      expandedPoolHouseholds.clear();
+      renderPoolHouseholdSummary();
+    });
 
     // Sync residents
     document.getElementById('poolSyncBtn').addEventListener('click', async () => {
@@ -1352,6 +1444,42 @@
           await loadPoolData();
         }
       } catch (e) { showAdminNotification('Error removing member.', 'error'); }
+    };
+
+    window.inactivatePoolMember = async (id, name) => {
+      const member = poolMembers.find(x => x.id === id);
+      if (!member) {
+        showAdminNotification('Pool member not found.', 'error');
+        return;
+      }
+      if (member.status === 'inactive') {
+        showAdminNotification(`${name} is already inactive.`, 'error');
+        return;
+      }
+      if (!confirm(`Mark ${name} as inactive? Their pool access will be disabled until reactivated.`)) return;
+
+      try {
+        const res = await fetch(`/api/admin/pool/members/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'inactive' })
+        });
+        const raw = await res.text();
+        let data = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          data = { error: raw || 'Unable to update member status.' };
+        }
+        if (data.success) {
+          showAdminNotification(`${name} marked inactive.`, 'success');
+          await loadPoolData();
+        } else {
+          showAdminNotification(data.error || 'Unable to inactivate member.', 'error');
+        }
+      } catch (e) {
+        showAdminNotification('Error updating member status.', 'error');
+      }
     };
 
     window.generateGooglePass = async (memberId, memberName) => {
