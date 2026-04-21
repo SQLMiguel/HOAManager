@@ -3,6 +3,7 @@ const path = require('path');
 const config = require('./config');
 const db = require('./database');
 const scanHandler = require('./scanHandler');
+const sync = require('./sync');
 
 function startViewer() {
   const app = express();
@@ -48,6 +49,32 @@ function startViewer() {
       limit: req.query.limit
     });
     res.json(rows);
+  });
+
+  // Manual sync trigger — allows the website's admin Pool Entry Management
+  // screen to force a pull/push cycle on demand. Protected by the same
+  // shared key used for other privileged viewer actions (if configured).
+  app.post('/api/viewer/sync', async (req, res) => {
+    if (config.phoneUnlockKey) {
+      const provided = req.get('X-Gate-Phone-Key') || req.body?.gate_key;
+      if (provided !== config.phoneUnlockKey) {
+        return res.status(401).json({ success: false, error: 'unauthorized' });
+      }
+    }
+    try {
+      const result = await sync.runSync();
+      res.json({
+        success: true,
+        pulled: result.pulled,
+        pushed: result.pushed,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: (err && err.message) || 'Sync failed.'
+      });
+    }
   });
 
   // ── Phone unlock endpoint ─────────────────────────────

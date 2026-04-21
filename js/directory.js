@@ -364,6 +364,8 @@
 
     document.getElementById('infoNameDisplay').textContent    = fullName(bp) || '—';
     document.getElementById('infoAddressDisplay').textContent = user.address  || '—';
+    const familyAddrEl = document.getElementById('familyHouseholdAddress');
+    if (familyAddrEl) familyAddrEl.textContent = user.address || 'No address on file — please contact the HOA admin.';
     const emailEl = document.getElementById('infoEmailValue');
     if (emailEl) emailEl.textContent = user.email || '—';
 

@@ -306,6 +306,20 @@ async function initDb() {
     )
   `);
 
+  // SMS broadcast history
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sms_broadcasts (
+      id TEXT PRIMARY KEY,
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sent_by TEXT,
+      message TEXT NOT NULL,
+      recipients_total INTEGER DEFAULT 0,
+      sent_count INTEGER DEFAULT 0,
+      failed_count INTEGER DEFAULT 0,
+      note TEXT
+    )
+  `);
+
   // Password reset tokens table
   db.run(`
     CREATE TABLE IF NOT EXISTS password_resets (
@@ -491,6 +505,15 @@ async function initDb() {
     }
   } catch (e) { /* column may already exist */ }
 
+  // Cleanup: remove orphaned Resident pool_members rows whose owning directory
+  // adult/child no longer exists, or whose owning user isn't approved. All
+  // Residents must map to an approved household address.
+  try {
+    cleanupOrphanedResidentPoolMembers();
+  } catch (e) {
+    console.warn('  ⚠ Orphaned resident cleanup skipped:', e && e.message ? e.message : e);
+  }
+
   // Pool NFC credentials (Apple Wallet passes for iPhones)
   db.run(`
     CREATE TABLE IF NOT EXISTS pool_nfc_credentials (
@@ -573,41 +596,170 @@ function normalizeStreetAddress(address) {
 }
 
 function getPoolMemberStreetAddress(poolMember) {
+  const h = getPoolMemberHousehold(poolMember);
+  return h ? h.streetAddress : null;
+}
+
+// Resolve the owning household for a pool_members row.
+// Returns { ownerUserId, streetAddress, ownerFirstName, ownerLastName } or null
+// for manual/guest rows that are not tied to a resident household.
+function getPoolMemberHousehold(poolMember) {
   if (!poolMember) return null;
 
   // Standard approved resident row: pool_members.user_id points at users.id
   if (poolMember.source === 'member' && poolMember.user_id) {
-    const user = dbGet('SELECT address FROM users WHERE id = ?', [poolMember.user_id]);
-    return normalizeStreetAddress(user?.address);
+    const user = dbGet('SELECT id, first_name, last_name, address FROM users WHERE id = ?', [poolMember.user_id]);
+    if (!user) return null;
+    return {
+      ownerUserId: user.id,
+      streetAddress: normalizeStreetAddress(user.address),
+      ownerFirstName: user.first_name || '',
+      ownerLastName: user.last_name || ''
+    };
   }
 
   // Family adult rows use pseudo user_id: family_adult_<dir_adults.id>
   if (poolMember.source === 'family' && poolMember.user_id && poolMember.user_id.startsWith('family_adult_')) {
     const adultId = poolMember.user_id.replace('family_adult_', '');
     const row = dbGet(`
-      SELECT u.address
+      SELECT u.id, u.first_name, u.last_name, u.address
       FROM dir_adults da
       JOIN users u ON u.id = da.user_id
       WHERE da.id = ?
       LIMIT 1
     `, [adultId]);
-    return normalizeStreetAddress(row?.address);
+    if (!row) return null;
+    return {
+      ownerUserId: row.id,
+      streetAddress: normalizeStreetAddress(row.address),
+      ownerFirstName: row.first_name || '',
+      ownerLastName: row.last_name || ''
+    };
   }
 
   // Family child rows use pseudo user_id: family_child_<dir_children.id>
   if (poolMember.source === 'family' && poolMember.user_id && poolMember.user_id.startsWith('family_child_')) {
     const childId = poolMember.user_id.replace('family_child_', '');
     const row = dbGet(`
-      SELECT u.address
+      SELECT u.id, u.first_name, u.last_name, u.address
       FROM dir_children dc
       JOIN users u ON u.id = dc.user_id
       WHERE dc.id = ?
       LIMIT 1
     `, [childId]);
-    return normalizeStreetAddress(row?.address);
+    if (!row) return null;
+    return {
+      ownerUserId: row.id,
+      streetAddress: normalizeStreetAddress(row.address),
+      ownerFirstName: row.first_name || '',
+      ownerLastName: row.last_name || ''
+    };
   }
 
   return null;
+}
+
+// Remove pool_members rows with Entry Type = 'Resident' that cannot be
+// associated to a household address. This happens when the owning directory
+// adult/child was deleted, or when the owning user was removed/denied.
+// Guests, lifeguards, vendors, admins, etc. are left alone — they legitimately
+// have no household address.
+function cleanupOrphanedResidentPoolMembers() {
+  const residentType = dbGet(`SELECT id FROM pool_entry_types WHERE name = 'Resident'`);
+  if (!residentType) return 0;
+
+  const residents = dbAll(
+    `SELECT * FROM pool_members WHERE entry_type_id = ?`,
+    [residentType.id]);
+
+  let removed = 0;
+  for (const pm of residents) {
+    const household = getPoolMemberHousehold(pm);
+    if (household && household.ownerUserId) continue; // has an owner → keep
+
+    // Orphaned resident — revoke credentials, remove the row.
+    dbRun(
+      `UPDATE pool_nfc_credentials
+         SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP
+       WHERE pool_member_id = ? AND status = 'active'`,
+      [pm.id]);
+    dbRun(`DELETE FROM pool_members WHERE id = ?`, [pm.id]);
+    removed++;
+  }
+
+  if (removed > 0) {
+    saveDb();
+    console.log(`  ✓ Removed ${removed} orphaned Resident pool_member(s) with no household`);
+  }
+  return removed;
+}
+
+// Remove dependent rows (pool membership, wallet-pass registrations, newsletter
+// subscription) when a directory adult/child is deleted from a household.
+// SMS eligibility is automatically recomputed because it joins against
+// dir_adults / dir_children at query time, so deleting the row is enough.
+function cleanupFamilyMemberDeletion({ personType, personId, email, ownerUserId }) {
+  try {
+    const pseudoUserId = personType === 'adult'
+      ? `family_adult_${personId}`
+      : `family_child_${personId}`;
+
+    // 1) Revoke any wallet-pass phone registrations for this person
+    dbRun(
+      `UPDATE dir_pool_phones
+         SET status = 'revoked',
+             revoked_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+       WHERE person_type = ? AND person_id = ? AND status = 'active'`,
+      [personType, personId]);
+
+    // 2) Revoke pool NFC credentials tied to the pool_members rows for this person,
+    //    then delete the pool_members rows so they disappear from Pool Management.
+    const poolRows = dbAll(
+      `SELECT id FROM pool_members WHERE user_id = ? AND source = 'family'`,
+      [pseudoUserId]);
+    for (const pm of poolRows) {
+      dbRun(
+        `UPDATE pool_nfc_credentials
+           SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP
+         WHERE pool_member_id = ? AND status = 'active'`,
+        [pm.id]);
+      dbRun(`DELETE FROM pool_members WHERE id = ?`, [pm.id]);
+    }
+
+    // 3) Newsletter: unsubscribe matching email, but only if no approved user
+    //    and no other directory adult/child in this household still uses it.
+    if (email) {
+      const trimmed = email.trim().toLowerCase();
+      if (trimmed) {
+        const userUsing = dbGet(
+          `SELECT id FROM users WHERE LOWER(email) = ? AND status = 'approved' LIMIT 1`,
+          [trimmed]);
+        const adultUsing = dbGet(
+          `SELECT id FROM dir_adults
+            WHERE LOWER(email) = ?
+              AND NOT (user_id = ? AND id = ?)
+            LIMIT 1`,
+          [trimmed, ownerUserId, personType === 'adult' ? personId : '']);
+        const childUsing = dbGet(
+          `SELECT id FROM dir_children
+            WHERE LOWER(email) = ?
+              AND NOT (user_id = ? AND id = ?)
+            LIMIT 1`,
+          [trimmed, ownerUserId, personType === 'child' ? personId : '']);
+        if (!userUsing && !adultUsing && !childUsing) {
+          dbRun(
+            `UPDATE nl_subscribers
+                SET status = 'unsubscribed',
+                    unsubscribed_at = CURRENT_TIMESTAMP
+              WHERE LOWER(email) = ? AND status = 'active'`,
+            [trimmed]);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('cleanupFamilyMemberDeletion error:', err && err.message ? err.message : err);
+  }
 }
 
 function normalizeRfidCredentialValue(rawValue) {
@@ -1524,6 +1676,9 @@ app.put('/api/directory/adults/:id', requireAuth, (req, res) => {
   res.json({ success: true, adult: dbGet('SELECT * FROM dir_adults WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/adults/:id', requireAuth, (req, res) => {
+  const row = dbGet('SELECT * FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  if (!row) return res.json({ success: true });
+  cleanupFamilyMemberDeletion({ personType: 'adult', personId: row.id, email: row.email, ownerUserId: req.session.userId });
   dbRun('DELETE FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
   res.json({ success: true });
 });
@@ -1552,6 +1707,9 @@ app.put('/api/directory/children/:id', requireAuth, (req, res) => {
   res.json({ success: true, child: dbGet('SELECT * FROM dir_children WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/children/:id', requireAuth, (req, res) => {
+  const row = dbGet('SELECT * FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  if (!row) return res.json({ success: true });
+  cleanupFamilyMemberDeletion({ personType: 'child', personId: row.id, email: row.email, ownerUserId: req.session.userId });
   dbRun('DELETE FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
   res.json({ success: true });
 });
@@ -1838,6 +1996,21 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
     FROM users
     ORDER BY created_at DESC
   `);
+  // Attach household adults & children for each user (approved users typically have them)
+  for (const u of users) {
+    try {
+      u.adults = dbAll(
+        `SELECT id, name, email, phone, sms_opt_in
+           FROM dir_adults WHERE user_id = ? ORDER BY name ASC`,
+        [u.id]);
+    } catch { u.adults = []; }
+    try {
+      u.children = dbAll(
+        `SELECT id, first_name, phone, is_16_plus, sms_opt_in
+           FROM dir_children WHERE user_id = ? ORDER BY first_name ASC`,
+        [u.id]);
+    } catch { u.children = []; }
+  }
   res.json(users);
 });
 
@@ -1936,17 +2109,49 @@ app.post('/api/admin/sms/send', requireAdmin, async (req, res) => {
       }
     }
 
+    const note = (twilioClient && twilioFromNumber)
+      ? null
+      : 'Twilio is not configured. Messages were logged to the server console.';
+
+    // Log the broadcast in history
+    try {
+      const adminUser = dbGet('SELECT email FROM users WHERE id = ?', [req.session.userId]);
+      const broadcastId = uuidv4();
+      const sentAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      const sentBy = (adminUser && adminUser.email) ? String(adminUser.email) : 'admin';
+      const noteVal = note == null ? '' : String(note);
+      dbRun(
+        `INSERT INTO sms_broadcasts (id, sent_at, sent_by, message, recipients_total, sent_count, failed_count, note)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [broadcastId, sentAt, sentBy, String(message), Number(allRecipients.length) || 0, Number(sent) || 0, Number(failed) || 0, noteVal]);
+      console.log(`✓ Logged SMS broadcast ${broadcastId} (sent=${sent} failed=${failed} total=${allRecipients.length})`);
+    } catch (logErr) {
+      console.warn('Failed to record SMS broadcast history:', logErr && (logErr.stack || logErr.message || logErr));
+    }
+
     res.json({
       success: true,
       sent,
       failed,
       totalEligible: allRecipients.length,
-      note: (twilioClient && twilioFromNumber) ? null : 'Twilio is not configured. Messages were logged to the server console.'
+      note
     });
   } catch (err) {
     console.error('Admin SMS send error:', err);
     res.status(500).json({ error: 'Failed to send SMS broadcast.' });
   }
+});
+
+// SMS broadcast history (admin-only)
+app.get('/api/admin/sms/history', requireAdmin, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const rows = dbAll(
+    `SELECT id, sent_at, sent_by, message, recipients_total, sent_count, failed_count, note
+       FROM sms_broadcasts
+      ORDER BY sent_at DESC
+      LIMIT ?`,
+    [limit]);
+  res.json(rows);
 });
 
 // Approve user
@@ -2314,6 +2519,22 @@ app.post('/api/admin/pool/sync-residents', requireAdmin, (req, res) => {
   }
 });
 
+// POST /api/admin/pool/cleanup-orphans — remove Resident pool_members that
+// have no household (owning dir_adult/dir_child deleted, or owning user
+// removed). Callable on demand from the admin UI.
+app.post('/api/admin/pool/cleanup-orphans', requireAdmin, (req, res) => {
+  try {
+    const removed = cleanupOrphanedResidentPoolMembers();
+    res.json({ success: true, removed,
+      message: removed > 0
+        ? `Removed ${removed} orphaned Resident(s) with no household address.`
+        : 'No orphaned Residents found.' });
+  } catch (err) {
+    console.error('Pool orphan cleanup error:', err);
+    res.status(500).json({ error: 'Failed to clean up orphaned residents.' });
+  }
+});
+
 // GET entry types
 app.get('/api/admin/pool/entry-types', requireAdmin, (req, res) => {
   const types = dbAll('SELECT * FROM pool_entry_types ORDER BY is_system DESC, name ASC');
@@ -2353,11 +2574,57 @@ app.get('/api/admin/pool/members', requireAdmin, (req, res) => {
     ORDER BY pet.name, pm.last_name, pm.first_name
   `);
   const enriched = members.map(m => {
-    const street_address = getPoolMemberStreetAddress(m);
+    const household = getPoolMemberHousehold(m);
+    const street_address = household ? household.streetAddress : null;
+    const household_owner_user_id = household ? household.ownerUserId : null;
+    const household_owner_name = household
+      ? `${household.ownerFirstName} ${household.ownerLastName}`.trim()
+      : null;
+
+    // Determine phone preference and child-age status via notes linkage
+    let device_platform = null;
+    let is_child_under_16 = false;
+
+    if (typeof m.notes === 'string') {
+      const adultMatch = m.notes.match(/^family_adult_(.+)$/);
+      const childMatch = m.notes.match(/^family_child_(.+)$/);
+      if (adultMatch) {
+        const ph = dbGet(
+          `SELECT device_platform FROM dir_pool_phones
+           WHERE person_type='adult' AND person_id=? AND status='active'
+           ORDER BY created_at DESC LIMIT 1`,
+          [adultMatch[1]]);
+        if (ph) device_platform = ph.device_platform;
+      } else if (childMatch) {
+        const child = dbGet('SELECT is_16_plus FROM dir_children WHERE id=?', [childMatch[1]]);
+        if (child && !child.is_16_plus) is_child_under_16 = true;
+        if (!is_child_under_16) {
+          const ph = dbGet(
+            `SELECT device_platform FROM dir_pool_phones
+             WHERE person_type='child' AND person_id=? AND status='active'
+             ORDER BY created_at DESC LIMIT 1`,
+            [childMatch[1]]);
+          if (ph) device_platform = ph.device_platform;
+        }
+      }
+    }
+    if (!device_platform && !is_child_under_16 && m.user_id) {
+      const ph = dbGet(
+        `SELECT device_platform FROM dir_pool_phones
+         WHERE user_id=? AND person_type='self' AND status='active'
+         ORDER BY created_at DESC LIMIT 1`,
+        [m.user_id]);
+      if (ph) device_platform = ph.device_platform;
+    }
+
     return {
       ...m,
       street_address,
-      household_key: street_address ? street_address.toLowerCase() : null
+      household_key: street_address ? street_address.toLowerCase() : null,
+      household_owner_user_id,
+      household_owner_name,
+      device_platform,
+      is_child_under_16
     };
   });
   res.json(enriched);
@@ -3066,6 +3333,89 @@ app.post('/api/gate/heartbeat', requireGateKey, (req, res) => {
   const { device_id, uptime, last_sync, pending_checkins, version } = req.body;
   console.log(`  🚪 Gate heartbeat: device=${device_id} uptime=${uptime}s pending=${pending_checkins} v=${version}`);
   res.json({ success: true, server_time: new Date().toISOString() });
+});
+
+// ── Admin-facing proxy to the GateEntry Pi viewer ──────────────
+// Lets the Pool Entry Management screen view the gate's local database
+// (members, credentials, schedules, check-ins, sync log) and trigger a
+// manual sync to bring the Pi in line with the website.
+const GATE_VIEWER_URL = (process.env.GATE_VIEWER_URL || 'http://localhost:8080').replace(/\/$/, '');
+const GATE_VIEWER_KEY = process.env.GATE_VIEWER_KEY || process.env.PHONE_UNLOCK_KEY || '';
+
+async function fetchGateViewer(pathSuffix, { method = 'GET', body = null, timeoutMs = 8000 } = {}) {
+  const url = `${GATE_VIEWER_URL}${pathSuffix}`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (GATE_VIEWER_KEY) headers['X-Gate-Phone-Key'] = GATE_VIEWER_KEY;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+    return { ok: res.ok, status: res.status, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+app.get('/api/admin/gate/snapshot', requireAdmin, async (req, res) => {
+  try {
+    const parts = await Promise.allSettled([
+      fetchGateViewer('/api/viewer/summary'),
+      fetchGateViewer('/api/viewer/members?limit=500'),
+      fetchGateViewer('/api/viewer/credentials?limit=500'),
+      fetchGateViewer('/api/viewer/schedules?limit=200'),
+      fetchGateViewer('/api/viewer/checkins?limit=100'),
+      fetchGateViewer('/api/viewer/sync-log?limit=25')
+    ]);
+    const labels = ['summary', 'members', 'credentials', 'schedules', 'checkins', 'syncLog'];
+    const payload = { reachable: true, viewerUrl: GATE_VIEWER_URL };
+    parts.forEach((p, i) => {
+      if (p.status === 'fulfilled' && p.value.ok) {
+        payload[labels[i]] = p.value.data;
+      } else {
+        payload[labels[i]] = null;
+        if (p.status === 'rejected' || !p.value.ok) {
+          payload.reachable = false;
+          payload.error = payload.error || (
+            p.status === 'rejected'
+              ? ((p.reason && p.reason.message) || 'fetch failed')
+              : `HTTP ${p.value.status}`);
+        }
+      }
+    });
+    res.json(payload);
+  } catch (err) {
+    res.status(502).json({
+      reachable: false,
+      viewerUrl: GATE_VIEWER_URL,
+      error: (err && err.message) || 'Failed to contact gate.'
+    });
+  }
+});
+
+app.post('/api/admin/gate/sync', requireAdmin, async (req, res) => {
+  try {
+    const r = await fetchGateViewer('/api/viewer/sync', { method: 'POST', body: {}, timeoutMs: 60000 });
+    if (!r.ok) {
+      return res.status(502).json({
+        success: false,
+        error: (r.data && r.data.error) || `Gate returned HTTP ${r.status}`
+      });
+    }
+    res.json({ success: true, ...r.data });
+  } catch (err) {
+    res.status(502).json({
+      success: false,
+      error: (err && err.message) || 'Failed to contact gate.'
+    });
+  }
 });
 
 // ── Start Server ────────────────────────────────────────

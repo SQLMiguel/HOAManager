@@ -126,6 +126,21 @@
     .pool-badge-yes { background: #d4edda; color: #155724; }
     .pool-badge-no { background: #f8d7da; color: #721c24; }
 
+    /* Gate Device panel */
+    .gate-desc { color: var(--text-light); font-size: 0.85rem; margin: 8px 0 16px; }
+    .gate-status-label { margin-left: auto; font-size: 0.82rem; color: var(--text-light); font-weight: 500; }
+    .gate-status-label.ok { color: #2e7d32; }
+    .gate-status-label.err { color: #c62828; }
+    .gate-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+    .gate-summary-card { background: #fff; border: 1px solid #e8edf2; border-radius: 8px; padding: 12px 14px; }
+    .gate-summary-card .k { font-size: 0.72rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .gate-summary-card .v { font-size: 1.3rem; font-weight: 700; color: var(--text); margin-top: 4px; }
+    .gate-summary-card .sub { font-size: 0.76rem; color: var(--text-light); margin-top: 2px; }
+    .gate-section { margin-bottom: 20px; }
+    .gate-section h4 { margin: 0 0 8px; font-size: 0.95rem; }
+    .gate-table-wrap { overflow-x: auto; border: 1px solid #eef2f6; border-radius: 6px; }
+    .gate-empty { text-align: center; padding: 22px; color: var(--text-light); font-size: 0.85rem; }
+
     /* Pool modal */
     .pool-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; }
     .pool-modal-overlay.open { display: flex; }
@@ -207,6 +222,16 @@
     .sms-card-note { margin: 0 0 10px; color: var(--text-light); font-size: 0.85rem; }
     .sms-card-actions { margin-top: 8px; }
     .sms-send-status { margin-top: 10px; font-size: 0.85rem; color: var(--text-light); }
+    .sms-empty { text-align: center; padding: 18px; color: var(--text-light); font-size: 0.88rem; }
+    .sms-recipients-wrap { max-height: 320px; overflow-y: auto; border: 1px solid #eef2f6; border-radius: 6px; }
+    .sms-recipients-table { margin: 0; }
+    .sms-recipients-table th { position: sticky; top: 0; background: #f7f9fc; z-index: 1; }
+    .sms-history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
+    .sms-history-wrap { display: flex; flex-direction: column; gap: 10px; max-height: 480px; overflow-y: auto; }
+    .sms-history-item { background: #fff; border: 1px solid #e8edf2; border-radius: 8px; padding: 12px 14px; }
+    .sms-history-meta { display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 0.78rem; color: var(--text-light); margin-bottom: 8px; }
+    .sms-history-meta strong { color: var(--text); }
+    .sms-history-msg { white-space: pre-wrap; font-size: 0.9rem; color: var(--text); background: #f8fafc; border-radius: 6px; padding: 8px 10px; border: 1px solid #eef2f6; }
   </style>
 </head>
 <body>
@@ -336,6 +361,7 @@
           <button class="pool-sub-tab" data-pool-panel="poolSchedules">Schedules</button>
           <button class="pool-sub-tab" data-pool-panel="poolEntryTypes">Entry Types</button>
           <button class="pool-sub-tab" data-pool-panel="poolAccessCheck">Access Check</button>
+          <button class="pool-sub-tab" data-pool-panel="poolGateDevice">Gate Device</button>
         </div>
 
         <!-- ── Pool Members Panel ── -->
@@ -433,6 +459,72 @@
           </div>
           <div class="pool-access-result" id="poolAccessResult"></div>
         </div>
+
+        <!-- ── Gate Device Panel ── -->
+        <div class="pool-panel" id="poolGateDevice">
+          <div class="pool-toolbar">
+            <button class="btn btn-primary" id="gateRefreshBtn">🔄 Refresh Gate View</button>
+            <button class="btn btn-outline" id="gateManualSyncBtn">⇅ Manual Sync Now</button>
+            <span id="gateStatusLabel" class="gate-status-label"></span>
+          </div>
+          <p class="gate-desc">
+            Read-only view of the Raspberry Pi gate controller's local database.
+            Use <strong>Manual Sync Now</strong> to trigger an on-demand pull/push so the
+            website and the gate are in sync without waiting for the next scheduled cycle.
+          </p>
+
+          <div class="gate-summary-grid" id="gateSummaryGrid"></div>
+
+          <div class="gate-section">
+            <h4>Recent Sync Log</h4>
+            <div class="gate-table-wrap">
+              <table class="pool-table" id="gateSyncLogTable">
+                <thead><tr><th>When</th><th>Direction</th><th>Pulled</th><th>Pushed</th><th>Status</th><th>Message</th></tr></thead>
+                <tbody><tr><td colspan="6" class="gate-empty">Not loaded yet.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="gate-section">
+            <h4>Members on Gate</h4>
+            <div class="gate-table-wrap">
+              <table class="pool-table" id="gateMembersTable">
+                <thead><tr><th>Name</th><th>Entry Type</th><th>Status</th><th>Source</th></tr></thead>
+                <tbody><tr><td colspan="4" class="gate-empty">Not loaded yet.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="gate-section">
+            <h4>Credentials on Gate</h4>
+            <div class="gate-table-wrap">
+              <table class="pool-table" id="gateCredentialsTable">
+                <thead><tr><th>Member</th><th>Type</th><th>Platform</th><th>Device</th><th>Status</th></tr></thead>
+                <tbody><tr><td colspan="5" class="gate-empty">Not loaded yet.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="gate-section">
+            <h4>Schedules on Gate</h4>
+            <div class="gate-table-wrap">
+              <table class="pool-table" id="gateSchedulesTable">
+                <thead><tr><th>Name</th><th>Entry Type</th><th>Days/Date</th><th>Time</th></tr></thead>
+                <tbody><tr><td colspan="4" class="gate-empty">Not loaded yet.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="gate-section">
+            <h4>Recent Check-Ins on Gate</h4>
+            <div class="gate-table-wrap">
+              <table class="pool-table" id="gateCheckinsTable">
+                <thead><tr><th>When</th><th>Member</th><th>Status</th><th>Source</th></tr></thead>
+                <tbody><tr><td colspan="4" class="gate-empty">Not loaded yet.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ========== SMS MANAGEMENT SECTION ========== -->
@@ -457,6 +549,33 @@
               <button class="btn btn-primary" id="smsSendBtn" type="button">Send SMS to Eligible Members</button>
             </div>
             <p id="smsSendStatus" class="sms-send-status"></p>
+          </div>
+
+          <!-- Eligible recipients list -->
+          <div class="pool-modal sms-card">
+            <h3 class="sms-card-title">Eligible Recipients</h3>
+            <p class="sms-card-note">Approved members and opted-in household members with valid phone numbers.</p>
+            <div class="sms-recipients-wrap">
+              <table class="pool-table sms-recipients-table" id="smsRecipientsTable">
+                <thead>
+                  <tr><th>Name</th><th>Phone</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="2" class="sms-empty">Loading recipients…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Previous broadcasts -->
+          <div class="pool-modal sms-card">
+            <div class="sms-history-header">
+              <h3 class="sms-card-title">Previous SMS Alerts</h3>
+              <button class="btn btn-outline" id="smsHistoryRefreshBtn" type="button">Refresh</button>
+            </div>
+            <div class="sms-history-wrap" id="smsHistoryList">
+              <p class="sms-empty">Loading history…</p>
+            </div>
           </div>
         </div>
       </div>
@@ -809,14 +928,36 @@
         return;
       }
 
-      userListEl.innerHTML = filtered.map(user => `
+      // Group users by normalized household address
+      const norm = (addr) => {
+        if (!addr) return '';
+        let s = String(addr).split(',')[0].trim();
+        s = s.replace(/\s+(apt|apartment|unit|suite|ste|#)\s*[\w-]+.*$/i, '');
+        s = s.replace(/\s+/g, ' ').trim().toLowerCase();
+        return s;
+      };
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+      const groups = new Map();
+      const noAddress = [];
+      for (const u of filtered) {
+        const key = norm(u.address);
+        if (!key) { noAddress.push(u); continue; }
+        if (!groups.has(key)) groups.set(key, { address: u.address, users: [] });
+        groups.get(key).users.push(u);
+      }
+
+      const sortedGroups = [...groups.values()].sort((a, b) => a.address.localeCompare(b.address));
+
+      const renderUserRow = (user) => `
         <div class="user-row ${user.status}">
           <div class="user-info">
-            <h3>${user.first_name} ${user.last_name} <span class="badge badge-${user.status}">${user.status}</span></h3>
-            <p><strong>Email:</strong> ${user.email}</p>
-            <p><strong>Address:</strong> ${user.address}</p>
-            ${user.phone ? `<p><strong>Phone:</strong> ${user.phone}</p>` : ''}
+            <h3>${esc(user.first_name)} ${esc(user.last_name)} <span class="badge badge-${user.status}">${user.status}</span> <span class="badge" style="background:#4a90e2;color:#fff;">Primary</span></h3>
+            <p><strong>Email:</strong> ${esc(user.email)}</p>
+            <p><strong>Address:</strong> ${esc(user.address)}</p>
+            ${user.phone ? `<p><strong>Phone:</strong> ${esc(user.phone)}</p>` : ''}
             <p style="font-size:0.8rem; color: #aaa; margin-top: 4px;">Registered: ${new Date(user.created_at).toLocaleDateString()}</p>
+            ${renderHouseholdMembers(user)}
           </div>
           <div class="user-actions">
             ${user.status === 'pending' ? `
@@ -826,10 +967,70 @@
             ${user.status === 'denied' ? `
               <button class="btn-approve" onclick="approveUser('${user.id}')">Approve</button>
             ` : ''}
-            <button class="btn-delete" onclick="deleteUser('${user.id}', '${user.first_name} ${user.last_name}')">Delete</button>
+            <button class="btn-delete" onclick="deleteUser('${user.id}', '${esc(user.first_name)} ${esc(user.last_name)}')">Delete</button>
           </div>
         </div>
-      `).join('');
+      `;
+
+      function renderHouseholdMembers(user) {
+        const adults = Array.isArray(user.adults) ? user.adults : [];
+        const children = Array.isArray(user.children) ? user.children : [];
+        if (!adults.length && !children.length) return '';
+        const adultItems = adults.map(a => `
+          <li>
+            <strong>${esc(a.name || '')}</strong>
+            <span class="badge" style="background:#7a7a7a;color:#fff;">Adult</span>
+            ${a.email ? ` · ${esc(a.email)}` : ''}
+            ${a.phone ? ` · ${esc(a.phone)}` : ''}
+            ${a.sms_opt_in ? ' · <span style="color:#2e7d32;">SMS opt-in</span>' : ''}
+          </li>`).join('');
+        const childItems = children.map(c => `
+          <li>
+            <strong>${esc(c.first_name || '')}</strong>
+            <span class="badge" style="background:#b36ae2;color:#fff;">Child</span>
+            ${c.is_16_plus ? '<span class="badge" style="background:#e0e0e0;color:#333;">16+</span>' : '<span class="badge" style="background:#e0e0e0;color:#333;">&lt;16</span>'}
+            ${c.phone ? ` · ${esc(c.phone)}` : ''}
+            ${c.sms_opt_in && c.is_16_plus ? ' · <span style="color:#2e7d32;">SMS opt-in</span>' : ''}
+          </li>`).join('');
+        return `
+          <div class="household-members" style="margin-top:10px; padding:8px 12px; background:#f8f9fb; border-left:3px solid #4a90e2; border-radius:4px;">
+            <p style="margin:0 0 6px; font-weight:600; font-size:0.9rem;">Household Members (${adults.length + children.length})</p>
+            <ul style="margin:0; padding-left:18px; font-size:0.88rem; line-height:1.5;">
+              ${adultItems}${childItems}
+            </ul>
+          </div>`;
+      }
+
+      let html = '';
+      for (const group of sortedGroups) {
+        const totalExtra = group.users.reduce((n, u) => n + (u.adults?.length || 0) + (u.children?.length || 0), 0);
+        html += `
+          <div class="household-group" style="margin-bottom:18px;">
+            <div class="household-header" style="padding:8px 12px; background:#eef2f7; border-radius:6px 6px 0 0; border:1px solid #d5dde7; font-weight:600;">
+              🏠 ${esc(group.address)}
+              <span style="font-weight:400; color:#666; margin-left:8px;">
+                ${group.users.length} primary${group.users.length === 1 ? '' : 's'}${totalExtra ? ` · ${totalExtra} household member${totalExtra === 1 ? '' : 's'}` : ''}
+              </span>
+            </div>
+            <div style="border:1px solid #d5dde7; border-top:0; border-radius:0 0 6px 6px; padding:8px;">
+              ${group.users.map(renderUserRow).join('')}
+            </div>
+          </div>`;
+      }
+      if (noAddress.length) {
+        html += `
+          <div class="household-group" style="margin-bottom:18px;">
+            <div class="household-header" style="padding:8px 12px; background:#fff3e0; border-radius:6px 6px 0 0; border:1px solid #ffb74d; font-weight:600;">
+              ⚠️ No Household Address
+              <span style="font-weight:400; color:#666; margin-left:8px;">${noAddress.length} user${noAddress.length === 1 ? '' : 's'}</span>
+            </div>
+            <div style="border:1px solid #ffb74d; border-top:0; border-radius:0 0 6px 6px; padding:8px;">
+              ${noAddress.map(renderUserRow).join('')}
+            </div>
+          </div>`;
+      }
+
+      userListEl.innerHTML = html;
     }
 
     // Global action handlers
@@ -927,6 +1128,7 @@
           statsPoolGroup.style.display = 'none';
           trendChartWrapper.style.display = 'none';
           loadSmsRecipients();
+          loadSmsHistory();
         } else {
           poolSection.classList.remove('active');
           smsSection.classList.remove('active');
@@ -1047,26 +1249,82 @@
     }
 
     // ── SMS Management ──
+    function smsEscape(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     async function loadSmsRecipients() {
       const countEl = document.getElementById('smsEligibleCount');
       const statusEl = document.getElementById('smsSendStatus');
+      const tbody = document.querySelector('#smsRecipientsTable tbody');
       if (countEl) countEl.textContent = 'Loading recipients...';
       if (statusEl) statusEl.textContent = '';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="2" class="sms-empty">Loading recipients…</td></tr>';
 
       try {
         const res = await fetch('/api/admin/sms/recipients');
         const data = await res.json();
         if (data && typeof data.eligibleCount === 'number') {
           countEl.textContent = `${data.eligibleCount} eligible member(s) currently subscribed to SMS`;
+          const list = Array.isArray(data.recipients) ? data.recipients : [];
+          if (tbody) {
+            if (list.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="2" class="sms-empty">No eligible recipients.</td></tr>';
+            } else {
+              const sorted = [...list].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+              tbody.innerHTML = sorted.map(r =>
+                `<tr><td>${smsEscape(r.name || '—')}</td><td>${smsEscape(r.phoneMasked || '—')}</td></tr>`
+              ).join('');
+            }
+          }
         } else {
           countEl.textContent = 'Unable to load recipients.';
+          if (tbody) tbody.innerHTML = '<tr><td colspan="2" class="sms-empty">Unable to load recipients.</td></tr>';
         }
       } catch {
         countEl.textContent = 'Unable to load recipients.';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="2" class="sms-empty">Unable to load recipients.</td></tr>';
+      }
+    }
+
+    async function loadSmsHistory() {
+      const listEl = document.getElementById('smsHistoryList');
+      if (!listEl) return;
+      listEl.innerHTML = '<p class="sms-empty">Loading history…</p>';
+      try {
+        const res = await fetch('/api/admin/sms/history');
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          listEl.innerHTML = '<p class="sms-empty">No SMS alerts have been sent yet.</p>';
+          return;
+        }
+        listEl.innerHTML = data.map(b => {
+          const when = b.sent_at ? new Date(b.sent_at).toLocaleString() : '—';
+          const sender = b.sent_by ? ` · <strong>Sent by:</strong> ${smsEscape(b.sent_by)}` : '';
+          const note = b.note ? `<div class="sms-history-note">${smsEscape(b.note)}</div>` : '';
+          return `
+            <div class="sms-history-item">
+              <div class="sms-history-meta">
+                <span><strong>Date/Time:</strong> ${smsEscape(when)}</span>
+                <span><strong>Sent:</strong> ${smsEscape(b.sent_count ?? 0)}</span>
+                <span><strong>Failed:</strong> ${smsEscape(b.failed_count ?? 0)}</span>
+                <span><strong>Recipients:</strong> ${smsEscape(b.recipients_total ?? 0)}</span>
+                ${sender}
+              </div>
+              <div class="sms-history-msg">${smsEscape(b.message)}</div>
+              ${note}
+            </div>`;
+        }).join('');
+      } catch {
+        listEl.innerHTML = '<p class="sms-empty">Unable to load history.</p>';
       }
     }
 
     document.getElementById('smsRefreshBtn').addEventListener('click', loadSmsRecipients);
+    const smsHistoryRefreshBtn = document.getElementById('smsHistoryRefreshBtn');
+    if (smsHistoryRefreshBtn) smsHistoryRefreshBtn.addEventListener('click', loadSmsHistory);
 
     document.getElementById('smsSendBtn').addEventListener('click', async () => {
       const messageEl = document.getElementById('smsMessage');
@@ -1098,6 +1356,7 @@
           statusEl.textContent = `Sent: ${data.sent} · Failed: ${data.failed} · Eligible: ${data.totalEligible}.${note}`;
           showAdminNotification('SMS broadcast completed.', 'success');
           await loadSmsRecipients();
+          await loadSmsHistory();
         } else {
           statusEl.textContent = data.error || 'Failed to send SMS.';
           showAdminNotification(data.error || 'Failed to send SMS.', 'error');
@@ -1125,10 +1384,28 @@
       const grouped = new Map();
       for (const member of poolMembers) {
         const hasStreetAddress = !!member.street_address;
-        const key = hasStreetAddress
-          ? (member.household_key || member.street_address.toLowerCase())
-          : '__no_household_address__';
-        const streetLabel = hasStreetAddress ? member.street_address : 'No Household Address';
+        const hasHouseholdOwner = !!member.household_owner_user_id;
+        let key;
+        let streetLabel;
+        if (hasStreetAddress) {
+          // Prefer owner-id-based key so all members of the same household
+          // group together even if address strings vary slightly.
+          key = member.household_owner_user_id
+            ? `owner:${member.household_owner_user_id}`
+            : (member.household_key || member.street_address.toLowerCase());
+          streetLabel = member.street_address;
+        } else if (hasHouseholdOwner) {
+          // Family member tied to a resident but the owner's address is not
+          // recorded yet — group by owner so they don't fall into the
+          // "No Household Address" bucket.
+          key = `owner:${member.household_owner_user_id}`;
+          streetLabel = member.household_owner_name
+            ? `${member.household_owner_name} Household (address not on file)`
+            : 'Household (address not on file)';
+        } else {
+          key = '__no_household_address__';
+          streetLabel = 'No Household Address';
+        }
         if (!grouped.has(key)) {
           grouped.set(key, {
             key,
@@ -1144,7 +1421,9 @@
           entryTypeName: member.entry_type_name || '—',
           status: member.status || 'active',
           source: member.source || 'manual',
-          notes: member.notes || ''
+          notes: member.notes || '',
+          devicePlatform: member.device_platform || null,
+          isChildUnder16: !!member.is_child_under_16
         });
       }
 
@@ -1176,19 +1455,29 @@
           <div class="pool-household-body">
             ${h.members
               .sort((a, b) => a.name.localeCompare(b.name))
-              .map(member => `
+              .map(member => {
+                let passButtons = '';
+                let ageNote = '';
+                if (member.isChildUnder16) {
+                  ageNote = '<div class="pool-household-member-detail" style="color:#c0392b;font-weight:600;">Less than 16yr old</div>';
+                } else if (member.devicePlatform === 'ios') {
+                  passButtons = `<button type="button" class="pool-household-btn-apple" data-household-action="apple" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">📱 Apple Pass</button>`;
+                } else if (member.devicePlatform === 'android') {
+                  passButtons = `<button type="button" class="pool-household-btn-google" data-household-action="google" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">🤖 Google Pass</button>`;
+                }
+                return `
                 <div class="pool-household-member">
                   <div class="pool-household-member-main">
                     <div class="pool-household-member-name">${member.name}</div>
                     <div class="pool-household-member-detail">Entry type: ${member.entryTypeName}</div>
+                    ${ageNote}
                     ${member.notes ? `<div class="pool-household-member-detail">Notes: ${member.notes}</div>` : ''}
                   </div>
                   <div class="pool-household-member-side">
                     <div class="pool-household-member-detail">${member.source} · ${member.status}</div>
                     <div class="pool-household-member-actions">
                       <button type="button" class="pool-household-btn-edit" data-household-action="edit" data-member-id="${member.id}">Edit</button>
-                      <button type="button" class="pool-household-btn-apple" data-household-action="apple" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">📱 Apple Pass</button>
-                      <button type="button" class="pool-household-btn-google" data-household-action="google" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">🤖 Google Pass</button>
+                      ${passButtons}
                       ${member.status !== 'inactive'
                         ? `<button type="button" class="pool-household-btn-inactive" data-household-action="inactive" data-member-id="${member.id}" data-member-name="${encodeURIComponent(member.name)}">Inactivate</button>`
                         : ''}
@@ -1196,7 +1485,8 @@
                     </div>
                   </div>
                 </div>
-              `).join('')}
+              `;
+              }).join('')}
           </div>
         </div>
       `).join('');
@@ -1968,6 +2258,168 @@
     document.querySelectorAll('.pool-modal-overlay').forEach(overlay => {
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) overlay.classList.remove('open');
+      });
+    });
+
+    // ── Gate Device viewer ──────────────────────────────
+    const gateStatusEl = document.getElementById('gateStatusLabel');
+    const gateSummaryEl = document.getElementById('gateSummaryGrid');
+    let gateLoadedOnce = false;
+
+    function gateEscape(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function fmtTs(v) {
+      if (!v) return '—';
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? gateEscape(v) : d.toLocaleString();
+    }
+
+    function setGateStatus(text, kind) {
+      if (!gateStatusEl) return;
+      gateStatusEl.textContent = text || '';
+      gateStatusEl.className = 'gate-status-label' + (kind ? ' ' + kind : '');
+    }
+
+    function renderGateSummary(summary) {
+      if (!gateSummaryEl) return;
+      if (!summary) {
+        gateSummaryEl.innerHTML = '<div class="gate-summary-card"><div class="k">Gate</div><div class="v">Unreachable</div><div class="sub">Could not contact the Pi viewer.</div></div>';
+        return;
+      }
+      const cards = [
+        { k: 'Members', v: summary.members_total ?? summary.members ?? 0, sub: `Active: ${summary.members_active ?? '—'}` },
+        { k: 'Credentials', v: summary.credentials_total ?? summary.credentials ?? 0, sub: `Active: ${summary.credentials_active ?? '—'}` },
+        { k: 'Schedules', v: summary.schedules_total ?? summary.schedules ?? 0, sub: '' },
+        { k: 'Check-ins', v: summary.checkins_total ?? summary.checkins ?? 0, sub: `Pending sync: ${summary.pending_sync ?? summary.pendingSync ?? 0}` },
+        { k: 'Last sync', v: fmtTs(summary.last_sync || summary.lastSync), sub: '' }
+      ];
+      gateSummaryEl.innerHTML = cards.map(c => `
+        <div class="gate-summary-card">
+          <div class="k">${gateEscape(c.k)}</div>
+          <div class="v">${gateEscape(c.v)}</div>
+          ${c.sub ? `<div class="sub">${gateEscape(c.sub)}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function renderGateTable(tableId, rows, columns, emptyText) {
+      const tbody = document.querySelector(`#${tableId} tbody`);
+      if (!tbody) return;
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${columns.length}" class="gate-empty">${gateEscape(emptyText || 'No records.')}</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(r => {
+        return '<tr>' + columns.map(col => `<td>${gateEscape(col.get(r))}</td>`).join('') + '</tr>';
+      }).join('');
+    }
+
+    async function loadGateSnapshot() {
+      setGateStatus('Loading…', '');
+      try {
+        const res = await fetch('/api/admin/gate/snapshot');
+        const data = await res.json();
+        if (!data.reachable) {
+          renderGateSummary(null);
+          setGateStatus(data.error ? `Unreachable: ${data.error}` : 'Unreachable', 'err');
+          ['gateSyncLogTable', 'gateMembersTable', 'gateCredentialsTable', 'gateSchedulesTable', 'gateCheckinsTable'].forEach(id => {
+            const tbody = document.querySelector(`#${id} tbody`);
+            if (tbody) {
+              const span = tbody.querySelector('tr td')?.getAttribute('colspan') || 4;
+              tbody.innerHTML = `<tr><td colspan="${span}" class="gate-empty">Gate not reachable.</td></tr>`;
+            }
+          });
+          return;
+        }
+        setGateStatus(`Connected · ${data.viewerUrl}`, 'ok');
+        renderGateSummary(data.summary);
+
+        renderGateTable('gateSyncLogTable', data.syncLog, [
+          { get: r => fmtTs(r.started_at || r.created_at || r.when) },
+          { get: r => r.direction || r.kind || '—' },
+          { get: r => r.pulled ?? r.records_pulled ?? 0 },
+          { get: r => r.pushed ?? r.records_pushed ?? 0 },
+          { get: r => r.status || '—' },
+          { get: r => r.message || r.error || '' }
+        ], 'No sync log entries.');
+
+        renderGateTable('gateMembersTable', data.members, [
+          { get: r => `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.name || '—' },
+          { get: r => r.entry_type_name || r.entry_type || '—' },
+          { get: r => r.status || '—' },
+          { get: r => r.source || '—' }
+        ], 'No members on gate.');
+
+        renderGateTable('gateCredentialsTable', data.credentials, [
+          { get: r => r.member_name || r.pool_member_name || r.first_name || '—' },
+          { get: r => r.credential_type || r.type || '—' },
+          { get: r => r.device_platform || r.platform || '—' },
+          { get: r => r.device_name || r.device_label || '—' },
+          { get: r => r.status || '—' }
+        ], 'No credentials on gate.');
+
+        renderGateTable('gateSchedulesTable', data.schedules, [
+          { get: r => r.name || '—' },
+          { get: r => r.entry_type_name || r.entry_type || '—' },
+          { get: r => r.days || r.date || r.days_of_week || '—' },
+          { get: r => (r.start_time || r.start || '—') + ' – ' + (r.end_time || r.end || '—') }
+        ], 'No schedules on gate.');
+
+        renderGateTable('gateCheckinsTable', data.checkins, [
+          { get: r => fmtTs(r.check_in_time || r.when) },
+          { get: r => r.member_name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || '—' },
+          { get: r => r.status || '—' },
+          { get: r => r.source || '—' }
+        ], 'No recent check-ins.');
+      } catch (err) {
+        renderGateSummary(null);
+        setGateStatus('Unreachable: ' + (err && err.message ? err.message : 'network error'), 'err');
+      }
+    }
+
+    const gateRefreshBtn = document.getElementById('gateRefreshBtn');
+    if (gateRefreshBtn) gateRefreshBtn.addEventListener('click', () => loadGateSnapshot());
+
+    const gateManualSyncBtn = document.getElementById('gateManualSyncBtn');
+    if (gateManualSyncBtn) {
+      gateManualSyncBtn.addEventListener('click', async () => {
+        gateManualSyncBtn.disabled = true;
+        const originalText = gateManualSyncBtn.textContent;
+        gateManualSyncBtn.textContent = 'Syncing…';
+        setGateStatus('Running manual sync…', '');
+        try {
+          const res = await fetch('/api/admin/gate/sync', { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            showAdminNotification(
+              `Gate sync complete. Pulled ${data.pulled ?? 0}, pushed ${data.pushed ?? 0}.`,
+              'success');
+            await loadGateSnapshot();
+          } else {
+            showAdminNotification('Gate sync failed: ' + (data.error || 'unknown error'), 'error');
+            setGateStatus('Sync failed: ' + (data.error || 'unknown'), 'err');
+          }
+        } catch (e) {
+          showAdminNotification('Gate sync failed: ' + (e.message || 'network error'), 'error');
+          setGateStatus('Sync failed: ' + (e.message || 'network error'), 'err');
+        } finally {
+          gateManualSyncBtn.disabled = false;
+          gateManualSyncBtn.textContent = originalText;
+        }
+      });
+    }
+
+    // Load gate snapshot the first time the tab is opened
+    document.querySelectorAll('.pool-sub-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.getAttribute('data-pool-panel') === 'poolGateDevice' && !gateLoadedOnce) {
+          gateLoadedOnce = true;
+          loadGateSnapshot();
+        }
       });
     });
   });
