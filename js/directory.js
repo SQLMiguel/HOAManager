@@ -310,6 +310,32 @@
 
     if (phoneEl) phoneEl.textContent = smsPrefs.phoneMasked || 'No valid phone number on file';
 
+    // Sync the inline SMS toggle on the Household Info tab
+    const infoToggle = document.getElementById('profSmsOptIn');
+    const infoStatus = document.getElementById('profSmsStatus');
+    if (infoToggle) {
+      infoToggle.disabled = false;
+      infoToggle.checked = !smsPrefs.optedOut;
+      if (infoStatus) {
+        infoStatus.textContent = smsPrefs.optedOut ? 'Enable to receive SMS notices' : '';
+        infoStatus.className = 'dir-sms-inline-status';
+      }
+    }
+
+    // Render household SMS members list
+    const hhList = document.getElementById('smsHouseholdList');
+    if (hhList) {
+      if (smsPrefs.householdSms && smsPrefs.householdSms.length) {
+        hhList.innerHTML = smsPrefs.householdSms.map(m =>
+          `<div class="dir-sms-hh-item"><span class="dir-badge-sms">📱</span> ${e(m.name)} · ${m.phoneMasked}</div>`
+        ).join('');
+        hhList.style.display = 'block';
+      } else {
+        hhList.innerHTML = '';
+        hhList.style.display = 'none';
+      }
+    }
+
     if (!smsPrefs.hasPhone) {
       outBtn.classList.add('dir-hidden');
       inBtn.classList.add('dir-hidden');
@@ -380,6 +406,17 @@
   function initInfoTab() {
     document.getElementById('saveInfoBtn').addEventListener('click', saveInfo);
     // Phone auto-formatter is handled by validation.js (auto-init)
+
+    // SMS opt-in/out toggle on the Household Info tab
+    const smsToggle = document.getElementById('profSmsOptIn');
+    if (smsToggle) {
+      smsToggle.addEventListener('change', async () => {
+        const optedOut = !smsToggle.checked;
+        const [ok, msg] = await apiPost('/api/sms/preferences', { opted_out: optedOut ? 1 : 0 });
+        if (!ok) { smsToggle.checked = !smsToggle.checked; }
+        await loadSmsPreferences();
+      });
+    }
   }
 
   async function saveInfo() {
@@ -407,7 +444,12 @@
     };
     const [ok, msg] = await apiPost('/api/directory/profile', payload);
     showMsg('saveInfoMsg', msg, !ok);
-    if (ok) { myProfile = await (await fetch('/api/directory/me')).json(); loadDirectory(); }
+    if (ok) {
+      markSaved(document.getElementById('saveInfoBtn'));
+      myProfile = await (await fetch('/api/directory/me')).json();
+      loadDirectory();
+      await loadSmsPreferences();
+    }
   }
 
   // ── Family Tab ───────────────────────────────────────────────
@@ -415,6 +457,13 @@
     document.getElementById('addAdultBtn').addEventListener('click', addAdult);
     document.getElementById('addChildBtn').addEventListener('click', addChild);
     document.getElementById('addPetBtn').addEventListener('click', addPet);
+    // Toggle phone/email fields when "16+" is checked in add-child row
+    const is16Chk = document.getElementById('childIs16Plus');
+    if (is16Chk) {
+      is16Chk.addEventListener('change', () => {
+        document.getElementById('addChildContactRow').style.display = is16Chk.checked ? 'flex' : 'none';
+      });
+    }
   }
 
   function renderAdults(list) {
@@ -424,27 +473,141 @@
         a.phone ? `📞 ${e(a.phone)}` : '',
         a.email ? `✉ ${e(a.email)}` : ''
       ].filter(Boolean).join(' · ');
+      const smsOn = a.sms_opt_in ? 1 : 0;
       return `<div class="dir-list-item">
-        <span>${e(a.name)}${details ? ` · ${details}` : ''}</span>
-        <button class="dir-del-btn" data-id="${a.id}" data-type="adult" title="Remove">✕</button>
+        <span>${e(a.name)}${details ? ` · ${details}` : ''}${smsOn ? ' · <span class="dir-badge-sms">📱 SMS</span>' : ''}</span>
+        <div class="dir-item-actions">
+          <button class="dir-edit-btn" data-id="${a.id}" data-type="adult" title="Edit">✎</button>
+          <button class="dir-del-btn" data-id="${a.id}" data-type="adult" title="Remove">✕</button>
+        </div>
+      </div>
+      <div class="dir-edit-form" id="edit-adult-${a.id}" style="display:none;">
+        <div class="dir-edit-fields">
+          <div class="dir-edit-field">
+            <label>Phone</label>
+            <input type="tel" class="dir-input" id="edit-adult-phone-${a.id}" value="${e(a.phone || '')}" placeholder="Phone number">
+          </div>
+          <div class="dir-edit-field">
+            <label>Email</label>
+            <input type="email" class="dir-input" id="edit-adult-email-${a.id}" value="${e(a.email || '')}" placeholder="Email address">
+          </div>
+          <div class="dir-edit-field dir-edit-field-full">
+            <label class="dir-toggle dir-toggle-sms">
+              <input type="checkbox" id="edit-adult-sms-${a.id}" ${smsOn ? 'checked' : ''}>
+              <span class="dir-toggle-slider"></span>
+              <span class="dir-toggle-label">Enroll in HOA SMS text alerts</span>
+            </label>
+            <p class="dir-field-hint" style="margin-top:4px;">Requires a valid phone number above.</p>
+          </div>
+        </div>
+        <div class="dir-edit-actions">
+          <button class="btn btn-primary dir-save-btn" data-id="${a.id}" data-type="adult" type="button">Save</button>
+          <button class="btn btn-outline dir-cancel-btn" data-id="${a.id}" data-type="adult" type="button">Cancel</button>
+        </div>
       </div>
       <div class="dir-pool-phone-row" data-pp-person-type="adult" data-pp-person-id="${a.id}" data-pp-person-name="${e(a.name)}"></div>`;
     }).join('');
     document.querySelectorAll('#adultsList .dir-del-btn').forEach(btn =>
-      btn.addEventListener('click', () => deleteItem('adults', btn.dataset.id)));
+      btn.addEventListener('click', () => {
+        const adult = (myProfile?.adults || []).find(a => String(a.id) === String(btn.dataset.id));
+        const name = adult?.name || 'this household member';
+        if (!confirm(`Are you sure you want to delete ${name} from your household?\n\nThis action cannot be undone.`)) return;
+        deleteItem('adults', btn.dataset.id);
+      }));
+    document.querySelectorAll('#adultsList .dir-edit-btn').forEach(btn =>
+      btn.addEventListener('click', () => toggleEditForm('adult', btn.dataset.id)));
+    document.querySelectorAll('#adultsList .dir-cancel-btn').forEach(btn =>
+      btn.addEventListener('click', () => toggleEditForm('adult', btn.dataset.id, false)));
+    document.querySelectorAll('#adultsList .dir-save-btn').forEach(btn =>
+      btn.addEventListener('click', () => saveAdult(btn.dataset.id)));
+    // Attach phone mask + email validation to dynamically created edit inputs
+    document.querySelectorAll('#adultsList input[type="tel"]').forEach(el => {
+      FormValidation.maskPhone(el); FormValidation.validatePhoneInput(el);
+    });
+    document.querySelectorAll('#adultsList input[type="email"]').forEach(el => {
+      FormValidation.validateEmailInput(el);
+    });
   }
 
   function renderChildren(list) {
     document.getElementById('childrenList').innerHTML = list.map(c => {
       const bday = c.birth_month ? ` · ${e(c.birth_month)}${c.birth_day ? ' ' + c.birth_day : ''}` : '';
+      const is16 = c.is_16_plus ? 1 : 0;
+      const smsOn = c.sms_opt_in ? 1 : 0;
+      const ageLabel = is16 ? ' · <span class="dir-badge-16plus">16+</span>' : '';
+      const contactDetails = [
+        c.phone ? `📞 ${e(c.phone)}` : '',
+        c.email ? `✉ ${e(c.email)}` : ''
+      ].filter(Boolean).join(' · ');
       return `<div class="dir-list-item">
-        <span>${e(c.first_name)}${bday}</span>
-        <button class="dir-del-btn" data-id="${c.id}" data-type="child" title="Remove">✕</button>
+        <span>${e(c.first_name)}${bday}${ageLabel}${contactDetails ? ` · ${contactDetails}` : ''}${is16 && smsOn ? ' · <span class="dir-badge-sms">📱 SMS</span>' : ''}</span>
+        <div class="dir-item-actions">
+          <button class="dir-edit-btn" data-id="${c.id}" data-type="child" title="Edit">✎</button>
+          <button class="dir-del-btn" data-id="${c.id}" data-type="child" title="Remove">✕</button>
+        </div>
       </div>
-      <div class="dir-pool-phone-row" data-pp-person-type="child" data-pp-person-id="${c.id}" data-pp-person-name="${e(c.first_name)}"></div>`;
+      <div class="dir-edit-form" id="edit-child-${c.id}" style="display:none;">
+        <div class="dir-edit-fields">
+          <div class="dir-edit-field dir-edit-field-full">
+            <label>Is this child 16 years old or older?</label>
+            <div class="dir-radio-group">
+              <label class="dir-radio"><input type="radio" name="child16-${c.id}" value="1" ${is16 ? 'checked' : ''} class="child-16-radio" data-id="${c.id}"> Yes</label>
+              <label class="dir-radio"><input type="radio" name="child16-${c.id}" value="0" ${!is16 ? 'checked' : ''} class="child-16-radio" data-id="${c.id}"> No</label>
+            </div>
+          </div>
+          <div class="dir-child-contact-fields" id="child-contact-${c.id}" style="display:${is16 ? 'flex' : 'none'};">
+            <div class="dir-edit-field">
+              <label>Phone</label>
+              <input type="tel" class="dir-input" id="edit-child-phone-${c.id}" value="${e(c.phone || '')}" placeholder="Phone number">
+            </div>
+            <div class="dir-edit-field">
+              <label>Email</label>
+              <input type="email" class="dir-input" id="edit-child-email-${c.id}" value="${e(c.email || '')}" placeholder="Email address">
+            </div>
+            <div class="dir-edit-field dir-edit-field-full">
+              <label class="dir-toggle dir-toggle-sms">
+                <input type="checkbox" id="edit-child-sms-${c.id}" ${smsOn ? 'checked' : ''}>
+                <span class="dir-toggle-slider"></span>
+                <span class="dir-toggle-label">Enroll in HOA SMS text alerts</span>
+              </label>
+              <p class="dir-field-hint" style="margin-top:4px;">Requires a valid phone number above.</p>
+            </div>
+          </div>
+        </div>
+        <div class="dir-edit-actions">
+          <button class="btn btn-primary dir-save-btn" data-id="${c.id}" data-type="child" type="button">Save</button>
+          <button class="btn btn-outline dir-cancel-btn" data-id="${c.id}" data-type="child" type="button">Cancel</button>
+        </div>
+      </div>
+      ${is16 ? `<div class="dir-pool-phone-row" data-pp-person-type="child" data-pp-person-id="${c.id}" data-pp-person-name="${e(c.first_name)}"></div>` : ''}`;
     }).join('');
     document.querySelectorAll('#childrenList .dir-del-btn').forEach(btn =>
-      btn.addEventListener('click', () => deleteItem('children', btn.dataset.id)));
+      btn.addEventListener('click', () => {
+        const child = (myProfile?.children || []).find(c => String(c.id) === String(btn.dataset.id));
+        const name = child?.first_name || 'this household member';
+        if (!confirm(`Are you sure you want to delete ${name} from your household?\n\nThis action cannot be undone.`)) return;
+        deleteItem('children', btn.dataset.id);
+      }));
+    document.querySelectorAll('#childrenList .dir-edit-btn').forEach(btn =>
+      btn.addEventListener('click', () => toggleEditForm('child', btn.dataset.id)));
+    document.querySelectorAll('#childrenList .dir-cancel-btn').forEach(btn =>
+      btn.addEventListener('click', () => toggleEditForm('child', btn.dataset.id, false)));
+    document.querySelectorAll('#childrenList .dir-save-btn').forEach(btn =>
+      btn.addEventListener('click', () => saveChild(btn.dataset.id)));
+    document.querySelectorAll('#childrenList .child-16-radio').forEach(radio =>
+      radio.addEventListener('change', (ev) => {
+        const id = ev.target.dataset.id;
+        const show = ev.target.value === '1';
+        const contactEl = document.getElementById('child-contact-' + id);
+        if (contactEl) contactEl.style.display = show ? 'flex' : 'none';
+      }));
+    // Attach phone mask + email validation to dynamically created edit inputs
+    document.querySelectorAll('#childrenList input[type="tel"]').forEach(el => {
+      FormValidation.maskPhone(el); FormValidation.validatePhoneInput(el);
+    });
+    document.querySelectorAll('#childrenList input[type="email"]').forEach(el => {
+      FormValidation.validateEmailInput(el);
+    });
   }
 
   function renderPets(list) {
@@ -456,6 +619,59 @@
     ).join('');
     document.querySelectorAll('#petsList .dir-del-btn').forEach(btn =>
       btn.addEventListener('click', () => deleteItem('pets', btn.dataset.id)));
+  }
+
+  function toggleEditForm(type, id, show) {
+    const form = document.getElementById(`edit-${type}-${id}`);
+    if (!form) return;
+    if (typeof show === 'undefined') show = form.style.display === 'none';
+    form.style.display = show ? 'block' : 'none';
+  }
+
+  async function saveAdult(id) {
+    const phone = document.getElementById('edit-adult-phone-' + id)?.value.trim() || '';
+    const email = document.getElementById('edit-adult-email-' + id)?.value.trim() || '';
+    const sms_opt_in = document.getElementById('edit-adult-sms-' + id)?.checked ? 1 : 0;
+    if (sms_opt_in && !phone) { alert('A phone number is required to enroll in SMS alerts.'); return; }
+    if (phone && !FormValidation.isValidPhone(phone)) { alert('Please enter a valid phone number.'); return; }
+    if (email && !FormValidation.isValidEmail(email)) { alert('Please enter a valid email address.'); return; }
+    const r = await fetch('/api/directory/adults/' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, email, sms_opt_in })
+    });
+    const data = await r.json();
+    if (!r.ok || !data.success) { alert(data.error || 'Failed to save.'); return; }
+    const adultBtn = document.querySelector(`#adultsList .dir-save-btn[data-id="${id}"]`);
+    markSaved(adultBtn);
+    setTimeout(async () => {
+      await refreshProfile();
+      await loadSmsPreferences();
+    }, 3000);
+  }
+
+  async function saveChild(id) {
+    const is16Radio = document.querySelector(`input[name="child16-${id}"]:checked`);
+    const is_16_plus = is16Radio ? parseInt(is16Radio.value) : 0;
+    const phone = is_16_plus ? (document.getElementById('edit-child-phone-' + id)?.value.trim() || '') : '';
+    const email = is_16_plus ? (document.getElementById('edit-child-email-' + id)?.value.trim() || '') : '';
+    const sms_opt_in = is_16_plus ? (document.getElementById('edit-child-sms-' + id)?.checked ? 1 : 0) : 0;
+    if (sms_opt_in && !phone) { alert('A phone number is required to enroll in SMS alerts.'); return; }
+    if (phone && !FormValidation.isValidPhone(phone)) { alert('Please enter a valid phone number.'); return; }
+    if (email && !FormValidation.isValidEmail(email)) { alert('Please enter a valid email address.'); return; }
+    const r = await fetch('/api/directory/children/' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_16_plus, phone, email, sms_opt_in })
+    });
+    const data = await r.json();
+    if (!r.ok || !data.success) { alert(data.error || 'Failed to save.'); return; }
+    const childBtn = document.querySelector(`#childrenList .dir-save-btn[data-id="${id}"]`);
+    markSaved(childBtn);
+    setTimeout(async () => {
+      await refreshProfile();
+      await loadSmsPreferences();
+    }, 3000);
   }
 
 
@@ -476,8 +692,19 @@
     const birth_month  = val('childMonth');
     const birth_day    = val('childDay');
     const show_birthday = chk('childShowBday') ? 1 : 0;
-    const [ok] = await apiPost('/api/directory/children', { first_name, birth_month, birth_day, show_birthday });
-    if (ok) { clearInputs('childName', 'childDay'); document.getElementById('childMonth').value = ''; await refreshProfile(); }
+    const is_16_plus   = chk('childIs16Plus') ? 1 : 0;
+    const phone        = is_16_plus ? val('childPhone') : '';
+    const email        = is_16_plus ? val('childEmail') : '';
+    if (phone && !FormValidation.isValidPhone(phone)) return;
+    if (email && !FormValidation.isValidEmail(email)) return;
+    const [ok] = await apiPost('/api/directory/children', { first_name, birth_month, birth_day, show_birthday, is_16_plus, phone, email });
+    if (ok) {
+      clearInputs('childName', 'childDay', 'childPhone', 'childEmail');
+      document.getElementById('childMonth').value = '';
+      document.getElementById('childIs16Plus').checked = false;
+      document.getElementById('addChildContactRow').style.display = 'none';
+      await refreshProfile();
+    }
   }
 
   async function addPet() {
@@ -655,8 +882,6 @@
     document.getElementById('ppmDoneBtn').addEventListener('click', closePoolPhoneModal);
     document.getElementById('ppmRegIosBtn').addEventListener('click', () => submitPoolPhoneRegistration('ios'));
     document.getElementById('ppmRegAndroidBtn').addEventListener('click', () => submitPoolPhoneRegistration('android'));
-    document.getElementById('ppmCopyBtn').addEventListener('click', copyTokenToClipboard);
-    document.getElementById('ppmDownloadBtn').addEventListener('click', downloadQrImage);
   }
 
   async function refreshPoolPhones() {
@@ -707,12 +932,16 @@
     if (phone) {
       const platform = phone.device_platform === 'ios' ? 'iPhone' : 'Android';
       const label = phone.device_label ? ` &mdash; ${e(phone.device_label)}` : '';
+      const walletStatus = phone.wallet_pass_status === 'sent'
+        ? `<span class="dir-pp-status-active">✓ Wallet pass sent</span>`
+        : `<span class="dir-pp-status-pending">⏳ Wallet pass pending — admin will email it to you</span>`;
       const guestStatus = phone.is_active_guest
         ? `<span class="dir-pp-status-active">✓ Active pool guest</span>`
         : `<span class="dir-pp-status-pending">⏳ Awaiting admin to activate as pool guest</span>`;
       info = `<div class="dir-pp-info">
         <span class="dir-pp-platform-badge">${e(platform)}</span>
         <strong>${e(personName)}</strong>${label}<br>
+        ${walletStatus}<br>
         ${guestStatus}
       </div>`;
       actionsHtml = `<div class="dir-pp-actions">
@@ -785,42 +1014,14 @@
       alert(data.error || 'Registration failed.');
       return;
     }
-    showEnrollmentResult(data.enrollment_token, data.qr_payload);
+    showEnrollmentResult(platform);
     await refreshPoolPhones();
   }
 
-  function showEnrollmentResult(token, qrPayload) {
+  function showEnrollmentResult(platform) {
     document.getElementById('ppmStepChoose').style.display = 'none';
     document.getElementById('ppmStepShow').style.display = '';
-    document.getElementById('ppmTokenText').textContent = token;
-    const canvas = document.getElementById('ppmQrCanvas');
-    if (window.QRCode && canvas) {
-      window.QRCode.toCanvas(canvas, qrPayload, { width: 240, margin: 1 }, function (err) {
-        if (err) console.warn('QR render failed', err);
-      });
-    }
-  }
-
-  function copyTokenToClipboard() {
-    const txt = document.getElementById('ppmTokenText').textContent;
-    if (!txt) return;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(txt).then(() => {
-        const btn = document.getElementById('ppmCopyBtn');
-        const orig = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(() => { btn.textContent = orig; }, 1500);
-      });
-    }
-  }
-
-  function downloadQrImage() {
-    const canvas = document.getElementById('ppmQrCanvas');
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = 'glenridge-pool-pass.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    document.getElementById('ppmPlatformLabel').textContent = platform === 'ios' ? 'iPhone' : 'Android phone';
   }
 
   async function revokePoolPhone(id) {
@@ -833,7 +1034,16 @@
   // ── Shared Helpers ───────────────────────────────────────────
   async function refreshProfile() {
     myProfile = await (await fetch('/api/directory/me')).json();
-    populateEditor(myProfile);
+    // Only refresh sub-lists (family, social, photos, pool phones) — do NOT
+    // overwrite Household Info fields, which the user may have edited but not
+    // yet saved.
+    if (!myProfile) return;
+    renderAdults(myProfile.adults     || []);
+    renderChildren(myProfile.children || []);
+    renderPets(myProfile.pets         || []);
+    renderSocial(myProfile.social     || []);
+    renderPhotos(myProfile.photos     || []);
+    refreshPoolPhones();
   }
 
   // ── API Helpers ───────────────────────────────────────────────
@@ -872,6 +1082,26 @@
     el.className    = 'dir-save-msg' + (isError ? ' dir-save-msg-error' : ' dir-save-msg-ok');
     clearTimeout(el._t);
     el._t = setTimeout(() => { el.textContent = ''; el.className = 'dir-save-msg'; }, 4000);
+  }
+
+  function markSaved(btn) {
+    if (!btn) return;
+    const origText = btn.textContent;
+    const origBg = btn.style.background;
+    const origColor = btn.style.color;
+    btn.textContent = '✓ Saved';
+    btn.classList.add('btn-saved');
+    btn.style.background = '#6c757d';
+    btn.style.color = '#fff';
+    btn.disabled = true;
+    clearTimeout(btn._savedT);
+    btn._savedT = setTimeout(() => {
+      btn.textContent = origText;
+      btn.classList.remove('btn-saved');
+      btn.style.background = origBg;
+      btn.style.color = origColor;
+      btn.disabled = false;
+    }, 3000);
   }
 
   function showNotif(msg, isError) {

@@ -54,12 +54,14 @@
 .dir-actions .btn { display: flex; align-items: center; gap: .4rem; font-size: .9rem; padding: .55rem 1.1rem; }
 
 /* Override global btn-outline (white/white) so it's visible on the light toolbar background */
-.dir-actions .btn-outline {
+.dir-actions .btn-outline,
+.dir-editor .btn-outline {
   color: var(--primary, #2c5f3a);
   border-color: var(--primary, #2c5f3a);
   background: transparent;
 }
-.dir-actions .btn-outline:hover {
+.dir-actions .btn-outline:hover,
+.dir-editor .btn-outline:hover {
   background: var(--primary, #2c5f3a);
   color: #fff;
   transform: translateY(-2px);
@@ -234,7 +236,7 @@
   font-family: var(--font-body);
   font-size: .88rem;
   font-weight: 500;
-  color: #888;
+  color: #555;
   border-bottom: 3px solid transparent;
   margin-bottom: -2px;
   transition: color .15s, border-color .15s;
@@ -256,7 +258,7 @@
   display: flex; gap: .5rem; align-items: center;
 }
 
-.dir-field-hint { font-size: .84rem; color: #888; margin: 0 0 .6rem; }
+.dir-field-hint { font-size: .84rem; color: #555; margin: 0 0 .6rem; }
 
 .dir-badge-required {
   font-family: var(--font-body);
@@ -334,7 +336,7 @@
 }
 .dir-toggle input:checked + .dir-toggle-slider { background: var(--primary); }
 .dir-toggle input:checked + .dir-toggle-slider::after { transform: translateX(16px); }
-.dir-toggle-label { font-size: .82rem; color: #666; }
+.dir-toggle-label { font-size: .82rem; color: #444; }
 
 .dir-toggle-large .dir-toggle-slider { width: 48px; height: 28px; border-radius: 14px; }
 .dir-toggle-large .dir-toggle-slider::after { width: 22px; height: 22px; }
@@ -359,11 +361,166 @@
 }
 .dir-del-btn {
   background: none; border: none; cursor: pointer;
-  color: #bbb; font-size: .85rem; padding: .15rem .4rem;
+  color: #888; font-size: .85rem; padding: .15rem .4rem;
   border-radius: .3rem;
   transition: color .12s, background .12s;
 }
 .dir-del-btn:hover { color: #c0392b; background: #ffeaea; }
+
+/* Item action buttons (edit + delete) */
+.dir-item-actions {
+  display: flex;
+  gap: .3rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+.dir-edit-btn {
+  background: none; border: none; cursor: pointer;
+  color: #888; font-size: .85rem; padding: .15rem .4rem;
+  border-radius: .3rem;
+  transition: color .12s, background .12s;
+}
+.dir-edit-btn:hover { color: #2d6a4f; background: #e8f5e9; }
+
+/* Inline edit form */
+.dir-edit-form {
+  margin-bottom: .5rem;
+  padding: .75rem;
+  background: #f7f9fb;
+  border: 1px solid #e0e4ea;
+  border-radius: .5rem;
+}
+.dir-edit-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+}
+.dir-edit-field {
+  flex: 1 1 180px;
+}
+.dir-edit-field label {
+  display: block;
+  font-size: .78rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: .2rem;
+}
+.dir-edit-field-full {
+  flex: 1 1 100%;
+}
+.dir-edit-actions {
+  display: flex;
+  gap: .5rem;
+  margin-top: .6rem;
+}
+.dir-edit-actions .btn {
+  padding: .35rem .9rem;
+  font-size: .82rem;
+}
+
+/* Radio group for 16+ */
+.dir-radio-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+.dir-radio {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .88rem;
+  cursor: pointer;
+}
+.dir-radio input[type="radio"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Child contact fields (shown when 16+) */
+.dir-child-contact-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  width: 100%;
+}
+
+/* 16+ badge */
+.dir-badge-16plus {
+  display: inline-block;
+  background: #e3f2fd;
+  color: #0d47a1;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  vertical-align: middle;
+}
+.dir-badge-sms {
+  display: inline-block;
+  background: #e8f5e9;
+  color: #1b5e20;
+  font-size: .72rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  vertical-align: middle;
+}
+.dir-edit-field label.dir-toggle-sms {
+  display: inline-flex;
+  align-items: center;
+  gap: .75rem;
+  cursor: pointer;
+  padding: .5rem .75rem;
+  background: #f0f4f1;
+  border: 1.5px solid #d0d9d2;
+  border-radius: .5rem;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: border-color .15s, background .15s;
+  font-size: inherit;
+  font-weight: inherit;
+  margin-bottom: 0;
+}
+.dir-edit-field label.dir-toggle-sms:hover {
+  border-color: var(--primary, #2d6a4f);
+  background: #e8ede9;
+}
+.dir-toggle-sms .dir-toggle-slider {
+  flex-shrink: 0;
+}
+.dir-toggle-sms .dir-toggle-label {
+  font-size: .88rem;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+}
+.dir-sms-optout-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-top: .5rem;
+  flex-wrap: wrap;
+}
+.dir-sms-inline-status {
+  font-size: .82rem;
+  color: #555;
+}
+.dir-sms-inline-active {
+  color: #276749;
+  font-weight: 600;
+}
+.dir-sms-household {
+  margin-top: .5rem;
+  padding: .5rem .75rem;
+  background: #f5f7f5;
+  border-radius: 8px;
+}
+.dir-sms-hh-item {
+  font-size: .88rem;
+  padding: .25rem 0;
+  color: #333;
+}
 
 /* Add-row layouts */
 .dir-add-row {
@@ -452,13 +609,13 @@
   align-items: flex-start;
   cursor: pointer;
   font-size: .88rem;
-  color: #444;
+  color: #333;
   line-height: 1.5;
 }
 .dir-consent-check input { margin-top: .2rem; flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--primary); }
 
 .dir-publish-actions { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
-.dir-publish-status { font-size: .88rem; color: #888; }
+.dir-publish-status { font-size: .88rem; color: #555; }
 .dir-status-live { color: #276749; font-weight: 600; }
 .dir-sms-pref-row { margin-top: .5rem; }
 .dir-sms-pref-actions { margin-top: .8rem; }
@@ -474,6 +631,14 @@
 .dir-save-msg { font-size: .85rem; margin-left: .75rem; }
 .dir-save-msg-ok    { color: #276749; }
 .dir-save-msg-error { color: #c0392b; }
+
+/* ── Saved Button Feedback ─────────────────────────────────── */
+.btn-saved {
+  background: #6c757d !important;
+  color: #fff !important;
+  pointer-events: none;
+  transition: background .3s ease;
+}
 
 /* ── Toast Notifications ───────────────────────────────────── */
 .dir-notif {

@@ -195,7 +195,10 @@ async function initDb() {
       birth_month INTEGER,
       birth_day INTEGER,
       show_birthday INTEGER DEFAULT 0,
-      is_visible INTEGER DEFAULT 1
+      is_visible INTEGER DEFAULT 1,
+      is_16_plus INTEGER DEFAULT 0,
+      phone TEXT,
+      email TEXT
     )
   `);
   db.run(`
@@ -423,15 +426,42 @@ async function initDb() {
         db.run(`ALTER TABLE dir_adults ADD COLUMN email TEXT`);
         console.log('  ✓ Added email column to dir_adults');
       }
+      if (!adultInfo.sql.includes('sms_opt_in')) {
+        db.run(`ALTER TABLE dir_adults ADD COLUMN sms_opt_in INTEGER DEFAULT 0`);
+        console.log('  ✓ Added sms_opt_in column to dir_adults');
+      }
+      saveDb();
+    }
+  } catch (e) { /* columns may already exist */ }
+
+  // Migration: add is_16_plus, phone, email columns to dir_children if missing
+  try {
+    const childInfo = dbGet("SELECT sql FROM sqlite_master WHERE type='table' AND name='dir_children'");
+    if (childInfo && childInfo.sql) {
+      if (!childInfo.sql.includes('is_16_plus')) {
+        db.run(`ALTER TABLE dir_children ADD COLUMN is_16_plus INTEGER DEFAULT 0`);
+        console.log('  ✓ Added is_16_plus column to dir_children');
+      }
+      if (!childInfo.sql.includes('phone')) {
+        db.run(`ALTER TABLE dir_children ADD COLUMN phone TEXT`);
+        console.log('  ✓ Added phone column to dir_children');
+      }
+      if (!childInfo.sql.includes('email')) {
+        db.run(`ALTER TABLE dir_children ADD COLUMN email TEXT`);
+        console.log('  ✓ Added email column to dir_children');
+      }
+      if (!childInfo.sql.includes('sms_opt_in')) {
+        db.run(`ALTER TABLE dir_children ADD COLUMN sms_opt_in INTEGER DEFAULT 0`);
+        console.log('  ✓ Added sms_opt_in column to dir_children');
+      }
       saveDb();
     }
   } catch (e) { /* columns may already exist */ }
 
   // ── Pool phone-access credentials (per household person) ─────────
   // A member registers a phone (iPhone/Android) for themselves OR for a
-  // family member (adult or child). The phone presents a QR token at the
-  // pool gate. Access is granted only when an admin has the matching
-  // pool_member set to status='active'.
+  // family member (adult or child). The admin is notified of the phone type
+  // and sends the appropriate wallet pass (Apple/Google) via email.
   db.run(`
     CREATE TABLE IF NOT EXISTS dir_pool_phones (
       id TEXT PRIMARY KEY,
@@ -441,14 +471,25 @@ async function initDb() {
       person_name TEXT NOT NULL,
       device_platform TEXT NOT NULL CHECK(device_platform IN ('ios','android')),
       device_label TEXT,
-      credential_token_hash TEXT NOT NULL,
+      credential_token_hash TEXT,
       pool_member_id TEXT,
+      wallet_pass_status TEXT DEFAULT 'pending' CHECK(wallet_pass_status IN ('pending','sent')),
       status TEXT DEFAULT 'active' CHECK(status IN ('active','revoked')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       revoked_at DATETIME
     )
   `);
+
+  // Migration: add wallet_pass_status column to dir_pool_phones if missing
+  try {
+    const ppInfo = dbGet("SELECT sql FROM sqlite_master WHERE type='table' AND name='dir_pool_phones'");
+    if (ppInfo && ppInfo.sql && !ppInfo.sql.includes('wallet_pass_status')) {
+      db.run(`ALTER TABLE dir_pool_phones ADD COLUMN wallet_pass_status TEXT DEFAULT 'pending'`);
+      saveDb();
+      console.log('  ✓ Added wallet_pass_status column to dir_pool_phones');
+    }
+  } catch (e) { /* column may already exist */ }
 
   // Pool NFC credentials (Apple Wallet passes for iPhones)
   db.run(`
@@ -1185,18 +1226,31 @@ app.get('/api/me', (req, res) => {
 
 // ── SMS Preference Routes (member-facing) ──────────────────
 app.get('/api/sms/preferences', requireAuth, (req, res) => {
-  const user = dbGet(`SELECT id, status, phone, sms_opt_out FROM users WHERE id = ?`, [req.session.userId]);
+  const userId = req.session.userId;
+  const user = dbGet(`SELECT id, status, phone, sms_opt_out FROM users WHERE id = ?`, [userId]);
   if (!user) return res.status(404).json({ error: 'User not found.' });
 
   const hasPhone = !!normalizeUSPhone(user.phone);
   const optedOut = !!user.sms_opt_out;
   const canReceiveSms = user.status === 'approved' && hasPhone && !optedOut;
 
+  // Household members enrolled in SMS
+  const adults = dbAll('SELECT id, name, phone, sms_opt_in FROM dir_adults WHERE user_id = ?', [userId]);
+  const children = dbAll('SELECT id, first_name, phone, is_16_plus, sms_opt_in FROM dir_children WHERE user_id = ?', [userId]);
+  const householdSms = [];
+  adults.filter(a => a.sms_opt_in && normalizeUSPhone(a.phone)).forEach(a => {
+    householdSms.push({ id: a.id, type: 'adult', name: a.name, phoneMasked: maskPhone(a.phone) });
+  });
+  children.filter(c => c.is_16_plus && c.sms_opt_in && normalizeUSPhone(c.phone)).forEach(c => {
+    householdSms.push({ id: c.id, type: 'child', name: c.first_name, phoneMasked: maskPhone(c.phone) });
+  });
+
   res.json({
     hasPhone,
     phoneMasked: hasPhone ? maskPhone(user.phone) : null,
     optedOut,
-    canReceiveSms
+    canReceiveSms,
+    householdSms
   });
 });
 
@@ -1438,6 +1492,10 @@ app.post('/api/directory/profile', requireAuth, (req, res) => {
        anniversary||null, show_anniversary?1:0, interests||null, show_interests?1:0,
        notes||null, show_notes?1:0, do_not_list?1:0, is_published?1:0, consent_given?1:0]);
   }
+  // Sync profile phone to users.phone so it becomes the default SMS contact number
+  if (phone !== undefined) {
+    dbRun(`UPDATE users SET phone = ? WHERE id = ?`, [phone?.trim() || null, uid]);
+  }
   dirAudit(uid, 'profile_updated', null);
   res.json({ success: true, profile: buildProfile(uid) });
 });
@@ -1448,10 +1506,22 @@ app.post('/api/directory/adults', requireAuth, (req, res) => {
   if (!name) return res.status(400).json({ error: 'Name is required.' });
   if (email && !isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
   if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
+  const sms_opt_in_val = req.body.sms_opt_in ? 1 : 0;
   const id = uuidv4();
-  dbRun('INSERT INTO dir_adults (id,user_id,name,birthday,show_birthday,phone,email,is_visible) VALUES (?,?,?,?,?,?,?,?)',
-    [id, req.session.userId, name.trim(), birthday||null, show_birthday?1:0, phone?.trim()||null, email?.trim()||null, is_visible!==false?1:0]);
+  dbRun('INSERT INTO dir_adults (id,user_id,name,birthday,show_birthday,phone,email,is_visible,sms_opt_in) VALUES (?,?,?,?,?,?,?,?,?)',
+    [id, req.session.userId, name.trim(), birthday||null, show_birthday?1:0, phone?.trim()||null, email?.trim()||null, is_visible!==false?1:0, sms_opt_in_val]);
   res.json({ success: true, adult: dbGet('SELECT * FROM dir_adults WHERE id=?', [id]) });
+});
+app.put('/api/directory/adults/:id', requireAuth, (req, res) => {
+  const { phone, email } = req.body;
+  if (email && !isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
+  if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
+  const row = dbGet('SELECT * FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  if (!row) return res.status(404).json({ error: 'Adult not found.' });
+  const sms_opt_in_val = req.body.sms_opt_in !== undefined ? (req.body.sms_opt_in ? 1 : 0) : (row.sms_opt_in || 0);
+  dbRun('UPDATE dir_adults SET phone=?, email=?, sms_opt_in=? WHERE id=? AND user_id=?',
+    [phone?.trim()||null, email?.trim()||null, sms_opt_in_val, req.params.id, req.session.userId]);
+  res.json({ success: true, adult: dbGet('SELECT * FROM dir_adults WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/adults/:id', requireAuth, (req, res) => {
   dbRun('DELETE FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
@@ -1460,12 +1530,26 @@ app.delete('/api/directory/adults/:id', requireAuth, (req, res) => {
 
 // POST /api/directory/children
 app.post('/api/directory/children', requireAuth, (req, res) => {
-  const { first_name, birth_month, birth_day, show_birthday, is_visible } = req.body;
+  const { first_name, birth_month, birth_day, show_birthday, is_visible, is_16_plus, phone, email } = req.body;
   if (!first_name) return res.status(400).json({ error: 'First name is required.' });
+  if (email && !isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
+  if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
+  const sms_opt_in_val = req.body.sms_opt_in ? 1 : 0;
   const id = uuidv4();
-  dbRun('INSERT INTO dir_children (id,user_id,first_name,birth_month,birth_day,show_birthday,is_visible) VALUES (?,?,?,?,?,?,?)',
-    [id, req.session.userId, first_name.trim(), birth_month||null, birth_day||null, show_birthday?1:0, is_visible!==false?1:0]);
+  dbRun('INSERT INTO dir_children (id,user_id,first_name,birth_month,birth_day,show_birthday,is_visible,is_16_plus,phone,email,sms_opt_in) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+    [id, req.session.userId, first_name.trim(), birth_month||null, birth_day||null, show_birthday?1:0, is_visible!==false?1:0, is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val]);
   res.json({ success: true, child: dbGet('SELECT * FROM dir_children WHERE id=?', [id]) });
+});
+app.put('/api/directory/children/:id', requireAuth, (req, res) => {
+  const { is_16_plus, phone, email } = req.body;
+  if (email && !isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
+  if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
+  const row = dbGet('SELECT * FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  if (!row) return res.status(404).json({ error: 'Child not found.' });
+  const sms_opt_in_val = req.body.sms_opt_in !== undefined ? (req.body.sms_opt_in ? 1 : 0) : (row.sms_opt_in || 0);
+  dbRun('UPDATE dir_children SET is_16_plus=?, phone=?, email=?, sms_opt_in=? WHERE id=? AND user_id=?',
+    [is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val, req.params.id, req.session.userId]);
+  res.json({ success: true, child: dbGet('SELECT * FROM dir_children WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/children/:id', requireAuth, (req, res) => {
   dbRun('DELETE FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
@@ -1553,19 +1637,8 @@ app.get('/api/directory/print', requireAuth, (req, res) => {
 // ── Pool Phone Access (per-person phone credentials) ────────────
 //
 // A household member may register one phone (iPhone or Android) for
-// themselves and for each adult / child on their profile. The phone is
-// the access method at the pool gate. Access is only granted when an
-// admin has added the matching person to pool_members with status=active.
-
-function hashPoolPhoneToken(token) {
-  return crypto.createHash('sha256').update(String(token || '').trim()).digest('hex');
-}
-
-function generatePoolPhoneToken() {
-  // 22-char URL-safe token (~128 bits of entropy)
-  return crypto.randomBytes(16).toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+// themselves and for each adult / child on their profile. The admin is
+// notified of the phone type and sends the appropriate wallet pass via email.
 
 // Map a (user_id, person_type, person_id) to the corresponding pool_members
 // row. Returns the pool_member object or null when admin has not enrolled
@@ -1618,6 +1691,7 @@ function decoratePhone(row) {
     person_name: row.person_name,
     device_platform: row.device_platform,
     device_label: row.device_label,
+    wallet_pass_status: row.wallet_pass_status || 'pending',
     status: row.status,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -1641,9 +1715,8 @@ app.get('/api/directory/me/pool-phones', requireAuth, (req, res) => {
 });
 
 // POST /api/directory/me/pool-phones — register or replace the phone for
-// a specific household person. Only one active phone per person. Returns
-// a one-time enrollment_token — the user must save it to their phone now;
-// only the SHA-256 hash is retained on the server.
+// a specific household person. Records the phone type (iPhone/Android)
+// so the admin knows which wallet pass to send via email.
 app.post('/api/directory/me/pool-phones', requireAuth, (req, res) => {
   try {
     const uid = req.session.userId;
@@ -1670,18 +1743,16 @@ app.post('/api/directory/me/pool-phones', requireAuth, (req, res) => {
        WHERE user_id=? AND person_type=? AND ((person_id IS NULL AND ? IS NULL) OR person_id=?) AND status='active'`,
       [uid, person_type, person_type === 'self' ? null : person_id, person_type === 'self' ? null : person_id]);
 
-    const token = generatePoolPhoneToken();
-    const hash  = hashPoolPhoneToken(token);
-    const id    = uuidv4();
-    const pm    = findPoolMemberForPerson(uid, person_type, person_type === 'self' ? null : person_id);
+    const id = uuidv4();
+    const pm = findPoolMemberForPerson(uid, person_type, person_type === 'self' ? null : person_id);
 
     dbRun(
       `INSERT INTO dir_pool_phones
         (id, user_id, person_type, person_id, person_name, device_platform, device_label,
-         credential_token_hash, pool_member_id, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+         credential_token_hash, pool_member_id, wallet_pass_status, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [id, uid, person_type, person_type === 'self' ? null : person_id, personName,
-       device_platform, (device_label || '').trim() || null, hash, pm ? pm.id : null]);
+       device_platform, (device_label || '').trim() || null, '', pm ? pm.id : null]);
 
     dirAudit(uid, 'pool_phone_registered',
       `${personName} (${person_type}) — ${device_platform}${device_label ? ' / ' + device_label : ''}`);
@@ -1689,9 +1760,7 @@ app.post('/api/directory/me/pool-phones', requireAuth, (req, res) => {
     const row = dbGet('SELECT * FROM dir_pool_phones WHERE id=?', [id]);
     res.json({
       success: true,
-      phone: decoratePhone(row),
-      enrollment_token: token,            // shown ONCE — never returned again
-      qr_payload: `GLENRIDGE-POOL:${token}`
+      phone: decoratePhone(row)
     });
   } catch (err) {
     console.error('POST /api/directory/me/pool-phones error:', err.message);
@@ -1793,9 +1862,23 @@ app.get('/api/admin/sms/recipients', requireAdmin, (req, res) => {
       phoneMasked: maskPhone(u.phone)
     }));
 
+  // Include opted-in household members (adults & 16+ children)
+  const householdRecipients = [];
+  const approvedUserIds = users.filter(u => !u.sms_opt_out).map(u => u.id);
+  for (const uid of approvedUserIds) {
+    const adults = dbAll('SELECT name, phone, sms_opt_in FROM dir_adults WHERE user_id = ?', [uid]);
+    adults.filter(a => a.sms_opt_in && normalizeUSPhone(a.phone)).forEach(a => {
+      householdRecipients.push({ id: uid, name: a.name, phoneMasked: maskPhone(a.phone) });
+    });
+    const children = dbAll('SELECT first_name, phone, is_16_plus, sms_opt_in FROM dir_children WHERE user_id = ?', [uid]);
+    children.filter(c => c.is_16_plus && c.sms_opt_in && normalizeUSPhone(c.phone)).forEach(c => {
+      householdRecipients.push({ id: uid, name: c.first_name, phoneMasked: maskPhone(c.phone) });
+    });
+  }
+
   res.json({
-    eligibleCount: recipients.length,
-    recipients
+    eligibleCount: recipients.length + householdRecipients.length,
+    recipients: [...recipients, ...householdRecipients]
   });
 });
 
@@ -1813,21 +1896,43 @@ app.post('/api/admin/sms/send', requireAdmin, async (req, res) => {
     `);
 
     const eligible = users.filter(u => !u.sms_opt_out && normalizeUSPhone(u.phone));
-    if (!eligible.length) {
+
+    // Collect opted-in household member phones
+    const householdPhones = [];
+    const approvedUserIds = users.filter(u => !u.sms_opt_out).map(u => u.id);
+    for (const uid of approvedUserIds) {
+      const unsub = users.find(u => u.id === uid);
+      const unsubToken = unsub ? unsub.sms_unsubscribe_token : '';
+      const adults = dbAll('SELECT phone, sms_opt_in FROM dir_adults WHERE user_id = ?', [uid]);
+      adults.filter(a => a.sms_opt_in && normalizeUSPhone(a.phone)).forEach(a => {
+        householdPhones.push({ phone: a.phone, sms_unsubscribe_token: unsubToken });
+      });
+      const children = dbAll('SELECT phone, is_16_plus, sms_opt_in FROM dir_children WHERE user_id = ?', [uid]);
+      children.filter(c => c.is_16_plus && c.sms_opt_in && normalizeUSPhone(c.phone)).forEach(c => {
+        householdPhones.push({ phone: c.phone, sms_unsubscribe_token: unsubToken });
+      });
+    }
+
+    const allRecipients = [
+      ...eligible.map(u => ({ phone: u.phone, sms_unsubscribe_token: u.sms_unsubscribe_token })),
+      ...householdPhones
+    ];
+
+    if (!allRecipients.length) {
       return res.status(400).json({ error: 'No eligible recipients with valid phone numbers.' });
     }
 
     let sent = 0;
     let failed = 0;
-    for (const u of eligible) {
-      const unsubUrl = `${siteUrl()}/unsubscribe.html?channel=sms&token=${encodeURIComponent(u.sms_unsubscribe_token || '')}`;
+    for (const r of allRecipients) {
+      const unsubUrl = `${siteUrl()}/unsubscribe.html?channel=sms&token=${encodeURIComponent(r.sms_unsubscribe_token || '')}`;
       const finalMessage = `${message}\n\nOpt out: ${unsubUrl}`;
       try {
-        await sendSms(u.phone, finalMessage);
+        await sendSms(r.phone, finalMessage);
         sent++;
       } catch (err) {
         failed++;
-        console.warn(`SMS send failed for ${u.first_name} ${u.last_name}:`, err.message);
+        console.warn(`SMS send failed for ${r.phone}:`, err.message);
       }
     }
 
@@ -1835,7 +1940,7 @@ app.post('/api/admin/sms/send', requireAdmin, async (req, res) => {
       success: true,
       sent,
       failed,
-      totalEligible: eligible.length,
+      totalEligible: allRecipients.length,
       note: (twilioClient && twilioFromNumber) ? null : 'Twilio is not configured. Messages were logged to the server console.'
     });
   } catch (err) {
@@ -2359,6 +2464,50 @@ app.delete('/api/admin/pool/members/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// ── Wallet Pass Requests ────────────────────────────
+
+// GET /api/admin/pool/wallet-requests — list all active phone registrations
+// with their wallet pass status so admin can see who needs a pass emailed.
+app.get('/api/admin/pool/wallet-requests', requireAdmin, (req, res) => {
+  try {
+    const rows = dbAll(
+      `SELECT p.*, u.email AS user_email
+       FROM dir_pool_phones p
+       LEFT JOIN users u ON u.id = p.user_id
+       WHERE p.status = 'active'
+       ORDER BY p.wallet_pass_status ASC, p.created_at DESC`);
+    res.json({ requests: rows.map(r => ({
+      id: r.id,
+      person_name: r.person_name,
+      person_type: r.person_type,
+      device_platform: r.device_platform,
+      device_label: r.device_label,
+      wallet_pass_status: r.wallet_pass_status || 'pending',
+      user_email: r.user_email,
+      created_at: r.created_at
+    }))});
+  } catch (err) {
+    console.error('GET /api/admin/pool/wallet-requests error:', err.message);
+    res.status(500).json({ error: 'Failed to load wallet requests.' });
+  }
+});
+
+// POST /api/admin/pool/wallet-requests/:id/mark-sent — mark a wallet pass
+// request as sent (admin has emailed the pass to the member).
+app.post('/api/admin/pool/wallet-requests/:id/mark-sent', requireAdmin, (req, res) => {
+  try {
+    const row = dbGet('SELECT * FROM dir_pool_phones WHERE id=?', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Phone registration not found.' });
+    dbRun(
+      `UPDATE dir_pool_phones SET wallet_pass_status='sent', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/admin/pool/wallet-requests mark-sent error:', err.message);
+    res.status(500).json({ error: 'Failed to update wallet request.' });
+  }
+});
+
 // ── Apple Wallet Pass Generation ────────────────────
 
 // Generate Apple Wallet pass (.pkpass) for a pool member
@@ -2866,6 +3015,7 @@ app.get('/api/gate/sync/pull', requireGateKey, (req, res) => {
   for (const p of phoneRows) {
     const pm = findPoolMemberForPerson(p.user_id, p.person_type, p.person_id);
     if (!pm) continue; // admin has not made this person an active pool guest
+    if (!p.credential_token_hash) continue; // no QR credential — wallet pass handled separately
     credentials.push({
       id: p.id,
       pool_member_id: pm.id,

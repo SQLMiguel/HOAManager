@@ -151,6 +151,22 @@
     .pool-day-btn.selected { background: var(--primary); color: white; border-color: var(--primary); }
     .pool-access-result { margin-top: 16px; }
 
+    /* Wallet pass request styles */
+    .pool-wallet-desc { color: var(--text-light); font-size: 0.88rem; margin-bottom: 16px; }
+    .pool-wallet-loading, .pool-wallet-empty, .pool-wallet-error { color: var(--text-light); font-size: 0.85rem; }
+    .pool-wallet-error { color: #c0392b; }
+    .pool-wallet-heading { font-size: 0.9rem; margin: 16px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #e8edf2; }
+    .pool-wallet-heading-sent { color: var(--text-light); }
+    .pool-wallet-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e8edf2; border-radius: 8px; background: #fff; margin-bottom: 8px; flex-wrap: wrap; }
+    .pool-wallet-pending { border-left: 4px solid #f0ad4e; }
+    .pool-wallet-sent { border-left: 4px solid #2d6a4f; opacity: 0.75; }
+    .pool-wallet-row-info { flex: 1; min-width: 200px; }
+    .pool-wallet-row-info strong { font-size: 0.9rem; }
+    .pool-wallet-detail { color: var(--text-light); font-size: 0.82rem; margin-top: 2px; }
+    .pool-wallet-date { color: var(--text-light); font-size: 0.78rem; }
+    .pool-wallet-row-actions { display: flex; gap: 8px; align-items: center; }
+    .pool-wallet-sent-badge { color: #2d6a4f; font-weight: 600; font-size: 0.82rem; }
+
     @media (max-width: 768px) {
       .pool-table { font-size: 0.82rem; }
       .pool-table th, .pool-table td { padding: 8px 10px; }
@@ -316,6 +332,7 @@
 
         <div class="pool-sub-tabs">
           <button class="pool-sub-tab active" data-pool-panel="poolMembers">Pool Members</button>
+          <button class="pool-sub-tab" data-pool-panel="poolWalletRequests">Wallet Pass Requests</button>
           <button class="pool-sub-tab" data-pool-panel="poolSchedules">Schedules</button>
           <button class="pool-sub-tab" data-pool-panel="poolEntryTypes">Entry Types</button>
           <button class="pool-sub-tab" data-pool-panel="poolAccessCheck">Access Check</button>
@@ -339,6 +356,15 @@
               </div>
             </div>
             <div class="pool-household-list" id="poolHouseholdList"></div>
+          </div>
+        </div>
+
+        <!-- ── Wallet Pass Requests Panel ── -->
+        <div class="pool-panel" id="poolWalletRequests">
+          <h4>📱 Member Wallet Pass Requests</h4>
+          <p class="pool-wallet-desc">Members register their phone type here. Send the appropriate wallet pass via email, then mark it as sent.</p>
+          <div id="walletRequestsList">
+            <p class="pool-wallet-loading">Loading requests...</p>
           </div>
         </div>
 
@@ -937,9 +963,87 @@
         renderPoolMembers();
         renderPoolSchedules();
         renderPoolEntryTypes();
+        loadWalletRequests();
       } catch (e) {
         console.error('Failed to load pool data:', e);
       }
+    }
+
+    // ── Wallet Pass Requests ──
+    async function loadWalletRequests() {
+      const container = document.getElementById('walletRequestsList');
+      if (!container) return;
+      try {
+        const res = await fetch('/api/admin/pool/wallet-requests');
+        const data = await res.json();
+        if (!data.requests || data.requests.length === 0) {
+          container.innerHTML = '<p class="pool-wallet-empty">No phone registrations yet.</p>';
+          return;
+        }
+        const pending = data.requests.filter(r => r.wallet_pass_status === 'pending');
+        const sent = data.requests.filter(r => r.wallet_pass_status === 'sent');
+
+        let html = '';
+        if (pending.length > 0) {
+          html += '<h5 class="pool-wallet-heading">⏳ Pending — Need Wallet Pass Emailed (' + pending.length + ')</h5>';
+          html += pending.map(r => renderWalletRequestRow(r)).join('');
+        }
+        if (sent.length > 0) {
+          html += '<h5 class="pool-wallet-heading pool-wallet-heading-sent">✓ Sent (' + sent.length + ')</h5>';
+          html += sent.map(r => renderWalletRequestRow(r)).join('');
+        }
+        container.innerHTML = html;
+
+        container.querySelectorAll('.pool-wallet-mark-sent-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Mark this wallet pass as sent?')) return;
+            const id = btn.dataset.requestId;
+            const res2 = await fetch('/api/admin/pool/wallet-requests/' + encodeURIComponent(id) + '/mark-sent', { method: 'POST' });
+            const result = await res2.json();
+            if (result.success) {
+              showAdminNotification('Wallet pass marked as sent.', 'success');
+              loadWalletRequests();
+            } else {
+              showAdminNotification(result.error || 'Failed to update.', 'error');
+            }
+          });
+        });
+      } catch (e) {
+        container.innerHTML = '<p class="pool-wallet-error">Failed to load wallet requests.</p>';
+        console.error('Wallet requests error:', e);
+      }
+    }
+
+    function renderWalletRequestRow(r) {
+      const platform = r.device_platform === 'ios' ? '📱 iPhone' : '🤖 Android';
+      const passType = r.device_platform === 'ios' ? 'Apple Wallet' : 'Google Wallet';
+      const label = r.device_label ? ' — ' + r.device_label : '';
+      const date = new Date(r.created_at).toLocaleDateString();
+      const isPending = r.wallet_pass_status === 'pending';
+      const email = r.user_email || '';
+      const subject = encodeURIComponent('Your Glenridge Pool Wallet Pass — ' + passType);
+      const body = encodeURIComponent(
+        'Hi ' + r.person_name + ',\n\n' +
+        'Attached is your ' + passType + ' pass for the Glenridge community pool gate.\n\n' +
+        'Please open the attachment on your ' + (r.device_platform === 'ios' ? 'iPhone' : 'Android phone') + ' to add it to your wallet.\n\n' +
+        'Thank you,\nGlenridge HOA'
+      );
+      const mailto = email ? ('mailto:' + encodeURIComponent(email) + '?subject=' + subject + '&body=' + body) : '';
+      const emailBtn = (isPending && email)
+        ? '<a href="' + mailto + '" class="btn btn-outline pool-wallet-email-btn" data-request-id="' + r.id + '" style="margin-right:6px;">✉ Email Pass</a>'
+        : '';
+      return '<div class="pool-wallet-row' + (isPending ? ' pool-wallet-pending' : ' pool-wallet-sent') + '">'
+        + '<div class="pool-wallet-row-info">'
+        + '<strong>' + r.person_name + '</strong>' + label + '<br>'
+        + '<span class="pool-wallet-detail">' + platform + ' · Send ' + passType + ' pass · ' + (email || 'No email on file') + '</span><br>'
+        + '<span class="pool-wallet-date">Registered ' + date + '</span>'
+        + '</div>'
+        + '<div class="pool-wallet-row-actions">'
+        + (isPending
+          ? (emailBtn + '<button type="button" class="btn btn-primary pool-wallet-mark-sent-btn" data-request-id="' + r.id + '">Mark as Sent</button>')
+          : '<span class="pool-wallet-sent-badge">✓ Sent</span>')
+        + '</div>'
+        + '</div>';
     }
 
     // ── SMS Management ──

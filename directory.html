@@ -166,6 +166,15 @@
                   <span class="dir-toggle-label">Show</span>
                 </label>
               </div>
+              <p class="dir-field-hint" style="margin-top:.5rem;">This number will be used for HOA SMS text notices from your community admin.</p>
+              <div class="dir-sms-optout-row">
+                <label class="dir-toggle dir-toggle-sms" title="Receive SMS text notices">
+                  <input type="checkbox" id="profSmsOptIn">
+                  <span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">Receive SMS text notices</span>
+                </label>
+                <span id="profSmsStatus" class="dir-sms-inline-status"></span>
+              </div>
             </div>
 
             <div class="dir-field-group">
@@ -273,7 +282,15 @@
                   <input type="checkbox" id="childShowBday"><span class="dir-toggle-slider"></span>
                   <span class="dir-toggle-label">Show bday</span>
                 </label>
+                <label class="dir-toggle" title="16 years or older">
+                  <input type="checkbox" id="childIs16Plus"><span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">16+</span>
+                </label>
                 <button class="btn btn-primary dir-add-btn" id="addChildBtn" type="button">Add</button>
+              </div>
+              <div class="dir-add-row dir-add-child-contact" id="addChildContactRow" style="display:none;margin-top:.4rem;">
+                <input type="tel" id="childPhone" placeholder="Phone (optional)" class="dir-input">
+                <input type="email" id="childEmail" placeholder="Email (optional)" maxlength="120" class="dir-input">
               </div>
             </div>
 
@@ -348,6 +365,8 @@
                 <label>SMS Number</label>
                 <span id="smsPhoneDisplay" class="dir-readonly">Not available</span>
               </div>
+              <div id="smsHouseholdList" class="dir-sms-household" style="display:none;"></div>
+              <p class="dir-field-hint" style="margin-top:.4rem;">You can enroll additional household members for SMS alerts by editing their phone number and enabling SMS in the <strong>Family &amp; Pets</strong> tab.</p>
               <div class="dir-publish-actions dir-sms-pref-actions">
                 <button class="btn btn-outline" id="smsOptOutBtn" type="button">Opt Out of SMS</button>
                 <button class="btn btn-primary dir-hidden" id="smsOptInBtn" type="button">Opt Back In</button>
@@ -417,17 +436,17 @@
       <!-- Step 1: choose platform -->
       <div id="ppmStepChoose">
         <h3 id="ppmTitle">Register Phone for <span id="ppmPersonName">…</span></h3>
-        <p class="dir-field-hint">Pick the phone type. We will generate a one-time access code that you save to that phone.</p>
+        <p class="dir-field-hint">Select your phone type so the admin can send you the correct wallet pass via email.</p>
         <div class="dir-field-group">
           <label for="ppmDeviceLabel" style="display:block;margin-bottom:.4rem;font-weight:500;">Device label (optional)</label>
           <input type="text" id="ppmDeviceLabel" class="dir-input" placeholder="e.g. Sarah's iPhone" maxlength="40">
         </div>
         <div class="dir-pp-platform-row">
           <button class="btn btn-primary" id="ppmRegIosBtn" type="button">
-            Register iPhone
+            I have an iPhone
           </button>
           <button class="btn btn-primary" id="ppmRegAndroidBtn" type="button">
-            Register Android
+            I have an Android
           </button>
         </div>
         <p class="dir-field-hint" style="margin-top:1rem;">
@@ -436,23 +455,18 @@
         <p id="ppmGuestStatus" class="dir-pp-guest-status"></p>
       </div>
 
-      <!-- Step 2: show QR + token -->
+      <!-- Step 2: confirmation -->
       <div id="ppmStepShow" style="display:none;">
-        <h3>Save This to Your Phone</h3>
-        <p class="dir-field-hint">
-          This code is your pool-gate pass. <strong>It is shown only once</strong> &mdash; save the QR
-          image to <strong>Apple Wallet</strong> (iPhone) or <strong>Google Wallet / Photos</strong> (Android),
-          then present it at the pool gate scanner.
+        <h3>&#10003; Phone Registered</h3>
+        <p class="dir-field-hint" style="font-size:1rem;line-height:1.5;">
+          Your <strong id="ppmPlatformLabel">phone</strong> has been registered.
+          The HOA admin has been notified and will send your wallet pass to your email address on file.
         </p>
-        <div id="ppmQrBox" class="dir-pp-qr-box">
-          <canvas id="ppmQrCanvas" width="240" height="240"></canvas>
-        </div>
-        <div class="dir-pp-token-row">
-          <code id="ppmTokenText" class="dir-pp-token"></code>
-          <button class="btn btn-outline" id="ppmCopyBtn" type="button">Copy Code</button>
-        </div>
+        <p class="dir-field-hint" style="margin-top:.5rem;">
+          You will receive an email with instructions on how to add the pass to your
+          <strong>Apple Wallet</strong> or <strong>Google Wallet</strong>.
+        </p>
         <div class="dir-pp-actions">
-          <button class="btn btn-outline" id="ppmDownloadBtn" type="button">Download QR Image</button>
           <button class="btn btn-primary" id="ppmDoneBtn" type="button">Done</button>
         </div>
       </div>
@@ -507,7 +521,6 @@
 
   <script src="js/validation.js"></script>
   <script src="js/main.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="js/directory.js"></script>
 </body>
 </html>
