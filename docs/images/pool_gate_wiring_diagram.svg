@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050">
+  <defs>
+    <style>
+      .title { font: 700 34px Arial, sans-serif; fill:#111827; }
+      .subtitle { font: 400 18px Arial, sans-serif; fill:#4b5563; }
+      .box { fill:#ffffff; stroke:#1f2937; stroke-width:3; rx:18; }
+      .enclosure { fill:#f8fafc; stroke:#0f172a; stroke-width:4; rx:24; stroke-dasharray:10 8; }
+      .reader { fill:#eff6ff; stroke:#2563eb; stroke-width:3; rx:18; }
+      .power { fill:#fff7ed; stroke:#f97316; stroke-width:3; rx:18; }
+      .relay { fill:#f0fdf4; stroke:#16a34a; stroke-width:3; rx:18; }
+      .gate { fill:#fef2f2; stroke:#dc2626; stroke-width:3; rx:18; }
+      .label { font: 700 21px Arial, sans-serif; fill:#111827; }
+      .small { font: 400 16px Arial, sans-serif; fill:#374151; }
+      .tiny { font: 400 14px Arial, sans-serif; fill:#4b5563; }
+      .wire-power { stroke:#f97316; stroke-width:5; fill:none; marker-end:url(#arrowOrange); }
+      .wire-signal { stroke:#2563eb; stroke-width:5; fill:none; marker-end:url(#arrowBlue); }
+      .wire-control { stroke:#16a34a; stroke-width:5; fill:none; marker-end:url(#arrowGreen); }
+      .wire-gate { stroke:#dc2626; stroke-width:5; fill:none; marker-end:url(#arrowRed); }
+      .ground { stroke:#6b7280; stroke-width:4; fill:none; }
+      .legend { font: 600 15px Arial, sans-serif; fill:#111827; }
+    </style>
+    <marker id="arrowOrange" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10" fill="#f97316"/></marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10" fill="#2563eb"/></marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10" fill="#16a34a"/></marker>
+    <marker id="arrowRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10" fill="#dc2626"/></marker>
+  </defs>
+
+  <rect width="1600" height="1050" fill="#ffffff"/>
+  <text x="60" y="65" class="title">Pool Gate Access System — Raspberry Pi 5 + Apple Wallet-Compatible Reader</text>
+  <text x="60" y="96" class="subtitle">Recommended topology: reader handles Apple Wallet; Pi validates local database and triggers isolated relay/dry contact.</text>
+
+  <!-- Outdoor reader -->
+  <rect x="70" y="220" width="330" height="230" class="reader"/>
+  <text x="95" y="260" class="label">Outdoor Reader</text>
+  <text x="95" y="292" class="small">HID Signo / STid / Wallet-capable</text>
+  <text x="95" y="326" class="tiny">• Apple Wallet credential handshake</text>
+  <text x="95" y="350" class="tiny">• BLE/NFC/mobile credential</text>
+  <text x="95" y="374" class="tiny">• DESFire card/fob backup</text>
+  <text x="95" y="398" class="tiny">• OSDP RS-485 preferred</text>
+  <text x="95" y="422" class="tiny">• 12V DC field power</text>
+
+  <!-- Enclosure -->
+  <rect x="500" y="150" width="760" height="660" class="enclosure"/>
+  <text x="530" y="190" class="label">Locked NEMA 4X Enclosure</text>
+  <text x="530" y="218" class="tiny">Mount on secure side of gate; use sealed cable glands and surge protection.</text>
+
+  <!-- Field PSU -->
+  <rect x="550" y="260" width="270" height="135" class="power"/>
+  <text x="575" y="300" class="label">12V DC PSU</text>
+  <text x="575" y="330" class="small">Mean Well DIN Rail</text>
+  <text x="575" y="360" class="tiny">Powers reader + relay coil</text>
+
+  <!-- Pi PSU -->
+  <rect x="550" y="455" width="270" height="135" class="power"/>
+  <text x="575" y="495" class="label">Pi 5 PSU</text>
+  <text x="575" y="525" class="small">Official 27W USB-C</text>
+  <text x="575" y="555" class="tiny">5.1V / 5A to Pi only</text>
+
+  <!-- Terminal blocks -->
+  <rect x="550" y="650" width="270" height="110" class="box"/>
+  <text x="575" y="690" class="label">Terminal Blocks</text>
+  <text x="575" y="720" class="tiny">Reader 12V/GND, A/B, gate pair</text>
+
+  <!-- Pi -->
+  <rect x="900" y="260" width="300" height="180" class="box"/>
+  <text x="925" y="300" class="label">Raspberry Pi 5</text>
+  <text x="925" y="330" class="small">Local controller</text>
+  <text x="925" y="360" class="tiny">• SQLite guest DB</text>
+  <text x="925" y="384" class="tiny">• FastAPI admin + sync</text>
+  <text x="925" y="408" class="tiny">• GPIO relay trigger</text>
+
+  <!-- RS485 adapter -->
+  <rect x="900" y="475" width="300" height="100" class="box"/>
+  <text x="925" y="515" class="label">USB RS-485 Adapter</text>
+  <text x="925" y="545" class="tiny">Reader A/B → USB serial</text>
+
+  <!-- Relay -->
+  <rect x="900" y="625" width="300" height="135" class="relay"/>
+  <text x="925" y="665" class="label">Isolated Relay</text>
+  <text x="925" y="695" class="small">Altronix RB1224/RDC12</text>
+  <text x="925" y="725" class="tiny">COM/NO dry contact to gate</text>
+
+  <!-- Gate operator -->
+  <rect x="1320" y="395" width="230" height="220" class="gate"/>
+  <text x="1345" y="435" class="label">Gate Operator</text>
+  <text x="1345" y="468" class="small">OPEN input</text>
+  <text x="1345" y="500" class="tiny">Dry contact pair</text>
+  <text x="1345" y="524" class="tiny">or strike circuit</text>
+  <text x="1345" y="548" class="tiny">depending on hardware</text>
+
+  <!-- Wires -->
+  <path d="M400 285 C455 285 485 300 550 300" class="wire-power"/>
+  <text x="420" y="260" class="tiny">12V + GND</text>
+
+  <path d="M400 355 C555 355 730 525 900 525" class="wire-signal"/>
+  <text x="430" y="385" class="tiny">OSDP RS-485 A/B + GND</text>
+
+  <path d="M820 522 L900 522" class="wire-power"/>
+  <text x="835" y="500" class="tiny">USB-C 5V to Pi</text>
+
+  <path d="M1050 475 L1050 440" class="wire-signal"/>
+  <text x="1062" y="462" class="tiny">USB</text>
+
+  <path d="M1050 440 L1050 625" class="wire-control"/>
+  <text x="1065" y="600" class="tiny">GPIO trigger</text>
+
+  <path d="M820 330 C845 330 870 670 900 690" class="wire-power"/>
+  <text x="745" y="430" class="tiny">12V relay coil</text>
+
+  <path d="M1200 692 C1260 692 1275 510 1320 510" class="wire-gate"/>
+  <text x="1230" y="640" class="tiny">COM/NO dry contact</text>
+
+  <path d="M685 395 L685 650" class="ground"/>
+  <text x="610" y="632" class="tiny">Common field ground where required</text>
+
+  <!-- Legend -->
+  <rect x="70" y="850" width="1420" height="120" fill="#f9fafb" stroke="#d1d5db" stroke-width="2" rx="18"/>
+  <text x="95" y="890" class="legend">Legend</text>
+  <line x1="95" y1="920" x2="170" y2="920" class="wire-power"/><text x="185" y="925" class="tiny">Power wiring</text>
+  <line x1="345" y1="920" x2="420" y2="920" class="wire-signal"/><text x="435" y="925" class="tiny">Reader data / OSDP RS-485</text>
+  <line x1="655" y1="920" x2="730" y2="920" class="wire-control"/><text x="745" y="925" class="tiny">Pi GPIO control</text>
+  <line x1="930" y1="920" x2="1005" y2="920" class="wire-gate"/><text x="1020" y="925" class="tiny">Gate dry-contact circuit</text>
+  <text x="95" y="955" class="tiny">Note: Keep Pi 5V power isolated from reader/strike power. Put the reader outside; put Pi, relay, PSU, and terminals inside the locked enclosure.</text>
+</svg>
