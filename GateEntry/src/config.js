@@ -28,6 +28,15 @@ const config = {
   spiBus: parseInt(process.env.SPI_BUS) || 0,
   spiDevice: parseInt(process.env.SPI_DEVICE) || 0,
 
+  // RFID reader selection: 'mfrc522' (SPI) | 'serial' (RS485 USB) | 'auto'
+  readerType: (process.env.READER_TYPE || 'auto').toLowerCase(),
+
+  // Serial / RS485-USB reader settings
+  serialPort: process.env.SERIAL_PORT || '/dev/ttyUSB0',
+  serialBaud: parseInt(process.env.SERIAL_BAUD) || 9600,
+  // Line delimiter emitted by the reader between scans: 'crlf' | 'cr' | 'lf' | 'stx-etx'
+  serialDelimiter: (process.env.SERIAL_DELIMITER || 'crlf').toLowerCase(),
+
   // Read-only viewer UI (hosted on Raspberry Pi)
   viewerPort: parseInt(process.env.VIEWER_PORT) || 8080,
   viewerHost: process.env.VIEWER_HOST || '0.0.0.0',

@@ -16,6 +16,8 @@
     "mfrc522-rpi": "^2.1.3",
     "node-fetch": "^2.7.0",
     "onoff": "^6.0.3",
+    "rpi-softspi": "^1.2.5",
+    "serialport": "^12.0.0",
     "uuid": "^9.0.0"
   },
   "engines": {
