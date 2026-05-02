@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "Glenridge Pool",
+    "slug": "glenridge-pool-member",
+    "scheme": "glenridgepool",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1e7e74"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.glenridge.poolmember",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We use your location only to confirm you are near the pool gate when opening it.",
+        "NSFaceIDUsageDescription": "Use Face ID to confirm pool gate access."
+      }
+    },
+    "android": {
+      "package": "com.glenridge.poolmember",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1e7e74"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "We use your location only to confirm you are near the pool gate when opening it."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to confirm pool gate access."
+        }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "http://localhost:3000",
+      "poolLatitude": 0,
+      "poolLongitude": 0,
+      "poolGeofenceMeters": 250
+    }
+  }
+}
