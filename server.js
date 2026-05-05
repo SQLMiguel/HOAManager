@@ -70,6 +70,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SALT_ROUNDS = 12;
 
+// ── Branding / contact (configurable via env) ─────────────
+const BRAND_NAME      = process.env.BRAND_NAME      || 'Glenridge Community HOA';
+const BRAND_SHORT     = process.env.BRAND_SHORT     || 'Glenridge Community';
+const BRAND_LOCATION  = process.env.BRAND_LOCATION  || 'Winston-Salem, NC';
+const ADMIN_EMAIL     = process.env.ADMIN_EMAIL     || 'admin@glenridgecommunity.com';
+const MAIL_FROM_EMAIL = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER || ADMIN_EMAIL;
+const SITE_URL        = (process.env.SITE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+
 // ── Validation helpers ────────────────────────────────────
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 function isValidEmail(v) { return EMAIL_RE.test((v || '').trim()); }
@@ -87,19 +95,47 @@ function maskPhone(v) {
 }
 
 // ── Database Setup ──────────────────────────────────────
-const dbPool = mysql.createPool({
+const dbConfig = {
   host:     process.env.DB_HOST     || 'localhost',
   port:     parseInt(process.env.DB_PORT || '3306'),
   user:     process.env.DB_USER     || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME     || 'glenridge',
+};
+
+console.log('═══ Database connection config ═══');
+console.log(`  DB_HOST:     ${dbConfig.host}`);
+console.log(`  DB_PORT:     ${dbConfig.port}`);
+console.log(`  DB_USER:     ${dbConfig.user}`);
+console.log(`  DB_NAME:     ${dbConfig.database}`);
+console.log(`  DB_PASSWORD: ${dbConfig.password ? '(' + dbConfig.password.length + ' chars)' : '(empty!)'}`);
+console.log('═══════════════════════════════════');
+
+const dbPool = mysql.createPool({
+  ...dbConfig,
   waitForConnections: true,
   connectionLimit: 10,
   charset: 'utf8mb4',
 });
 
 async function initDb() {
-  const conn = await dbPool.getConnection();
+  // Test the connection up-front so failures produce a clear error
+  let conn;
+  try {
+    conn = await dbPool.getConnection();
+    console.log('✓ MySQL connection established');
+  } catch (err) {
+    console.error('✗ Could not connect to MySQL.');
+    console.error(`  Error: ${err.code || err.message}`);
+    if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+      console.error('  → Wrong DB_USER or DB_PASSWORD.');
+    } else if (err.code === 'ER_BAD_DB_ERROR') {
+      console.error(`  → Database "${dbConfig.database}" does not exist. Create it in hPanel first.`);
+    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+      console.error(`  → Host "${dbConfig.host}" not reachable. Check DB_HOST.`);
+    }
+    throw err;
+  }
   try {
 
   // Create users table (password_hash nullable to support OAuth users)
@@ -740,7 +776,7 @@ transporter.verify().then(() => {
 
 async function sendEmail(to, subject, html) {
   const mailOptions = {
-    from: `"Glenridge Community HOA" <${process.env.SMTP_USER || 'noreply@glenridgecommunity.com'}>`,
+    from: `"${BRAND_NAME}" <${MAIL_FROM_EMAIL}>`,
     to,
     subject,
     html,
@@ -819,7 +855,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: `${process.env.SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`
+    callbackURL: `${SITE_URL}/api/auth/google/callback`
   }, async (accessToken, refreshToken, profile, done) => {
     try {
       const email = profile.emails?.[0]?.value?.toLowerCase();
@@ -845,7 +881,7 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
   passport.use(new FacebookStrategy({
     clientID: process.env.FACEBOOK_APP_ID,
     clientSecret: process.env.FACEBOOK_APP_SECRET,
-    callbackURL: `${process.env.SITE_URL || 'http://localhost:3000'}/api/auth/facebook/callback`,
+    callbackURL: `${SITE_URL}/api/auth/facebook/callback`,
     profileFields: ['id', 'emails', 'name']
   }, async (accessToken, refreshToken, profile, done) => {
     try {
@@ -986,7 +1022,7 @@ app.post('/api/auth/social-complete', async (req, res) => {
     delete req.session.pendingSocial;
 
 
-    const adminUrl = `${process.env.SITE_URL || 'http://localhost:3000'}/admin.html`;
+    const adminUrl = `${SITE_URL}/admin.html`;
     await sendEmail(
       process.env.ADMIN_EMAIL,
       `🏡 New Resident Signup (${pending.provider}) — Approval Needed`,
@@ -1008,7 +1044,7 @@ app.post('/api/auth/social-complete', async (req, res) => {
             <a href="${adminUrl}" style="background: #2d6a4f; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; display: inline-block;">Review &amp; Approve</a>
           </div>
         </div>
-        <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">Glenridge Community HOA</div>
+        <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">${BRAND_NAME}</div>
       </div>
       `
     );
@@ -1063,7 +1099,7 @@ app.post('/api/signup', async (req, res) => {
     await dbRun(`UPDATE users SET sms_opt_out = 0, sms_unsubscribe_token = COALESCE(sms_unsubscribe_token, ?) WHERE id = ?`, [uuidv4(), userId]);
 
     // Send notification email to admin
-    const adminUrl = `${process.env.SITE_URL || 'http://localhost:3000'}/admin.html`;
+    const adminUrl = `${SITE_URL}/admin.html`;
     await sendEmail(
       process.env.ADMIN_EMAIL,
       '🏡 New Resident Signup — Approval Needed',
@@ -1085,7 +1121,7 @@ app.post('/api/signup', async (req, res) => {
           </div>
         </div>
         <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">
-          Glenridge Community HOA
+          ${BRAND_NAME}
         </div>
       </div>
       `
@@ -1129,7 +1165,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     if (user.status === 'denied') {
-      return res.status(403).json({ error: 'Your account has been denied. Please contact admin@glenridgecommunity.com for assistance.' });
+      return res.status(403).json({ error: `Your account has been denied. Please contact ${ADMIN_EMAIL} for assistance.` });
     }
 
     // Create session
@@ -1181,11 +1217,11 @@ app.post('/api/forgot-password', async (req, res) => {
       VALUES (?, ?, ?, ?)
     `, [uuidv4(), user.id, tokenHash, expiresAt]);
 
-    const resetUrl = `${process.env.SITE_URL || 'http://localhost:3000'}/reset-password.html?token=${token}`;
+    const resetUrl = `${SITE_URL}/reset-password.html?token=${token}`;
 
     await sendEmail(
       user.email,
-      'Glenridge Community HOA — Password Reset',
+      `${BRAND_NAME} — Password Reset`,
       `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #2d6a4f; color: white; padding: 24px; border-radius: 12px 12px 0 0;">
@@ -1193,7 +1229,7 @@ app.post('/api/forgot-password', async (req, res) => {
         </div>
         <div style="background: #f8f9fa; padding: 24px; border: 1px solid #e0e0e0;">
           <p>Hi ${user.first_name},</p>
-          <p>We received a request to reset the password for your Glenridge Community HOA account.</p>
+          <p>We received a request to reset the password for your ${BRAND_NAME} account.</p>
           <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
           <div style="margin: 24px 0; text-align: center;">
             <a href="${resetUrl}" style="background: #2d6a4f; color: white; padding: 14px 36px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: bold;">Reset My Password</a>
@@ -1202,7 +1238,7 @@ app.post('/api/forgot-password', async (req, res) => {
           <p style="color: #666; font-size: 13px;">If the button doesn't work, copy and paste this link into your browser:</p>
           <p style="word-break: break-all; color: #2d6a4f; font-size: 13px;">${resetUrl}</p>
         </div>
-        <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">Glenridge Community HOA</div>
+        <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">${BRAND_NAME}</div>
       </div>
       `
     );
@@ -1401,10 +1437,10 @@ app.post('/api/events', requireAuth, async (req, res) => {
             <tr><td style="padding:8px;font-weight:bold;">Added by:</td><td style="padding:8px;">${req.session.userName}</td></tr>
           </table>
           <div style="margin-top:24px;text-align:center;">
-            <a href="${process.env.SITE_URL || 'http://localhost:3000'}/members.html" style="background:#2d6a4f;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;display:inline-block;">View Calendar</a>
+            <a href="${SITE_URL}/members.html" style="background:#2d6a4f;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;display:inline-block;">View Calendar</a>
           </div>
         </div>
-        <div style="padding:16px;text-align:center;color:#888;font-size:13px;">Glenridge Community HOA</div>
+        <div style="padding:16px;text-align:center;color:#888;font-size:13px;">${BRAND_NAME}</div>
       </div>
       `
     );
@@ -1451,7 +1487,7 @@ app.delete('/api/events/:id', requireAuth, async (req, res) => {
           <tr><td style="padding:8px;font-weight:bold;">Deleted by:</td><td style="padding:8px;">${deletedBy}</td></tr>
         </table>
       </div>
-      <div style="padding:16px;text-align:center;color:#888;font-size:13px;">Glenridge Community HOA</div>
+      <div style="padding:16px;text-align:center;color:#888;font-size:13px;">${BRAND_NAME}</div>
     </div>
     `
   );
@@ -2083,15 +2119,15 @@ app.post('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
     // Send approval email to the resident
     await sendEmail(
       user.email,
-      'Welcome to the Glenridge Community Website!',
+      `Welcome to the ${BRAND_SHORT} Website!`,
       `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #2d6a4f; color: white; padding: 24px; border-radius: 12px 12px 0 0;">
-          <h1 style="margin: 0; font-size: 20px;">Welcome to the Glenridge Community!</h1>
+          <h1 style="margin: 0; font-size: 20px;">Welcome to the ${BRAND_SHORT}!</h1>
         </div>
         <div style="background: #f8f9fa; padding: 24px; border: 1px solid #e0e0e0;">
           <p>Hello ${user.first_name},</p>
-          <p>Welcome to the Glenridge Community website! Your new member account has been successfully created.</p>
+          <p>Welcome to the ${BRAND_SHORT} website! Your new member account has been successfully created.</p>
           <p>Your account will be used for several important community features, including:</p>
           <ul style="line-height: 2;">
             <li>Community Newsletters &amp; Announcements</li>
@@ -2104,9 +2140,9 @@ app.post('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
 
           <h3 style="font-size: 15px; margin-bottom: 4px;">1. Login to Your Account</h3>
           <p>Return to the Members section of the website and log in using the credentials you created.</p>
-          <p>If you experience any issues logging in, please contact us at <a href="mailto:Admin@GlenridgeCommunity.com" style="color: #2d6a4f;">Admin@GlenridgeCommunity.com</a> and we will get back to you right away.</p>
+          <p>If you experience any issues logging in, please contact us at <a href="mailto:${ADMIN_EMAIL}" style="color: #2d6a4f;">${ADMIN_EMAIL}</a> and we will get back to you right away.</p>
           <div style="margin: 20px 0; text-align: center;">
-            <a href="${process.env.SITE_URL || 'http://localhost:3000'}/members.html" style="background: #2d6a4f; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; display: inline-block;">Log In Now</a>
+            <a href="${SITE_URL}/members.html" style="background: #2d6a4f; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; display: inline-block;">Log In Now</a>
           </div>
 
           <h3 style="font-size: 15px; margin-bottom: 4px;">2. Update Your My Household Profile</h3>
@@ -2128,11 +2164,11 @@ app.post('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
 
           <p style="margin-top: 28px;">We are excited to have you as part of the Glenridge Community and look forward to helping you stay connected.</p>
           <p>Warm regards,<br>
-          <strong>Glenridge Community Administration</strong><br>
-          <a href="mailto:admin@GlenridgeCommunity.com" style="color: #2d6a4f;">admin@GlenridgeCommunity.com</a></p>
+          <strong>${BRAND_SHORT} Administration</strong><br>
+          <a href="mailto:${ADMIN_EMAIL}" style="color: #2d6a4f;">${ADMIN_EMAIL}</a></p>
         </div>
         <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">
-          Glenridge Community HOA &bull; Winston-Salem, NC
+          ${BRAND_NAME} &bull; ${BRAND_LOCATION}
         </div>
       </div>
       `
@@ -2169,10 +2205,10 @@ app.post('/api/admin/users/:id/deny', requireAdmin, async (req, res) => {
         </div>
         <div style="background: #f8f9fa; padding: 24px; border: 1px solid #e0e0e0;">
           <p>Hello ${user.first_name},</p>
-          <p>We were unable to verify your residency in the Glenridge Community at this time. If you believe this is an error, please contact us at <a href="mailto:admin@glenridgecommunity.com">admin@glenridgecommunity.com</a> with your address and proof of residency.</p>
+          <p>We were unable to verify your residency in the ${BRAND_SHORT} at this time. If you believe this is an error, please contact us at <a href="mailto:${ADMIN_EMAIL}">${ADMIN_EMAIL}</a> with your address and proof of residency.</p>
         </div>
         <div style="padding: 16px; text-align: center; color: #888; font-size: 13px;">
-          Glenridge Community HOA &bull; Winston-Salem, NC
+          ${BRAND_NAME} &bull; ${BRAND_LOCATION}
         </div>
       </div>
       `
@@ -2222,7 +2258,7 @@ async function syncSubscribers() {
   }
 }
 
-function siteUrl() { return process.env.SITE_URL || 'http://localhost:3000'; }
+function siteUrl() { return SITE_URL; }
 
 function buildSendHtml(htmlContent, sendLogId, unsubToken) {
   const base = siteUrl();
@@ -2282,7 +2318,7 @@ app.post('/api/nl/newsletters/:id/test', requireAdmin, async (req, res) => {
   const html = nl.html_content.replace(/\{\{UNSUBSCRIBE_URL\}\}/g,'#').replace(/\{\{FIRST_NAME\}\}/g,'Neighbor');
   try {
     await transporter.sendMail({
-      from: `"Glenridge Community HOA" <${process.env.SMTP_USER}>`,
+      from: `"${BRAND_NAME}" <${MAIL_FROM_EMAIL}>`,
       to: email, subject: `[TEST] ${nl.subject}`, html
     });
     res.json({ success: true });
@@ -2312,7 +2348,7 @@ app.post('/api/nl/newsletters/:id/send', requireAdmin, async (req, res) => {
     );
     try {
       await transporter.sendMail({
-        from: `"Glenridge Community HOA" <${process.env.SMTP_USER}>`,
+        from: `"${BRAND_NAME}" <${MAIL_FROM_EMAIL}>`,
         to: sub.email, subject: nl.subject, html,
         headers: { 'List-Unsubscribe': `<${unsubUrl}>` }
       });
@@ -3362,7 +3398,7 @@ initDb().then(() => {
   app.listen(PORT, () => {
     console.log('');
     console.log('═══════════════════════════════════════════');
-    console.log(`  Glenridge Community HOA Server`);
+    console.log(`  ${BRAND_NAME} Server`);
     console.log(`  Running at http://localhost:${PORT}`);
     console.log(`  Admin panel: http://localhost:${PORT}/admin.html`);
     console.log('═══════════════════════════════════════════');
