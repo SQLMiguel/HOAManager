@@ -358,7 +358,9 @@ async function initDb() {
   await conn.query(`
     CREATE TABLE IF NOT EXISTS pool_entry_types (
       id VARCHAR(36) PRIMARY KEY,
-      name VARCHAR(100) UNIQUE NOT NULL, DEFAULT 0,
+      name VARCHAR(100) UNIQUE NOT NULL,
+      description TEXT,
+      is_system TINYINT(1) DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
