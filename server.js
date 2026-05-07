@@ -78,6 +78,11 @@ const ADMIN_EMAIL     = process.env.ADMIN_EMAIL     || 'admin@glenridgecommunity
 const MAIL_FROM_EMAIL = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER || ADMIN_EMAIL;
 const SITE_URL        = (process.env.SITE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
+// ── Pool location (for mobile-app geofence verification) ─
+const POOL_LATITUDE  = parseFloat(process.env.POOL_LATITUDE  || '0') || null;
+const POOL_LONGITUDE = parseFloat(process.env.POOL_LONGITUDE || '0') || null;
+const POOL_GEOFENCE_METERS = parseInt(process.env.POOL_GEOFENCE_METERS || '250', 10);
+
 // ── Validation helpers ────────────────────────────────────
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 function isValidEmail(v) { return EMAIL_RE.test((v || '').trim()); }
@@ -427,7 +432,12 @@ async function initDb() {
   const alterPoolMembers = [
     `ALTER TABLE pool_members ADD COLUMN rfid_tag VARCHAR(100) UNIQUE`,
   ];
-  for (const sql of [...alterAdults, ...alterChildren, ...alterPoolMembers]) {
+  const alterPoolCheckins = [
+    `ALTER TABLE pool_checkins ADD COLUMN person_name VARCHAR(120)`,
+    `ALTER TABLE pool_checkins ADD COLUMN reason VARCHAR(80)`,
+    `ALTER TABLE pool_checkins ADD COLUMN source VARCHAR(40) DEFAULT 'rfid'`,
+  ];
+  for (const sql of [...alterAdults, ...alterChildren, ...alterPoolMembers, ...alterPoolCheckins]) {
     try { await conn.query(sql); } catch(e) { /* column already exists */ }
   }
 
@@ -3404,6 +3414,167 @@ app.post('/api/admin/gate/sync', requireAdmin, async (req, res) => {
       success: false,
       error: (err && err.message) || 'Failed to contact gate.'
     });
+  }
+});
+
+// ── Mobile App Gate Open ─────────────────────────────────
+// Pool-member mobile app calls this to open the gate.
+// Verifies session → pool member exists & active → optional geofence
+// check → relays to the GateEntry Pi using the existing phone-unlock
+// endpoint. The Pi runs the same scan pipeline as a physical RFID tap.
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+app.post('/api/mobile/member/gate/open', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const { latitude, longitude, device_id } = req.body || {};
+
+    // 1. Verify the user is an active pool member
+    const poolMember = await dbGet(
+      `SELECT pm.*, pet.name AS entry_type_name
+         FROM pool_members pm
+         LEFT JOIN pool_entry_types pet ON pet.id = pm.entry_type_id
+         WHERE pm.user_id = ? AND pm.status = 'active'
+         LIMIT 1`,
+      [userId]);
+    if (!poolMember) {
+      return res.status(403).json({
+        allowed: false,
+        reason: 'not_a_pool_member',
+        message: 'Your account is not enrolled as an active pool member. Please contact the HOA admin.'
+      });
+    }
+
+    // 2. Server-side geofence check (when configured + lat/lon supplied)
+    if (POOL_LATITUDE && POOL_LONGITUDE && latitude != null && longitude != null) {
+      const dist = haversineMeters(
+        Number(latitude), Number(longitude),
+        POOL_LATITUDE, POOL_LONGITUDE);
+      if (dist > POOL_GEOFENCE_METERS) {
+        return res.status(403).json({
+          allowed: false,
+          reason: 'outside_geofence',
+          message: `You are too far from the pool gate (${Math.round(dist)} m).`
+        });
+      }
+    }
+
+    // 3. Find an active mobile credential for this pool member
+    let credential = await dbGet(
+      `SELECT * FROM pool_nfc_credentials
+        WHERE pool_member_id = ?
+          AND (revoked_at IS NULL)
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [poolMember.id]);
+
+    // Auto-issue a credential the first time the mobile app is used
+    if (!credential) {
+      const credentialToken = crypto.randomBytes(32).toString('hex');
+      const credentialHash  = crypto.createHash('sha256').update(credentialToken).digest('hex');
+      const credentialId    = uuidv4();
+      await dbRun(`
+        INSERT INTO pool_nfc_credentials
+          (id, pool_member_id, credential_hash, device_platform, device_name, pass_serial, pass_generated_at)
+        VALUES (?, ?, ?, 'mobile_app', ?, ?, CURRENT_TIMESTAMP)
+      `, [credentialId, poolMember.id, credentialHash,
+          `${poolMember.first_name} ${poolMember.last_name}'s phone`,
+          uuidv4()]);
+      credential = await dbGet('SELECT * FROM pool_nfc_credentials WHERE id = ?', [credentialId]);
+    }
+
+    // 4. Relay to the GateEntry Pi
+    let piResult = { ok: false, status: 0, data: null };
+    try {
+      piResult = await fetchGateViewer('/api/gate/phone-unlock', {
+        method: 'POST',
+        body: {
+          credential_type: 'nfc_phone',
+          token: credential.credential_hash,
+          device_platform: 'mobile_app',
+          device_name: device_id || 'Mobile App'
+        },
+        timeoutMs: 5000
+      });
+    } catch (e) {
+      console.warn('Gate Pi unreachable for mobile gate-open:', e.message);
+    }
+
+    // 5. Always log the attempt to pool_checkins so the HOA has a record,
+    //    even if the Pi is offline.
+    const checkinId = uuidv4();
+    const status = piResult.ok && piResult.data && piResult.data.allowed ? 'allowed' : 'denied';
+    const reason = (piResult.data && piResult.data.reason)
+      || (piResult.ok ? 'opened_via_mobile_app' : 'gate_offline');
+    await dbRun(`
+      INSERT INTO pool_checkins
+        (id, pool_member_id, person_name, entry_type_id, status, reason, check_in_time, source)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'mobile_app')
+    `, [checkinId, poolMember.id,
+        `${poolMember.first_name} ${poolMember.last_name}`,
+        poolMember.entry_type_id, status, reason]);
+
+    if (!piResult.ok) {
+      return res.status(502).json({
+        allowed: false,
+        reason: 'gate_offline',
+        message: 'Could not reach the gate controller. Please use your physical card or contact the HOA.',
+        transaction_id: checkinId
+      });
+    }
+    if (!piResult.data || !piResult.data.allowed) {
+      return res.status(403).json({
+        allowed: false,
+        reason: (piResult.data && piResult.data.reason) || 'denied',
+        message: 'Gate denied entry. Please check your pool schedule.',
+        transaction_id: checkinId
+      });
+    }
+
+    return res.json({
+      allowed: true,
+      reason: 'opened',
+      member_name: `${poolMember.first_name} ${poolMember.last_name}`,
+      timestamp: new Date().toISOString(),
+      transaction_id: checkinId
+    });
+
+  } catch (err) {
+    console.error('POST /api/mobile/member/gate/open error:', err);
+    res.status(500).json({ allowed: false, reason: 'server_error', message: 'Unexpected error.' });
+  }
+});
+
+// History of recent gate openings for the logged-in member.
+app.get('/api/mobile/member/gate/history', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const limit = Math.min(parseInt(req.query.limit || '25', 10) || 25, 100);
+    const poolMember = await dbGet(
+      `SELECT id FROM pool_members WHERE user_id = ? AND status = 'active' LIMIT 1`,
+      [userId]);
+    if (!poolMember) return res.json([]);
+
+    const rows = await dbAll(
+      `SELECT id, person_name, status, reason, check_in_time
+         FROM pool_checkins
+         WHERE pool_member_id = ?
+         ORDER BY check_in_time DESC
+         LIMIT ?`,
+      [poolMember.id, limit]);
+    res.json(rows);
+  } catch (err) {
+    console.error('GET /api/mobile/member/gate/history error:', err);
+    res.status(500).json([]);
   }
 });
 
