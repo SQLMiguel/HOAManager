@@ -85,7 +85,10 @@
         throw new Error(`Server error ${res.status}`);
       }
       const data = await res.json();
-      allMembers = Array.isArray(data) ? data : [];
+      // Safety net: never display members who opted out via do_not_list
+      const filtered = (Array.isArray(data) ? data : [])
+        .filter(m => !(m && m.profile && m.profile.do_not_list));
+      allMembers = filtered;
       renderDirectory(allMembers);
     } catch (err) {
       console.error('loadDirectory error:', err);

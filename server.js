@@ -1542,11 +1542,18 @@ async function buildProfile(userId) {
 // GET /api/directory - list all approved members (opt-out model: hidden only if do_not_list=1)
 app.get('/api/directory', requireAuth, async (req, res) => {
   try {
-    const approvedUsers = await dbAll(`SELECT id FROM users WHERE status='approved'`);
+    // Exclude users who have explicitly opted out via do_not_list at the SQL level
+    const approvedUsers = await dbAll(`
+      SELECT u.id FROM users u
+      LEFT JOIN dir_profiles p ON p.user_id = u.id
+      WHERE u.status = 'approved'
+        AND (p.do_not_list IS NULL OR p.do_not_list = 0)
+    `);
     const profiles = await Promise.all(approvedUsers.map(row => buildProfile(row.id)));
     const result = profiles
       .filter(p => {
         if (!p.user) return false;
+        // Defense in depth: also drop here in case the join missed something
         if (p.profile && p.profile.do_not_list) return false;
         return true;
       })
@@ -1729,7 +1736,12 @@ app.delete('/api/directory/photos/:id', requireAuth, async (req, res) => {
 // GET /api/directory/print
 app.get('/api/directory/print', requireAuth, async (req, res) => {
   dirAudit(req.session.userId, 'print_generated', null);
-  const approvedUsers = await dbAll(`SELECT id FROM users WHERE status='approved'`);
+  const approvedUsers = await dbAll(`
+    SELECT u.id FROM users u
+    LEFT JOIN dir_profiles p ON p.user_id = u.id
+    WHERE u.status = 'approved'
+      AND (p.do_not_list IS NULL OR p.do_not_list = 0)
+  `);
   const profiles = await Promise.all(approvedUsers.map(row => buildProfile(row.id)));
   const result = profiles
     .filter(p => p.user && !(p.profile && p.profile.do_not_list))

@@ -149,6 +149,14 @@
       color: #111;
       margin-bottom: .2rem;
     }
+    .entry-primary {
+      font-weight: 500;
+      font-size: .8rem;
+      color: #555;
+      font-style: italic;
+      margin-top: -.1rem;
+      margin-bottom: .25rem;
+    }
     .entry-row {
       font-size: .8rem;
       line-height: 1.6;
@@ -250,6 +258,10 @@
       if (!m.user) return '(Unknown)';
       return [m.user.first_name, m.user.last_name].filter(Boolean).join(' ') || '(Unknown)';
     }
+    function primaryName(m) {
+      if (!m.user) return '';
+      return [m.user.first_name, m.user.last_name].filter(Boolean).join(' ');
+    }
     function row(label, val) {
       return `<div class="entry-row"><span class="entry-label">${label}</span><span class="entry-val">${esc(val)}</span></div>`;
     }
@@ -328,6 +340,7 @@
 
           return `<div class="entry">
             <div class="entry-name">${esc(displayName(m))}</div>
+            ${(() => { const pn = primaryName(m); return pn && pn !== displayName(m) ? `<div class="entry-primary">${esc(pn)}</div>` : ''; })()}
             ${rows.join('')}
           </div>`;
         }).join('');
