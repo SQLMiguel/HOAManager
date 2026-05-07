@@ -1531,10 +1531,10 @@ async function dirAudit(userId, action, detail) {
 async function buildProfile(userId) {
   const user    = await dbGet('SELECT first_name, last_name, email, address FROM users WHERE id=?', [userId]);
   const profile = await dbGet('SELECT * FROM dir_profiles WHERE user_id=?', [userId]);
-  const adults  = await dbAll('SELECT * FROM dir_adults WHERE user_id=? ORDER BY rowid', [userId]);
-  const children= await dbAll('SELECT * FROM dir_children WHERE user_id=? ORDER BY rowid', [userId]);
-  const pets    = await dbAll('SELECT * FROM dir_pets WHERE user_id=? ORDER BY rowid', [userId]);
-  const social  = await dbAll('SELECT * FROM dir_social WHERE user_id=? ORDER BY rowid', [userId]);
+  const adults  = await dbAll('SELECT * FROM dir_adults WHERE user_id=? ORDER BY id', [userId]);
+  const children= await dbAll('SELECT * FROM dir_children WHERE user_id=? ORDER BY id', [userId]);
+  const pets    = await dbAll('SELECT * FROM dir_pets WHERE user_id=? ORDER BY id', [userId]);
+  const social  = await dbAll('SELECT * FROM dir_social WHERE user_id=? ORDER BY id', [userId]);
   const photos  = await dbAll('SELECT * FROM dir_photos WHERE user_id=? ORDER BY display_order, uploaded_at', [userId]);
   return { user, profile, adults, children, pets, social, photos };
 }
@@ -1543,8 +1543,8 @@ async function buildProfile(userId) {
 app.get('/api/directory', requireAuth, async (req, res) => {
   try {
     const approvedUsers = await dbAll(`SELECT id FROM users WHERE status='approved'`);
-    const result = approvedUsers
-      .map(row => buildProfile(row.id))
+    const profiles = await Promise.all(approvedUsers.map(row => buildProfile(row.id)));
+    const result = profiles
       .filter(p => {
         if (!p.user) return false;
         if (p.profile && p.profile.do_not_list) return false;
@@ -1565,7 +1565,7 @@ app.get('/api/directory', requireAuth, async (req, res) => {
 // GET /api/directory/me - get my full profile
 app.get('/api/directory/me', requireAuth, async (req, res) => {
   try {
-    res.json(buildProfile(req.session.userId));
+    res.json(await buildProfile(req.session.userId));
   } catch (err) {
     console.error('GET /api/directory/me error:', err.message);
     res.status(500).json({ error: 'Failed to load profile.' });
@@ -1598,7 +1598,7 @@ app.post('/api/directory/profile', requireAuth, async (req, res) => {
     await dbRun(`UPDATE users SET phone = ? WHERE id = ?`, [phone?.trim() || null, uid]);
   }
   dirAudit(uid, 'profile_updated', null);
-  res.json({ success: true, profile: buildProfile(uid) });
+  res.json({ success: true, profile: await buildProfile(uid) });
 });
 
 // POST /api/directory/adults
@@ -1730,8 +1730,8 @@ app.delete('/api/directory/photos/:id', requireAuth, async (req, res) => {
 app.get('/api/directory/print', requireAuth, async (req, res) => {
   dirAudit(req.session.userId, 'print_generated', null);
   const approvedUsers = await dbAll(`SELECT id FROM users WHERE status='approved'`);
-  const result = approvedUsers
-    .map(row => buildProfile(row.id))
+  const profiles = await Promise.all(approvedUsers.map(row => buildProfile(row.id)));
+  const result = profiles
     .filter(p => p.user && !(p.profile && p.profile.do_not_list))
     .sort((a, b) => {
       const nameA = (a.profile && a.profile.display_name) || `${a.user.last_name} ${a.user.first_name}`;
