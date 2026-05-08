@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vendor Directory — Glenridge Community</title>
+  <meta name="description" content="Neighbor-recommended vendors for plumbing, electric, landscaping, and other home services.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="images/LogoFlower_Edited.png">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .vendors-wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    .vendors-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .vendors-search { display: flex; gap: 8px; flex: 1 1 320px; max-width: 480px; }
+    .vendors-search input, .vendors-search select {
+      padding: 10px 12px; border: 1px solid #d0d4da; border-radius: 8px; font-size: 0.92rem; font-family: var(--font-body); background: #fff;
+    }
+    .vendors-search input { flex: 1; }
+    .vendors-toolbar .btn { padding: 10px 18px; }
+
+    .cat-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+    .cat-pill {
+      padding: 6px 14px; border-radius: 999px; border: 1px solid #cdd4dc; background: #fff;
+      font-size: 0.84rem; cursor: pointer; transition: all .15s; color: var(--text);
+    }
+    .cat-pill:hover { background: #f0f5f1; }
+    .cat-pill.active { background: var(--primary, #2c5f3a); color: #fff; border-color: var(--primary, #2c5f3a); }
+
+    .vendors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .vendor-card {
+      background: #fff; border: 1px solid #e6e9ee; border-radius: 12px; padding: 18px 18px 14px;
+      box-shadow: var(--shadow-sm); cursor: pointer; transition: transform .12s, box-shadow .12s;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .vendor-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .vendor-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .vendor-card-name { font-weight: 700; font-size: 1.05rem; color: var(--text); margin: 0; }
+    .vendor-card-cats { display: flex; flex-wrap: wrap; gap: 4px; }
+    .vendor-cat-tag { font-size: 0.72rem; padding: 2px 8px; background: #eef3ee; color: #2c5f3a; border-radius: 12px; }
+    .vendor-rating { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-light); }
+    .stars { color: #f0a500; letter-spacing: 1px; }
+    .stars-input { display: inline-flex; gap: 3px; cursor: pointer; }
+    .stars-input .star { font-size: 1.6rem; color: #d6d6d6; transition: color .1s; }
+    .stars-input .star.active, .stars-input .star.hover { color: #f0a500; }
+    .rec-badge { font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+    .rec-recommend { background: #e6f4ea; color: #1d5b2e; }
+    .rec-not_recommend { background: #fde8e6; color: #8a1f12; }
+    .vendor-card-meta { font-size: 0.82rem; color: var(--text-light); }
+
+    .vendor-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 30px 16px; overflow-y: auto; }
+    .vendor-overlay.active { display: flex; }
+    .vendor-modal { background: #fff; border-radius: 12px; max-width: 760px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+    .vendor-modal-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px 24px; border-bottom: 1px solid #eee; gap: 12px; }
+    .vendor-modal-head h2 { margin: 0; font-size: 1.4rem; }
+    .vendor-modal-body { padding: 20px 24px 24px; }
+    .vendor-modal .close-btn { background: transparent; border: none; font-size: 1.6rem; cursor: pointer; color: #666; }
+    .vendor-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin: 12px 0 16px; font-size: 0.92rem; }
+    .vendor-info-grid .lbl { color: var(--text-light); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .5px; }
+    .vendor-info-grid a { color: var(--primary, #2c5f3a); text-decoration: none; word-break: break-all; }
+    .vendor-info-grid a:hover { text-decoration: underline; }
+    .vendor-section-h { margin: 18px 0 8px; font-size: 1rem; }
+    .review { padding: 12px 14px; border: 1px solid #eef0f3; border-radius: 8px; margin-bottom: 8px; background: #fafbfc; }
+    .review-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .review-meta { font-size: 0.78rem; color: var(--text-light); }
+    .review-comment { margin-top: 6px; font-size: 0.92rem; white-space: pre-wrap; }
+    .review-form { background: #f6faf6; border: 1px solid #d8e6dc; border-radius: 8px; padding: 14px 16px; margin-top: 12px; }
+    .review-form label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; }
+    .review-form textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0d4da; border-radius: 6px; resize: vertical; font-family: var(--font-body); font-size: 0.92rem; min-height: 60px; }
+    .review-form .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+    .review-form select { padding: 8px 10px; border: 1px solid #d0d4da; border-radius: 6px; font-size: 0.92rem; }
+    .review-form .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+
+    .vendor-form-card { background:#fff; border-radius: 12px; padding: 24px; box-shadow: var(--shadow-md); margin-bottom: 28px; }
+    .vendor-form-card h2 { margin-top: 0; font-size: 1.3rem; }
+    .vendor-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 700px) { .vendor-form-grid, .vendor-info-grid { grid-template-columns: 1fr; } }
+    .vendor-form-card label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; }
+    .vendor-form-card input[type=text], .vendor-form-card input[type=email], .vendor-form-card input[type=url], .vendor-form-card input[type=tel], .vendor-form-card textarea, .vendor-form-card select {
+      width: 100%; padding: 9px 11px; border: 1px solid #d0d4da; border-radius: 6px; font-family: var(--font-body); font-size: 0.92rem;
+    }
+    .vendor-form-card textarea { min-height: 80px; resize: vertical; }
+    .vendor-cat-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 12px; padding: 10px; border: 1px solid #e0e4ea; border-radius: 8px; max-height: 180px; overflow-y: auto; }
+    .vendor-cat-checks label { font-weight: normal; font-size: 0.88rem; display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; }
+    .vendor-rec-row { display: flex; gap: 14px; }
+    .vendor-rec-row label { font-weight: normal; font-size: 0.92rem; display: flex; align-items: center; gap: 6px; }
+    .vendor-form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+    .vendor-status { padding: 10px 14px; border-radius: 8px; margin-top: 12px; display: none; }
+    .vendor-status.error { background: #fde8e6; color: #8a1f12; display: block; }
+    .vendor-status.success { background: #e6f4ea; color: #1d5b2e; display: block; }
+
+    .auth-gate { background: #fff; border-radius: 12px; padding: 40px 24px; text-align: center; box-shadow: var(--shadow-md); }
+    .empty { text-align: center; padding: 40px 20px; color: var(--text-light); }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="navbar scrolled" id="navbar">
+    <div class="container">
+      <a href="index.html" class="nav-brand">
+        <img src="images/LogoFlower_Edited.png" alt="Glenridge Community Logo">
+        Glenridge Community
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="events.html">Events</a>
+        <a href="contact.html">Contact</a>
+        <a href="members.html" class="nav-cta active">Members</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="page-hero" style="padding: 100px 0 30px;">
+    <div class="container">
+      <h1>Vendor Directory</h1>
+      <p>Neighbor-recommended (and not-recommended) vendors. Add your own and rate the ones you've used.</p>
+    </div>
+  </section>
+
+  <!-- AUTH GATE -->
+  <section class="section" id="authGate" style="display:none;">
+    <div class="vendors-wrap">
+      <div class="auth-gate">
+        <h2>Members Only</h2>
+        <p>Please log in to view and contribute to the vendor directory.</p>
+        <a href="members.html" class="btn btn-primary">Log In</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN -->
+  <section class="section section-alt" id="vendorsSection" style="display:none;">
+    <div class="vendors-wrap">
+
+      <div class="vendors-toolbar">
+        <div class="vendors-search">
+          <input type="search" id="vendorSearch" placeholder="Search by name, category, or description…">
+          <select id="vendorRecFilter">
+            <option value="">All</option>
+            <option value="recommend">Recommended</option>
+            <option value="not_recommend">Not recommended</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-primary" id="addVendorBtn">+ Add Vendor</button>
+      </div>
+
+      <div class="cat-pills" id="catPills"></div>
+
+      <!-- Add/Edit Vendor Form -->
+      <div class="vendor-form-card" id="vendorFormCard" style="display:none;">
+        <h2 id="vendorFormTitle">Add a Vendor</h2>
+        <form id="vendorForm">
+          <input type="hidden" id="vfId">
+          <div class="vendor-form-grid">
+            <div>
+              <label for="vfName">Vendor / Business Name *</label>
+              <input type="text" id="vfName" required maxlength="200">
+            </div>
+            <div>
+              <label for="vfPhone">Phone</label>
+              <input type="tel" id="vfPhone" maxlength="50">
+            </div>
+            <div>
+              <label for="vfEmail">Email</label>
+              <input type="email" id="vfEmail" maxlength="255">
+            </div>
+            <div>
+              <label for="vfWebsite">Website</label>
+              <input type="url" id="vfWebsite" placeholder="https://" maxlength="500">
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="vfAddress">Address (optional)</label>
+              <input type="text" id="vfAddress" maxlength="300">
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label>Categories * (select all that apply)</label>
+              <div class="vendor-cat-checks" id="vfCatChecks"></div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label>Your recommendation</label>
+              <div class="vendor-rec-row">
+                <label><input type="radio" name="vfRec" value="recommend" checked> 👍 I recommend</label>
+                <label><input type="radio" name="vfRec" value="not_recommend"> 👎 I do not recommend</label>
+              </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="vfDescription">Notes / Description</label>
+              <textarea id="vfDescription" placeholder="Why you recommend (or don't), services they provided, pricing, etc."></textarea>
+            </div>
+          </div>
+          <div class="vendor-status" id="vfStatus"></div>
+          <div class="vendor-form-actions">
+            <button type="button" class="btn btn-outline" id="vfCancelBtn" style="background:#eee; color:#333; border-color:#ccc;">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="vfSaveBtn">Save Vendor</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Vendor list -->
+      <div id="vendorsGrid" class="vendors-grid">
+        <div class="empty">Loading vendors…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DETAIL MODAL -->
+  <div class="vendor-overlay" id="vendorOverlay" aria-hidden="true">
+    <div class="vendor-modal" id="vendorModal" role="dialog" aria-modal="true">
+      <div class="vendor-modal-head">
+        <div>
+          <h2 id="vmName">Vendor</h2>
+          <div id="vmCats" class="vendor-card-cats" style="margin-top:6px;"></div>
+        </div>
+        <button type="button" class="close-btn" id="vmClose" aria-label="Close">&times;</button>
+      </div>
+      <div class="vendor-modal-body" id="vmBody"></div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; <span id="footerYear"></span> Glenridge Community HOA</p>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('footerYear').textContent = new Date().getFullYear();
+
+    const $ = id => document.getElementById(id);
+    const authGate = $('authGate');
+    const vendorsSection = $('vendorsSection');
+    const vendorsGrid = $('vendorsGrid');
+    const vendorFormCard = $('vendorFormCard');
+    const catPills = $('catPills');
+    const overlay = $('vendorOverlay');
+    let currentUser = null;
+    let allCategories = [];
+    let allVendors = [];
+    let currentCategory = '';
+    let currentRec = '';
+    let currentSearch = '';
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function starString(rating) {
+      const r = Math.round(Number(rating) || 0);
+      return '★★★★★☆☆☆☆☆'.slice(5 - r, 10 - r);
+    }
+
+    async function init() {
+      try {
+        const me = await fetch('/api/me');
+        if (!me.ok) throw new Error('not auth');
+        const data = await me.json();
+        if (!data || !data.user) throw new Error('not auth');
+        currentUser = data.user;
+      } catch {
+        authGate.style.display = 'block';
+        return;
+      }
+      vendorsSection.style.display = 'block';
+      try {
+        const res = await fetch('/api/vendors/categories');
+        const data = await res.json();
+        allCategories = data.categories || [];
+      } catch { allCategories = []; }
+      renderCatPills();
+      renderCatChecks();
+      await loadVendors();
+    }
+
+    function renderCatPills() {
+      const all = `<button type="button" class="cat-pill ${!currentCategory ? 'active' : ''}" data-cat="">All</button>`;
+      catPills.innerHTML = all + allCategories.map(c =>
+        `<button type="button" class="cat-pill ${currentCategory === c ? 'active' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`
+      ).join('');
+      catPills.querySelectorAll('.cat-pill').forEach(b => {
+        b.addEventListener('click', () => {
+          currentCategory = b.dataset.cat;
+          renderCatPills();
+          loadVendors();
+        });
+      });
+    }
+
+    function renderCatChecks() {
+      $('vfCatChecks').innerHTML = allCategories.map(c =>
+        `<label><input type="checkbox" name="vfCat" value="${esc(c)}"> ${esc(c)}</label>`
+      ).join('');
+    }
+
+    async function loadVendors() {
+      const params = new URLSearchParams();
+      if (currentCategory) params.set('category', currentCategory);
+      if (currentRec) params.set('recommendation', currentRec);
+      if (currentSearch) params.set('q', currentSearch);
+      try {
+        const res = await fetch('/api/vendors?' + params.toString());
+        if (!res.ok) throw new Error('Failed to load.');
+        const data = await res.json();
+        allVendors = data.vendors || [];
+        renderGrid();
+      } catch (e) {
+        vendorsGrid.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+      }
+    }
+
+    function renderGrid() {
+      if (!allVendors.length) {
+        vendorsGrid.innerHTML = `<div class="empty">No vendors yet${currentCategory ? ' in <strong>' + esc(currentCategory) + '</strong>' : ''}. Be the first to add one!</div>`;
+        return;
+      }
+      vendorsGrid.innerHTML = allVendors.map(v => `
+        <div class="vendor-card" data-id="${esc(v.id)}" tabindex="0">
+          <div class="vendor-card-head">
+            <h3 class="vendor-card-name">${esc(v.name)}</h3>
+            <span class="rec-badge rec-${v.recommendation}">${v.recommendation === 'recommend' ? '👍 Rec' : '👎 Not'}</span>
+          </div>
+          <div class="vendor-card-cats">
+            ${(v.categories || []).map(c => `<span class="vendor-cat-tag">${esc(c)}</span>`).join('')}
+          </div>
+          <div class="vendor-rating">
+            <span class="stars">${starString(v.average_rating)}</span>
+            <span>${Number(v.average_rating || 0).toFixed(1)} (${v.review_count} review${v.review_count === 1 ? '' : 's'})</span>
+          </div>
+          ${v.phone ? `<div class="vendor-card-meta">📞 ${esc(v.phone)}</div>` : ''}
+          ${v.description ? `<div class="vendor-card-meta">${esc((v.description || '').slice(0, 100))}${v.description.length > 100 ? '…' : ''}</div>` : ''}
+          <div class="vendor-card-meta" style="margin-top:auto;">Added by ${esc(v.created_by_name || 'Member')}</div>
+        </div>
+      `).join('');
+      vendorsGrid.querySelectorAll('.vendor-card').forEach(card => {
+        const open = () => openVendor(card.dataset.id);
+        card.addEventListener('click', open);
+        card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+      });
+    }
+
+    async function openVendor(id) {
+      try {
+        const res = await fetch('/api/vendors/' + encodeURIComponent(id));
+        if (!res.ok) throw new Error('Failed to load vendor.');
+        const v = await res.json();
+        renderModal(v);
+        overlay.classList.add('active');
+      } catch (e) { alert(e.message); }
+    }
+
+    function closeModal() { overlay.classList.remove('active'); }
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+    $('vmClose').addEventListener('click', closeModal);
+
+    function renderModal(v) {
+      $('vmName').textContent = v.name;
+      $('vmCats').innerHTML = (v.categories || []).map(c => `<span class="vendor-cat-tag">${esc(c)}</span>`).join('');
+
+      const myReview = (v.reviews || []).find(r => r.user_id === currentUser.id);
+      const isOwner = v.created_by_user_id === currentUser.id;
+
+      const infoHtml = `
+        <div class="vendor-info-grid">
+          ${v.phone ? `<div><div class="lbl">Phone</div><a href="tel:${esc(v.phone)}">${esc(v.phone)}</a></div>` : ''}
+          ${v.email ? `<div><div class="lbl">Email</div><a href="mailto:${esc(v.email)}">${esc(v.email)}</a></div>` : ''}
+          ${v.website ? `<div><div class="lbl">Website</div><a href="${esc(v.website)}" target="_blank" rel="noopener">${esc(v.website)}</a></div>` : ''}
+          ${v.address ? `<div><div class="lbl">Address</div>${esc(v.address)}</div>` : ''}
+          <div><div class="lbl">Recommendation</div><span class="rec-badge rec-${v.recommendation}">${v.recommendation === 'recommend' ? '👍 Recommended' : '👎 Not recommended'}</span></div>
+          <div><div class="lbl">Average rating</div><span class="stars">${starString(v.average_rating)}</span> ${Number(v.average_rating || 0).toFixed(1)} (${v.review_count})</div>
+          <div style="grid-column: 1 / -1;"><div class="lbl">Added by</div>${esc(v.created_by_name || 'Member')} · ${new Date(v.created_at).toLocaleDateString()}</div>
+        </div>
+        ${v.description ? `<div><div class="lbl" style="font-size:.78rem;text-transform:uppercase;color:var(--text-light);letter-spacing:.5px;">Notes</div><div style="white-space:pre-wrap;font-size:0.92rem;margin-top:4px;">${esc(v.description)}</div></div>` : ''}
+      `;
+
+      const reviewsHtml = (v.reviews || []).map(r => `
+        <div class="review">
+          <div class="review-head">
+            <div>
+              <strong>${esc(r.reviewer_name)}</strong>
+              <span class="stars" style="margin-left:6px;">${starString(r.rating)}</span>
+              <span class="rec-badge rec-${r.recommendation}" style="margin-left:6px;">${r.recommendation === 'recommend' ? '👍' : '👎'}</span>
+            </div>
+            <div class="review-meta">
+              ${new Date(r.created_at).toLocaleDateString()}
+              ${r.user_id === currentUser.id ? `<button type="button" class="btn-link" data-del-review="${esc(r.id)}" style="background:transparent;border:none;color:#c0392b;cursor:pointer;font-size:.82rem;margin-left:6px;">Delete</button>` : ''}
+            </div>
+          </div>
+          ${r.comment ? `<div class="review-comment">${esc(r.comment)}</div>` : ''}
+        </div>
+      `).join('') || '<p class="review-meta">No reviews yet — be the first!</p>';
+
+      const myRating = myReview ? Number(myReview.rating) : 0;
+      const myRec = myReview ? myReview.recommendation : 'recommend';
+      const myComment = myReview ? (myReview.comment || '') : '';
+
+      const formHtml = `
+        <h3 class="vendor-section-h">${myReview ? 'Update your review' : 'Add your review'}</h3>
+        <div class="review-form">
+          <label>Star rating *</label>
+          <div class="stars-input" id="myStars" data-rating="${myRating}">
+            ${[1,2,3,4,5].map(i => `<span class="star ${i <= myRating ? 'active' : ''}" data-val="${i}">★</span>`).join('')}
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <label style="margin:0;">Recommendation:</label>
+            <select id="myRec">
+              <option value="recommend" ${myRec === 'recommend' ? 'selected' : ''}>👍 Recommend</option>
+              <option value="not_recommend" ${myRec === 'not_recommend' ? 'selected' : ''}>👎 Not recommend</option>
+            </select>
+          </div>
+          <label for="myComment">Comments (optional)</label>
+          <textarea id="myComment" placeholder="Share your experience…">${esc(myComment)}</textarea>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" id="saveReviewBtn">${myReview ? 'Update Review' : 'Submit Review'}</button>
+          </div>
+        </div>
+      `;
+
+      const ownerActions = (isOwner || (currentUser && currentUser.is_admin))
+        ? `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+             <button type="button" class="btn btn-outline" id="vmEditBtn" style="background:#eee;color:#333;border-color:#ccc;">Edit</button>
+             <button type="button" class="btn btn-outline" id="vmDeleteBtn" style="background:#fde8e6;color:#8a1f12;border-color:#f5b7b1;">Delete Vendor</button>
+           </div>` : '';
+
+      $('vmBody').innerHTML = infoHtml + ownerActions
+        + `<h3 class="vendor-section-h">Reviews (${v.review_count})</h3>` + reviewsHtml + formHtml;
+
+      // Star input
+      const stars = $('vmBody').querySelectorAll('#myStars .star');
+      let chosen = myRating;
+      stars.forEach(s => {
+        s.addEventListener('mouseenter', () => {
+          const val = Number(s.dataset.val);
+          stars.forEach(x => x.classList.toggle('hover', Number(x.dataset.val) <= val));
+        });
+        s.addEventListener('mouseleave', () => stars.forEach(x => x.classList.remove('hover')));
+        s.addEventListener('click', () => {
+          chosen = Number(s.dataset.val);
+          $('myStars').dataset.rating = chosen;
+          stars.forEach(x => x.classList.toggle('active', Number(x.dataset.val) <= chosen));
+        });
+      });
+
+      // Save review
+      $('saveReviewBtn').addEventListener('click', async () => {
+        const rating = Number($('myStars').dataset.rating);
+        if (!(rating >= 1 && rating <= 5)) { alert('Please pick a star rating.'); return; }
+        const body = {
+          rating,
+          recommendation: $('myRec').value,
+          comment: $('myComment').value.trim()
+        };
+        try {
+          const res = await fetch('/api/vendors/' + encodeURIComponent(v.id) + '/reviews', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Failed to save review.');
+          await openVendor(v.id);
+          await loadVendors();
+        } catch (e) { alert(e.message); }
+      });
+
+      // Delete own review
+      $('vmBody').querySelectorAll('[data-del-review]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete your review?')) return;
+          try {
+            const res = await fetch('/api/vendors/' + encodeURIComponent(v.id) + '/reviews/' + encodeURIComponent(btn.dataset.delReview), { method: 'DELETE' });
+            if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || 'Failed to delete.'); }
+            await openVendor(v.id);
+            await loadVendors();
+          } catch (e) { alert(e.message); }
+        });
+      });
+
+      // Edit / delete vendor
+      const editBtn = $('vmEditBtn');
+      if (editBtn) editBtn.addEventListener('click', () => { closeModal(); openForm(v); });
+      const delBtn = $('vmDeleteBtn');
+      if (delBtn) delBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this vendor and ALL of its reviews? This cannot be undone.')) return;
+        try {
+          const res = await fetch('/api/vendors/' + encodeURIComponent(v.id), { method: 'DELETE' });
+          if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || 'Failed to delete.'); }
+          closeModal();
+          loadVendors();
+        } catch (e) { alert(e.message); }
+      });
+    }
+
+    // ── Add / Edit Vendor form ──
+    function openForm(vendor) {
+      vendorFormCard.style.display = 'block';
+      $('vendorFormTitle').textContent = vendor ? 'Edit Vendor' : 'Add a Vendor';
+      $('vfId').value = vendor ? vendor.id : '';
+      $('vfName').value = vendor ? vendor.name : '';
+      $('vfPhone').value = vendor && vendor.phone ? vendor.phone : '';
+      $('vfEmail').value = vendor && vendor.email ? vendor.email : '';
+      $('vfWebsite').value = vendor && vendor.website ? vendor.website : '';
+      $('vfAddress').value = vendor && vendor.address ? vendor.address : '';
+      $('vfDescription').value = vendor && vendor.description ? vendor.description : '';
+      const recVal = vendor ? vendor.recommendation : 'recommend';
+      document.querySelectorAll('input[name=vfRec]').forEach(r => { r.checked = (r.value === recVal); });
+      const cats = (vendor && vendor.categories) || [];
+      document.querySelectorAll('input[name=vfCat]').forEach(c => { c.checked = cats.includes(c.value); });
+      $('vfStatus').className = 'vendor-status'; $('vfStatus').textContent = '';
+      vendorFormCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function closeForm() {
+      vendorFormCard.style.display = 'none';
+      $('vendorForm').reset();
+      document.querySelectorAll('input[name=vfCat]').forEach(c => c.checked = false);
+    }
+    $('addVendorBtn').addEventListener('click', () => openForm(null));
+    $('vfCancelBtn').addEventListener('click', closeForm);
+
+    $('vendorForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = $('vfId').value;
+      const cats = Array.from(document.querySelectorAll('input[name=vfCat]:checked')).map(c => c.value);
+      if (!cats.length) { showFormStatus('Please select at least one category.', 'error'); return; }
+      const body = {
+        name: $('vfName').value.trim(),
+        phone: $('vfPhone').value.trim(),
+        email: $('vfEmail').value.trim(),
+        website: $('vfWebsite').value.trim(),
+        address: $('vfAddress').value.trim(),
+        description: $('vfDescription').value.trim(),
+        categories: cats,
+        recommendation: document.querySelector('input[name=vfRec]:checked').value
+      };
+      const url = id ? '/api/vendors/' + encodeURIComponent(id) : '/api/vendors';
+      const method = id ? 'PUT' : 'POST';
+      try {
+        $('vfSaveBtn').disabled = true;
+        const res = await fetch(url, {
+          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save vendor.');
+        showFormStatus(id ? 'Vendor updated.' : 'Vendor added.', 'success');
+        setTimeout(() => { closeForm(); loadVendors(); }, 600);
+      } catch (e) {
+        showFormStatus(e.message, 'error');
+      } finally {
+        $('vfSaveBtn').disabled = false;
+      }
+    });
+
+    function showFormStatus(msg, kind) {
+      const el = $('vfStatus');
+      el.className = 'vendor-status ' + kind;
+      el.textContent = msg;
+    }
+
+    // Filters
+    let searchTimer;
+    $('vendorSearch').addEventListener('input', e => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { currentSearch = e.target.value.trim(); loadVendors(); }, 250);
+    });
+    $('vendorRecFilter').addEventListener('change', e => { currentRec = e.target.value; loadVendors(); });
+
+    init();
+  </script>
+</body>
+</html>

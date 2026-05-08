@@ -333,6 +333,42 @@ async function initDb() {
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
+  // ── Vendor directory (member-contributed) ─────────────────
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS vendors (
+      id VARCHAR(36) PRIMARY KEY,
+      created_by_user_id VARCHAR(36) NOT NULL,
+      created_by_name VARCHAR(200),
+      name VARCHAR(200) NOT NULL,
+      website VARCHAR(500),
+      email VARCHAR(255),
+      phone VARCHAR(50),
+      address VARCHAR(300),
+      categories_json TEXT NOT NULL,
+      recommendation VARCHAR(20) NOT NULL DEFAULT 'recommend',
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX (created_by_user_id),
+      INDEX (recommendation)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS vendor_reviews (
+      id VARCHAR(36) PRIMARY KEY,
+      vendor_id VARCHAR(36) NOT NULL,
+      user_id VARCHAR(36) NOT NULL,
+      reviewer_name VARCHAR(200) NOT NULL,
+      rating TINYINT NOT NULL,
+      recommendation VARCHAR(20) NOT NULL DEFAULT 'recommend',
+      comment TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_review_per_user (vendor_id, user_id),
+      INDEX (vendor_id)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+
   // ── Newsletter tables ───────────────────────────────
   await conn.query(`
     CREATE TABLE IF NOT EXISTS nl_newsletters (
@@ -2735,6 +2771,252 @@ app.post('/api/admin/reimbursements/:id/deny', requireAdmin, async (req, res) =>
   } catch (err) {
     console.error('Reimbursement deny error:', err);
     res.status(500).json({ error: err.message || 'Failed to deny.' });
+  }
+});
+
+// ── Vendor Directory Routes ─────────────────────────────
+
+const VENDOR_CATEGORIES = [
+  'Plumbing', 'Electrician', 'HVAC', 'Roofing', 'Landscaping', 'Lawn Care',
+  'Tree Service', 'Drywall', 'Painting', 'Flooring', 'Carpentry', 'Handyman',
+  'Pest Control', 'Cleaning', 'Appliance Repair', 'Garage Door',
+  'Windows / Glass', 'Concrete / Masonry', 'Pool Service', 'Locksmith',
+  'Moving', 'Pressure Washing', 'Gutter Service', 'Other'
+];
+
+function normalizeCategories(input) {
+  let arr = [];
+  if (Array.isArray(input)) arr = input;
+  else if (typeof input === 'string') {
+    try { const p = JSON.parse(input); if (Array.isArray(p)) arr = p; else arr = [input]; }
+    catch { arr = input.split(',').map(s => s.trim()); }
+  }
+  arr = arr.map(s => String(s || '').trim()).filter(Boolean);
+  // Dedupe, preserve order
+  const seen = new Set();
+  return arr.filter(c => { const k = c.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+function vendorOwnerName(req) {
+  return req.session.userName || 'Member';
+}
+
+async function loadVendorReviews(vendorId) {
+  const reviews = await dbAll(
+    'SELECT id, user_id, reviewer_name, rating, recommendation, comment, created_at, updated_at FROM vendor_reviews WHERE vendor_id = ? ORDER BY created_at DESC',
+    [vendorId]
+  );
+  let avg = 0;
+  if (reviews.length) {
+    avg = reviews.reduce((s, r) => s + Number(r.rating || 0), 0) / reviews.length;
+  }
+  return { reviews, average_rating: Number(avg.toFixed(2)), review_count: reviews.length };
+}
+
+function shapeVendor(v) {
+  let categories = [];
+  try { categories = JSON.parse(v.categories_json || '[]'); } catch {}
+  return {
+    id: v.id,
+    created_by_user_id: v.created_by_user_id,
+    created_by_name: v.created_by_name,
+    name: v.name,
+    website: v.website,
+    email: v.email,
+    phone: v.phone,
+    address: v.address,
+    categories,
+    recommendation: v.recommendation,
+    description: v.description,
+    created_at: v.created_at,
+    updated_at: v.updated_at
+  };
+}
+
+// GET /api/vendors/categories — canonical category list
+app.get('/api/vendors/categories', (req, res) => {
+  res.json({ categories: VENDOR_CATEGORIES });
+});
+
+// GET /api/vendors — list (optional ?category=, ?recommendation=, ?q=)
+app.get('/api/vendors', requireAuth, async (req, res) => {
+  try {
+    const rows = await dbAll('SELECT * FROM vendors ORDER BY name ASC');
+    let list = rows.map(shapeVendor);
+    const cat = (req.query.category || '').trim();
+    const rec = (req.query.recommendation || '').trim();
+    const q = (req.query.q || '').trim().toLowerCase();
+    if (cat) list = list.filter(v => v.categories.some(c => c.toLowerCase() === cat.toLowerCase()));
+    if (rec) list = list.filter(v => v.recommendation === rec);
+    if (q) list = list.filter(v =>
+      v.name.toLowerCase().includes(q) ||
+      (v.description || '').toLowerCase().includes(q) ||
+      v.categories.some(c => c.toLowerCase().includes(q))
+    );
+    // Aggregate review stats per vendor
+    const ids = list.map(v => v.id);
+    const stats = {};
+    if (ids.length) {
+      const placeholders = ids.map(() => '?').join(',');
+      const rs = await dbAll(
+        `SELECT vendor_id, COUNT(*) AS review_count, AVG(rating) AS avg_rating
+         FROM vendor_reviews WHERE vendor_id IN (${placeholders}) GROUP BY vendor_id`,
+        ids
+      );
+      for (const r of rs) stats[r.vendor_id] = { review_count: Number(r.review_count), average_rating: Number(Number(r.avg_rating).toFixed(2)) };
+    }
+    list = list.map(v => ({ ...v, review_count: stats[v.id]?.review_count || 0, average_rating: stats[v.id]?.average_rating || 0 }));
+    res.json({ vendors: list });
+  } catch (err) {
+    console.error('Vendor list error:', err);
+    res.status(500).json({ error: 'Failed to load vendors.' });
+  }
+});
+
+// GET /api/vendors/:id — detail with reviews
+app.get('/api/vendors/:id', requireAuth, async (req, res) => {
+  try {
+    const v = await dbGet('SELECT * FROM vendors WHERE id = ?', [req.params.id]);
+    if (!v) return res.status(404).json({ error: 'Vendor not found.' });
+    const { reviews, average_rating, review_count } = await loadVendorReviews(v.id);
+    res.json({ ...shapeVendor(v), reviews, average_rating, review_count });
+  } catch (err) {
+    console.error('Vendor detail error:', err);
+    res.status(500).json({ error: 'Failed to load vendor.' });
+  }
+});
+
+// POST /api/vendors — create
+app.post('/api/vendors', requireAuth, async (req, res) => {
+  try {
+    const { name, website, email, phone, address, categories, recommendation, description } = req.body;
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) return res.status(400).json({ error: 'Vendor name is required.' });
+    const cats = normalizeCategories(categories);
+    if (!cats.length) return res.status(400).json({ error: 'Select at least one category.' });
+    const rec = recommendation === 'not_recommend' ? 'not_recommend' : 'recommend';
+    const id = uuidv4();
+    const user = await dbGet('SELECT first_name, last_name FROM users WHERE id = ?', [req.session.userId]);
+    const creatorName = user ? `${user.first_name} ${user.last_name}` : vendorOwnerName(req);
+    await dbRun(`
+      INSERT INTO vendors (id, created_by_user_id, created_by_name, name, website, email, phone, address, categories_json, recommendation, description)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id, req.session.userId, creatorName, trimmedName,
+      String(website || '').trim() || null,
+      String(email || '').trim() || null,
+      String(phone || '').trim() || null,
+      String(address || '').trim() || null,
+      JSON.stringify(cats),
+      rec,
+      String(description || '').trim() || null
+    ]);
+    res.json({ success: true, id });
+  } catch (err) {
+    console.error('Vendor create error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create vendor.' });
+  }
+});
+
+// PUT /api/vendors/:id — update (creator or admin)
+app.put('/api/vendors/:id', requireAuth, async (req, res) => {
+  try {
+    const v = await dbGet('SELECT * FROM vendors WHERE id = ?', [req.params.id]);
+    if (!v) return res.status(404).json({ error: 'Vendor not found.' });
+    if (v.created_by_user_id !== req.session.userId && !req.session.isAdmin) {
+      return res.status(403).json({ error: 'Only the contributor or an admin can edit this vendor.' });
+    }
+    const { name, website, email, phone, address, categories, recommendation, description } = req.body;
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) return res.status(400).json({ error: 'Vendor name is required.' });
+    const cats = normalizeCategories(categories);
+    if (!cats.length) return res.status(400).json({ error: 'Select at least one category.' });
+    const rec = recommendation === 'not_recommend' ? 'not_recommend' : 'recommend';
+    await dbRun(`
+      UPDATE vendors SET name = ?, website = ?, email = ?, phone = ?, address = ?,
+        categories_json = ?, recommendation = ?, description = ? WHERE id = ?
+    `, [
+      trimmedName,
+      String(website || '').trim() || null,
+      String(email || '').trim() || null,
+      String(phone || '').trim() || null,
+      String(address || '').trim() || null,
+      JSON.stringify(cats),
+      rec,
+      String(description || '').trim() || null,
+      req.params.id
+    ]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Vendor update error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update vendor.' });
+  }
+});
+
+// DELETE /api/vendors/:id — creator or admin
+app.delete('/api/vendors/:id', requireAuth, async (req, res) => {
+  try {
+    const v = await dbGet('SELECT * FROM vendors WHERE id = ?', [req.params.id]);
+    if (!v) return res.status(404).json({ error: 'Vendor not found.' });
+    if (v.created_by_user_id !== req.session.userId && !req.session.isAdmin) {
+      return res.status(403).json({ error: 'Only the contributor or an admin can delete this vendor.' });
+    }
+    await dbRun('DELETE FROM vendor_reviews WHERE vendor_id = ?', [req.params.id]);
+    await dbRun('DELETE FROM vendors WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Vendor delete error:', err);
+    res.status(500).json({ error: 'Failed to delete vendor.' });
+  }
+});
+
+// POST /api/vendors/:id/reviews — create or update the user's review (one per user per vendor)
+app.post('/api/vendors/:id/reviews', requireAuth, async (req, res) => {
+  try {
+    const v = await dbGet('SELECT id FROM vendors WHERE id = ?', [req.params.id]);
+    if (!v) return res.status(404).json({ error: 'Vendor not found.' });
+    const rating = parseInt(req.body.rating, 10);
+    if (!(rating >= 1 && rating <= 5)) return res.status(400).json({ error: 'Rating must be 1–5 stars.' });
+    const rec = req.body.recommendation === 'not_recommend' ? 'not_recommend' : 'recommend';
+    const comment = String(req.body.comment || '').trim() || null;
+    const user = await dbGet('SELECT first_name, last_name FROM users WHERE id = ?', [req.session.userId]);
+    const reviewerName = user ? `${user.first_name} ${user.last_name}` : vendorOwnerName(req);
+
+    const existing = await dbGet('SELECT id FROM vendor_reviews WHERE vendor_id = ? AND user_id = ?',
+      [req.params.id, req.session.userId]);
+    if (existing) {
+      await dbRun(
+        'UPDATE vendor_reviews SET rating = ?, recommendation = ?, comment = ?, reviewer_name = ? WHERE id = ?',
+        [rating, rec, comment, reviewerName, existing.id]
+      );
+      return res.json({ success: true, id: existing.id, updated: true });
+    }
+    const id = uuidv4();
+    await dbRun(`
+      INSERT INTO vendor_reviews (id, vendor_id, user_id, reviewer_name, rating, recommendation, comment)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [id, req.params.id, req.session.userId, reviewerName, rating, rec, comment]);
+    res.json({ success: true, id });
+  } catch (err) {
+    console.error('Vendor review error:', err);
+    res.status(500).json({ error: err.message || 'Failed to save review.' });
+  }
+});
+
+// DELETE /api/vendors/:id/reviews/:reviewId — owner of the review or admin
+app.delete('/api/vendors/:id/reviews/:reviewId', requireAuth, async (req, res) => {
+  try {
+    const r = await dbGet('SELECT * FROM vendor_reviews WHERE id = ? AND vendor_id = ?',
+      [req.params.reviewId, req.params.id]);
+    if (!r) return res.status(404).json({ error: 'Review not found.' });
+    if (r.user_id !== req.session.userId && !req.session.isAdmin) {
+      return res.status(403).json({ error: 'You can only delete your own review.' });
+    }
+    await dbRun('DELETE FROM vendor_reviews WHERE id = ?', [req.params.reviewId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Vendor review delete error:', err);
+    res.status(500).json({ error: 'Failed to delete review.' });
   }
 });
 
