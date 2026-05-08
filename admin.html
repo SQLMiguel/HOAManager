@@ -84,6 +84,8 @@
     .reimb-approval-col, .reimb-approval-cell { text-align: center; }
     .reimb-actions-col, .reimb-actions-cell { text-align: right; white-space: nowrap; }
     .reimb-actions-cell .btn-outline { padding: 6px 12px; font-size: 0.82rem; }
+    tr.reimb-row { cursor: pointer; }
+    tr.reimb-row:focus { outline: 2px solid var(--primary, #2c5f3a); outline-offset: -2px; }
     .reimb-meta { font-size: 0.78rem; color: var(--text-light); }
     .reimb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 30px 16px; overflow-y: auto; }
     .reimb-overlay.active { display: flex; }
@@ -631,7 +633,7 @@
             <button class="admin-tab" data-reimb-filter="pending">Pending</button>
             <button class="admin-tab" data-reimb-filter="approved">Approved</button>
             <button class="admin-tab" data-reimb-filter="denied">Denied</button>
-            <button class="admin-tab" data-reimb-filter="all">All</button>
+            <button class="admin-tab active" data-reimb-filter="all">All</button>
             <button class="btn btn-outline" id="reimbRefreshBtn" type="button">Refresh</button>
           </div>
 
@@ -1419,7 +1421,7 @@
     if (smsHistoryRefreshBtn) smsHistoryRefreshBtn.addEventListener('click', loadSmsHistory);
 
     // ── Reimbursement queue ────────────────────────────────────
-    let reimbCurrentFilter = 'pending';
+    let reimbCurrentFilter = 'all';
     function reimbEsc(s) {
       return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1441,7 +1443,7 @@
         tbody.innerHTML = list.map(r => {
           const dt = new Date(r.submitted_at).toLocaleDateString();
           const badgeClass = r.status === 'approved' ? 'badge-approved' : (r.status === 'denied' ? 'badge-denied' : 'badge-pending');
-          return `<tr data-rid="${reimbEsc(r.id)}">
+          return `<tr class="reimb-row" data-rid="${reimbEsc(r.id)}" tabindex="0" title="Click to view details and receipts">
             <td>${reimbEsc(dt)}</td>
             <td>${reimbEsc(r.submitter_name)}<br><span class="reimb-meta">${reimbEsc(r.submitter_email || '')}</span></td>
             <td>${reimbEsc(r.association_name)}</td>
@@ -1449,13 +1451,24 @@
             <td class="reimb-approval-cell">${r.approval_count || 0} / 2</td>
             <td><span class="badge ${badgeClass}">${reimbEsc(r.status)}</span></td>
             <td class="reimb-actions-cell">
-              <button class="btn btn-outline reimb-view" data-id="${reimbEsc(r.id)}">View</button>
+              <button type="button" class="btn btn-outline reimb-view" data-id="${reimbEsc(r.id)}">View</button>
             </td>
           </tr>`;
         }).join('');
 
+        tbody.querySelectorAll('.reimb-row').forEach(row => {
+          const open = () => openReimbDetail(row.dataset.rid);
+          row.addEventListener('click', e => {
+            // Let explicit View button handle its own click without double-firing
+            if (e.target.closest('.reimb-view')) return;
+            open();
+          });
+          row.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+          });
+        });
         tbody.querySelectorAll('.reimb-view').forEach(btn => {
-          btn.addEventListener('click', () => openReimbDetail(btn.dataset.id));
+          btn.addEventListener('click', e => { e.stopPropagation(); openReimbDetail(btn.dataset.id); });
         });
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="7" class="sms-empty">Failed to load.</td></tr>';
