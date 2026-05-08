@@ -78,6 +78,29 @@
       letter-spacing: 0.5px; color: var(--text-light); font-weight: 600; border-bottom: 2px solid #e0e0e0; }
     .pool-table td { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem; vertical-align: middle; }
     .pool-table tr:hover td { background: #f8fdf9; }
+
+    /* Reimbursement queue */
+    .reimb-amt-col, .reimb-amt-cell { text-align: right; white-space: nowrap; }
+    .reimb-approval-col, .reimb-approval-cell { text-align: center; }
+    .reimb-actions-col, .reimb-actions-cell { text-align: right; white-space: nowrap; }
+    .reimb-actions-cell .btn-outline { padding: 6px 12px; font-size: 0.82rem; }
+    .reimb-meta { font-size: 0.78rem; color: var(--text-light); }
+    .reimb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 30px 16px; overflow-y: auto; }
+    .reimb-overlay.active { display: flex; }
+    .reimb-modal { background: #fff; border-radius: 12px; max-width: 720px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+    .reimb-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid #eee; }
+    .reimb-modal-head h3 { margin: 0; font-size: 1.15rem; }
+    .reimb-close { background: transparent; border: none; font-size: 1.6rem; cursor: pointer; color: #666; }
+    .reimb-modal-body { padding: 18px 22px 22px; }
+    .reimb-modal-body h4 { margin: 18px 0 6px; font-size: 0.95rem; }
+    .reimb-modal-body ul { padding-left: 18px; }
+    .reimb-modal-body .reimb-pre { white-space: pre-line; }
+    .reimb-items { margin-top: 6px; }
+    .reimb-modal-actions { margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }
+    .reimb-comment { width: 100%; padding: 8px 10px; border: 1px solid #d0d5dd; border-radius: 6px; font-family: var(--font-body); font-size: 0.88rem; resize: vertical; }
+    .reimb-btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+    .reimb-btn-row button { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.85rem; font-family: var(--font-body); }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; }
     .pool-table .actions { display: flex; gap: 6px; }
     .pool-table .actions button { padding: 5px 10px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.78rem; font-weight: 600; font-family: var(--font-body); }
     .pool-household-summary { margin-top: 14px; padding: 14px; border: 1px solid #dfe4ea; border-radius: 10px; background: #fbfcfd; }
@@ -307,6 +330,7 @@
           <div class="admin-tab-group">
             <button class="admin-tab" data-filter="pool">🏊 Pool Management</button>
             <button class="admin-tab" data-filter="sms">📱 SMS Alerts</button>
+            <button class="admin-tab" data-filter="reimbursements">💰 Reimbursements</button>
             <a href="newsletter-admin.html" class="admin-tab">📰 Newsletter</a>
           </div>
         </div>
@@ -357,7 +381,7 @@
 
         <div class="pool-sub-tabs">
           <button class="pool-sub-tab active" data-pool-panel="poolMembers">Pool Members</button>
-          <button class="pool-sub-tab" data-pool-panel="poolWalletRequests">Wallet Pass Requests</button>
+          <button class="pool-sub-tab" data-pool-panel="poolWalletRequests">Phone Registrations</button>
           <button class="pool-sub-tab" data-pool-panel="poolSchedules">Schedules</button>
           <button class="pool-sub-tab" data-pool-panel="poolEntryTypes">Entry Types</button>
           <button class="pool-sub-tab" data-pool-panel="poolAccessCheck">Access Check</button>
@@ -385,12 +409,17 @@
           </div>
         </div>
 
-        <!-- ── Wallet Pass Requests Panel ── -->
+        <!-- ── Phone Registrations Panel ── -->
         <div class="pool-panel" id="poolWalletRequests">
-          <h4>📱 Member Wallet Pass Requests</h4>
-          <p class="pool-wallet-desc">Members register their phone type here. Send the appropriate wallet pass via email, then mark it as sent.</p>
+          <h4>📱 Member Phone Registrations</h4>
+          <p class="pool-wallet-desc">
+            Members register a phone here so they can open the pool gate using the
+            <strong>Glenridge Pool</strong> mobile app. Confirm each registration by emailing
+            the member install instructions for the app, then mark it as notified.
+            (Wallet passes are no longer issued.)
+          </p>
           <div id="walletRequestsList">
-            <p class="pool-wallet-loading">Loading requests...</p>
+            <p class="pool-wallet-loading">Loading registrations...</p>
           </div>
         </div>
 
@@ -575,6 +604,43 @@
             </div>
             <div class="sms-history-wrap" id="smsHistoryList">
               <p class="sms-empty">Loading history…</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== REIMBURSEMENT QUEUE SECTION ========== -->
+      <div class="pool-section" id="reimbSection">
+        <h2 class="sms-title">💰 Reimbursement Requests</h2>
+        <p class="sms-subtitle">Members submit reimbursement requests with receipts. Two board approvals are required before the package is forwarded to Capstone for payment.</p>
+
+        <div class="pool-panel active sms-panel">
+          <div class="pool-toolbar sms-toolbar">
+            <button class="admin-tab" data-reimb-filter="pending">Pending</button>
+            <button class="admin-tab" data-reimb-filter="approved">Approved</button>
+            <button class="admin-tab" data-reimb-filter="denied">Denied</button>
+            <button class="admin-tab" data-reimb-filter="all">All</button>
+            <button class="btn btn-outline" id="reimbRefreshBtn" type="button">Refresh</button>
+          </div>
+
+          <div class="pool-modal sms-card">
+            <div class="sms-recipients-wrap">
+              <table class="pool-table" id="reimbTable">
+                <thead>
+                  <tr>
+                    <th>Submitted</th>
+                    <th>Member</th>
+                    <th>Association</th>
+                    <th class="reimb-amt-col">Amount</th>
+                    <th class="reimb-approval-col">Approvals</th>
+                    <th>Status</th>
+                    <th class="reimb-actions-col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="reimbTableBody">
+                  <tr><td colspan="7" class="sms-empty">Loading…</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -1099,6 +1165,7 @@
     const statsMembersGroup = document.getElementById('statsMembers');
     const statsPoolGroup = document.getElementById('statsPool');
     const trendChartWrapper = document.getElementById('trendChartWrapper');
+    const reimbSection = document.getElementById('reimbSection');
     let poolEntryTypes = [];
     let poolMembers = [];
     let poolSchedules = [];
@@ -1117,6 +1184,7 @@
           statsPoolGroup.style.display = '';
           trendChartWrapper.style.display = '';
           poolSection.classList.add('active');
+          reimbSection.classList.remove('active');
           loadPoolData();
           loadPoolStats();
           loadPoolTrend();
@@ -1127,8 +1195,18 @@
           statsMembersGroup.style.display = '';
           statsPoolGroup.style.display = 'none';
           trendChartWrapper.style.display = 'none';
+          reimbSection.classList.remove('active');
           loadSmsRecipients();
           loadSmsHistory();
+        } else if (tab.dataset.filter === 'reimbursements') {
+          poolSection.classList.remove('active');
+          smsSection.classList.remove('active');
+          userListSection.style.display = 'none';
+          statsMembersGroup.style.display = 'none';
+          statsPoolGroup.style.display = 'none';
+          trendChartWrapper.style.display = 'none';
+          reimbSection.classList.add('active');
+          loadReimbursements();
         } else {
           poolSection.classList.remove('active');
           smsSection.classList.remove('active');
@@ -1136,6 +1214,7 @@
           statsMembersGroup.style.display = '';
           statsPoolGroup.style.display = '';
           trendChartWrapper.style.display = '';
+          reimbSection.classList.remove('active');
           currentFilter = tab.dataset.filter;
           renderUsers();
         }
@@ -1171,7 +1250,7 @@
       }
     }
 
-    // ── Wallet Pass Requests ──
+    // ── Phone Registrations ──
     async function loadWalletRequests() {
       const container = document.getElementById('walletRequestsList');
       if (!container) return;
@@ -1187,23 +1266,23 @@
 
         let html = '';
         if (pending.length > 0) {
-          html += '<h5 class="pool-wallet-heading">⏳ Pending — Need Wallet Pass Emailed (' + pending.length + ')</h5>';
+          html += '<h5 class="pool-wallet-heading">⏳ Pending — Send App Install Instructions (' + pending.length + ')</h5>';
           html += pending.map(r => renderWalletRequestRow(r)).join('');
         }
         if (sent.length > 0) {
-          html += '<h5 class="pool-wallet-heading pool-wallet-heading-sent">✓ Sent (' + sent.length + ')</h5>';
+          html += '<h5 class="pool-wallet-heading pool-wallet-heading-sent">✓ Notified (' + sent.length + ')</h5>';
           html += sent.map(r => renderWalletRequestRow(r)).join('');
         }
         container.innerHTML = html;
 
         container.querySelectorAll('.pool-wallet-mark-sent-btn').forEach(btn => {
           btn.addEventListener('click', async () => {
-            if (!confirm('Mark this wallet pass as sent?')) return;
+            if (!confirm('Mark this member as notified?')) return;
             const id = btn.dataset.requestId;
             const res2 = await fetch('/api/admin/pool/wallet-requests/' + encodeURIComponent(id) + '/mark-sent', { method: 'POST' });
             const result = await res2.json();
             if (result.success) {
-              showAdminNotification('Wallet pass marked as sent.', 'success');
+              showAdminNotification('Marked as notified.', 'success');
               loadWalletRequests();
             } else {
               showAdminNotification(result.error || 'Failed to update.', 'error');
@@ -1211,39 +1290,40 @@
           });
         });
       } catch (e) {
-        container.innerHTML = '<p class="pool-wallet-error">Failed to load wallet requests.</p>';
-        console.error('Wallet requests error:', e);
+        container.innerHTML = '<p class="pool-wallet-error">Failed to load phone registrations.</p>';
+        console.error('Phone registrations error:', e);
       }
     }
 
     function renderWalletRequestRow(r) {
-      const platform = r.device_platform === 'ios' ? '📱 iPhone' : '🤖 Android';
-      const passType = r.device_platform === 'ios' ? 'Apple Wallet' : 'Google Wallet';
+      const isIos = r.device_platform === 'ios';
+      const platform = isIos ? '📱 iPhone' : '🤖 Android';
+      const storeName = isIos ? 'App Store' : 'Google Play';
       const label = r.device_label ? ' — ' + r.device_label : '';
       const date = new Date(r.created_at).toLocaleDateString();
       const isPending = r.wallet_pass_status === 'pending';
       const email = r.user_email || '';
-      const subject = encodeURIComponent('Your Glenridge Pool Wallet Pass — ' + passType);
+      const subject = encodeURIComponent('Glenridge Pool — Mobile App Access');
       const body = encodeURIComponent(
         'Hi ' + r.person_name + ',\n\n' +
-        'Attached is your ' + passType + ' pass for the Glenridge community pool gate.\n\n' +
-        'Please open the attachment on your ' + (r.device_platform === 'ios' ? 'iPhone' : 'Android phone') + ' to add it to your wallet.\n\n' +
+        'Thanks for registering your ' + (isIos ? 'iPhone' : 'Android phone') + ' for pool gate access.\n\n' +
+        'To open the gate from your phone, install the Glenridge Pool app from the ' + storeName + ' and sign in with your HOA account. You must be physically near the pool gate for the app to open it.\n\n' +
         'Thank you,\nGlenridge HOA'
       );
       const mailto = email ? ('mailto:' + encodeURIComponent(email) + '?subject=' + subject + '&body=' + body) : '';
       const emailBtn = (isPending && email)
-        ? '<a href="' + mailto + '" class="btn btn-outline pool-wallet-email-btn" data-request-id="' + r.id + '" style="margin-right:6px;">✉ Email Pass</a>'
+        ? '<a href="' + mailto + '" class="btn btn-outline pool-wallet-email-btn" data-request-id="' + r.id + '" style="margin-right:6px;">✉ Email Instructions</a>'
         : '';
       return '<div class="pool-wallet-row' + (isPending ? ' pool-wallet-pending' : ' pool-wallet-sent') + '">'
         + '<div class="pool-wallet-row-info">'
         + '<strong>' + r.person_name + '</strong>' + label + '<br>'
-        + '<span class="pool-wallet-detail">' + platform + ' · Send ' + passType + ' pass · ' + (email || 'No email on file') + '</span><br>'
+        + '<span class="pool-wallet-detail">' + platform + ' · Send ' + storeName + ' install instructions · ' + (email || 'No email on file') + '</span><br>'
         + '<span class="pool-wallet-date">Registered ' + date + '</span>'
         + '</div>'
         + '<div class="pool-wallet-row-actions">'
         + (isPending
-          ? (emailBtn + '<button type="button" class="btn btn-primary pool-wallet-mark-sent-btn" data-request-id="' + r.id + '">Mark as Sent</button>')
-          : '<span class="pool-wallet-sent-badge">✓ Sent</span>')
+          ? (emailBtn + '<button type="button" class="btn btn-primary pool-wallet-mark-sent-btn" data-request-id="' + r.id + '">Mark as Notified</button>')
+          : '<span class="pool-wallet-sent-badge">✓ Notified</span>')
         + '</div>'
         + '</div>';
     }
@@ -1325,6 +1405,182 @@
     document.getElementById('smsRefreshBtn').addEventListener('click', loadSmsRecipients);
     const smsHistoryRefreshBtn = document.getElementById('smsHistoryRefreshBtn');
     if (smsHistoryRefreshBtn) smsHistoryRefreshBtn.addEventListener('click', loadSmsHistory);
+
+    // ── Reimbursement queue ────────────────────────────────────
+    let reimbCurrentFilter = 'pending';
+    function reimbEsc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function reimbMoney(cents) { return '$' + ((Number(cents) || 0) / 100).toFixed(2); }
+
+    async function loadReimbursements() {
+      const tbody = document.getElementById('reimbTableBody');
+      tbody.innerHTML = '<tr><td colspan="7" class="sms-empty">Loading…</td></tr>';
+      try {
+        const res = await fetch('/api/admin/reimbursements?status=' + encodeURIComponent(reimbCurrentFilter));
+        const data = await res.json();
+        const list = data.requests || [];
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="sms-empty">No reimbursement requests in this view.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.map(r => {
+          const dt = new Date(r.submitted_at).toLocaleDateString();
+          const badgeClass = r.status === 'approved' ? 'badge-approved' : (r.status === 'denied' ? 'badge-denied' : 'badge-pending');
+          return `<tr data-rid="${reimbEsc(r.id)}">
+            <td>${reimbEsc(dt)}</td>
+            <td>${reimbEsc(r.submitter_name)}<br><span class="reimb-meta">${reimbEsc(r.submitter_email || '')}</span></td>
+            <td>${reimbEsc(r.association_name)}</td>
+            <td class="reimb-amt-cell">${reimbMoney(r.total_cents)}</td>
+            <td class="reimb-approval-cell">${r.approval_count || 0} / 2</td>
+            <td><span class="badge ${badgeClass}">${reimbEsc(r.status)}</span></td>
+            <td class="reimb-actions-cell">
+              <button class="btn btn-outline reimb-view" data-id="${reimbEsc(r.id)}">View</button>
+            </td>
+          </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('.reimb-view').forEach(btn => {
+          btn.addEventListener('click', () => openReimbDetail(btn.dataset.id));
+        });
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" class="sms-empty">Failed to load.</td></tr>';
+      }
+    }
+
+    async function openReimbDetail(id) {
+      try {
+        const res = await fetch('/api/reimbursements/' + encodeURIComponent(id));
+        if (!res.ok) throw new Error('Failed to load request.');
+        const r = await res.json();
+
+        const itemsHtml = (r.items || []).map(i =>
+          `<tr><td>${reimbEsc(i.description)}</td><td class="reimb-amt-cell">$${Number(i.amount).toFixed(2)}</td></tr>`
+        ).join('');
+
+        const receiptsHtml = (r.receipts || []).map(rc =>
+          `<li><a href="/api/reimbursements/${encodeURIComponent(r.id)}/receipt/${encodeURIComponent(rc.id)}" target="_blank" rel="noopener">${reimbEsc(rc.original_name || 'receipt')}</a> <span class="reimb-meta">(${(rc.size_bytes/1024).toFixed(0)} KB)</span></li>`
+        ).join('') || '<li class="reimb-meta">No receipts attached.</li>';
+
+        const approvalsHtml = (r.approvals || []).map(a =>
+          `<li><strong>${reimbEsc(a.admin_name)}</strong> — ${reimbEsc(a.decision)} on ${new Date(a.created_at).toLocaleString()}${a.comment ? `<br><span class="reimb-meta">${reimbEsc(a.comment)}</span>` : ''}</li>`
+        ).join('') || '<li class="reimb-meta">No decisions yet.</li>';
+
+        const isPending = r.status === 'pending';
+        const approvalCount = (r.approvals || []).filter(a => a.decision === 'approve').length;
+        const overlay = document.createElement('div');
+        overlay.className = 'pool-modal-overlay reimb-overlay';
+        overlay.innerHTML = `
+          <div class="pool-modal reimb-modal">
+            <div class="reimb-modal-head">
+              <h3>Reimbursement Request</h3>
+              <button class="reimb-close" type="button" aria-label="Close">&times;</button>
+            </div>
+            <div class="reimb-modal-body">
+              <p><strong>${reimbEsc(r.submitter_name)}</strong> &lt;${reimbEsc(r.submitter_email || '')}&gt;<br>
+              Submitted ${new Date(r.submitted_at).toLocaleString()}</p>
+              <p><strong>Association:</strong> ${reimbEsc(r.association_name)}<br>
+              <strong>Account:</strong> ${reimbEsc(r.account_name || '—')} ${r.account_number ? '(' + reimbEsc(r.account_number) + ')' : ''}</p>
+              <p><strong>Mailing address:</strong><br><span class="reimb-pre">${reimbEsc(r.mailing_address)}</span></p>
+
+              <h4>Items</h4>
+              <table class="pool-table reimb-items">
+                <thead><tr><th>Description</th><th class="reimb-amt-col">Amount</th></tr></thead>
+                <tbody>${itemsHtml}</tbody>
+                <tfoot><tr><td><strong>Total</strong></td><td class="reimb-amt-cell"><strong>${reimbMoney(r.total_cents)}</strong></td></tr></tfoot>
+              </table>
+
+              ${r.notes ? `<h4>Notes</h4><p class="reimb-pre">${reimbEsc(r.notes)}</p>` : ''}
+
+              <h4>Receipts</h4>
+              <ul>${receiptsHtml}</ul>
+
+              <h4>Board decisions (${approvalCount}/2)</h4>
+              <ul>${approvalsHtml}</ul>
+
+              ${isPending ? `
+                <div class="reimb-modal-actions">
+                  <textarea id="reimbComment" placeholder="Optional comment / denial reason" rows="2" class="reimb-comment"></textarea>
+                  <div class="reimb-btn-row">
+                    <button type="button" class="btn-deny" id="reimbDenyBtn">Deny</button>
+                    <button type="button" class="btn-approve" id="reimbApproveBtn">Approve (sign)</button>
+                  </div>
+                  <p class="reimb-meta">Two distinct admin approvals are required before this is forwarded to Capstone.</p>
+                </div>
+              ` : `<p class="reimb-meta"><em>This request is already ${reimbEsc(r.status)}.</em></p>`}
+            </div>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+        overlay.classList.add('active');
+
+        const close = () => overlay.remove();
+        overlay.querySelector('.reimb-close').addEventListener('click', close);
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+        const approveBtn = overlay.querySelector('#reimbApproveBtn');
+        const denyBtn = overlay.querySelector('#reimbDenyBtn');
+        if (approveBtn) approveBtn.addEventListener('click', async () => {
+          if (!confirm('Sign your approval for this reimbursement?')) return;
+          approveBtn.disabled = true; approveBtn.textContent = 'Submitting…';
+          try {
+            const cmt = overlay.querySelector('#reimbComment').value.trim();
+            const res = await fetch('/api/admin/reimbursements/' + encodeURIComponent(r.id) + '/approve', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ comment: cmt })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to approve.');
+            if (data.finalized) alert('Two signatures collected. Forwarded to Capstone.');
+            else alert('Approval recorded. ' + (data.approval_count || 1) + ' of 2 board signatures.');
+            close();
+            loadReimbursements();
+          } catch (err) {
+            alert(err.message);
+            approveBtn.disabled = false; approveBtn.textContent = 'Approve (sign)';
+          }
+        });
+        if (denyBtn) denyBtn.addEventListener('click', async () => {
+          const cmt = overlay.querySelector('#reimbComment').value.trim();
+          if (!confirm('Deny this reimbursement request?' + (cmt ? '' : '\n\n(No reason provided. Continue?)'))) return;
+          denyBtn.disabled = true; denyBtn.textContent = 'Submitting…';
+          try {
+            const res = await fetch('/api/admin/reimbursements/' + encodeURIComponent(r.id) + '/deny', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason: cmt })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to deny.');
+            close();
+            loadReimbursements();
+          } catch (err) {
+            alert(err.message);
+            denyBtn.disabled = false; denyBtn.textContent = 'Deny';
+          }
+        });
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    document.querySelectorAll('[data-reimb-filter]').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('[data-reimb-filter]').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        reimbCurrentFilter = b.dataset.reimbFilter;
+        loadReimbursements();
+      });
+    });
+    const reimbRefreshBtn = document.getElementById('reimbRefreshBtn');
+    if (reimbRefreshBtn) reimbRefreshBtn.addEventListener('click', loadReimbursements);
+
+    // Auto-open reimbursements tab if URL hash requests it
+    if (location.hash === '#reimbursements') {
+      const tab = document.querySelector('.admin-tab[data-filter="reimbursements"]');
+      if (tab) tab.click();
+    }
 
     document.getElementById('smsSendBtn').addEventListener('click', async () => {
       const messageEl = document.getElementById('smsMessage');

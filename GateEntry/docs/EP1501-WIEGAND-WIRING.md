@@ -113,31 +113,53 @@ hold two wires; otherwise use a Wago lever connector or wire nut to splice).
 
 ## 6. Wiring Diagram
 
+> ### ⚠️ Signal Direction is One-Way: EP1501 → Pi
+>
+> The two Wiegand data lines are **driven by the reader** (which is already
+> wired into TB2-4 and TB2-5). The Pi only **listens**. Configure GPIO 17 and
+> GPIO 27 as **inputs** in software. Never drive these GPIOs as outputs — doing
+> so would conflict with the reader and can corrupt card reads or damage the
+> reader's output stage.
+>
+> Only **D0, D1, and GND** are tapped from the EP1501.
+> **Do NOT** wire TB2-1 (VO/12 V), TB2-2 (LED), or TB2-3 (BZR) to the Pi.
+
 ```
    ┌──────────── EP1501 TB2 ────────────┐
-   │  TB2-4 (D1) ───┐                   │
-   │  TB2-5 (D0) ───┤ (existing reader  │
-   │  TB2-6 (GND) ──┤  wires stay)      │
-   └────────────────┼───────────────────┘
-                    │  tap each one
-                    ▼
-              ┌──────────────┐
-              │  TXS0108E    │
-   B2 ◄───────┤ B side (5V)  │
-   B1 ◄───────┤              │
-   VB ◄───────┤              │
-   GND ───────┤              │
-              │              │
-              │ A side (3.3V)├──── A2 ──► Pi GPIO 27 (pin 13)
-              │              ├──── A1 ──► Pi GPIO 17 (pin 11)
-              │ VA, OE       ├──────────► Pi 3.3V (pin 1)
-              │ GND          ├──────────► Pi GND  (pin 6)
-              └──────┬───────┘
-                     │
-                     └─── VB ──────────► Pi 5V  (pin 2)
+   │  TB2-4 (CLK / D1) ───┐             │  arrows show signal direction
+   │  TB2-5 (DAT / D0) ───┤             │  (reader drives the line, Pi reads)
+   │  TB2-6 (GND)      ───┤             │
+   └──────────────────────┼─────────────┘
+                          │  tap each one in parallel with the reader
+                          ▼
+                    ┌──────────────┐
+                    │  TXS0108E    │
+   TB2-4 ──────────►┤ B2  ⇄  A2    ├──────► Pi GPIO 27 (pin 13)  [INPUT]
+   TB2-5 ──────────►┤ B1  ⇄  A1    ├──────► Pi GPIO 17 (pin 11)  [INPUT]
+                    │              │
+        Pi 5V  ────►┤ VB           │
+                    │          VA  │◄──── Pi 3.3V (pin 1)
+                    │          OE  │◄──── jumper to VA (enables chip)
+        Pi GND ────►┤ GND          │
+                    │              │
+                    │   B5..B8     │   (unused channels — leave open)
+                    │   A5..A8     │
+                    └──────────────┘
 
-   EP1501 TB2-6 GND ──────────────────► Pi GND (pin 9) [direct]
+   EP1501 TB2-6 GND ─────────────────────► Pi GND (pin 9)  [DIRECT, not via shifter]
+
+   TB2-1 (VO 12 V)   ✗ not connected
+   TB2-2 (LED)       ✗ not connected
+   TB2-3 (BZR)       ✗ not connected
 ```
+
+### Channel pairing summary
+
+| EP1501 line | TXS0108E B-side | TXS0108E A-side | Pi GPIO   | Header pin |
+|-------------|-----------------|-----------------|-----------|------------|
+| TB2-5 (D0)  | B1              | A1              | GPIO 17   | 11         |
+| TB2-4 (D1)  | B2              | A2              | GPIO 27   | 13         |
+| TB2-6 (GND) | —               | —               | GND       | 9 (direct) |
 
 ---
 

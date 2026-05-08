@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reimbursement Request — Glenridge Community</title>
+  <meta name="description" content="Submit a reimbursement request for Glenridge Community HOA-related expenses.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="images/LogoFlower_Edited.png">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .reimb-wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+    .reimb-letterhead { text-align:center; font-size: 0.85rem; color: var(--text-light); margin-bottom: 18px; line-height: 1.5; }
+    .reimb-card { background:#fff; border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow-md); margin-bottom: 28px; }
+    .reimb-card h2 { font-size: 1.4rem; margin-bottom: 18px; border-bottom: 2px solid #e8efe9; padding-bottom: 10px; }
+    .reimb-row { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .reimb-row.three { grid-template-columns: 2fr 1fr 1fr; }
+    @media (max-width: 640px) { .reimb-row, .reimb-row.three { grid-template-columns: 1fr; } }
+    .items-table { width:100%; border-collapse: collapse; margin-top: 8px; }
+    .items-table th { text-align:left; padding: 8px 6px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); border-bottom: 1px solid #ddd; }
+    .items-table td { padding: 6px; vertical-align: top; }
+    .items-table input { width: 100%; padding: 8px 10px; border: 1px solid #d0d4da; border-radius: 6px; font-family: var(--font-body); font-size: 0.92rem; }
+    .items-table .col-amt { width: 140px; }
+    .items-table .col-amt input { text-align: right; }
+    .items-table .col-rm { width: 36px; text-align: center; }
+    .items-table .row-rm { background: transparent; border: none; color: #c0392b; cursor: pointer; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; }
+    .items-table .row-rm:hover { background: #fde8e6; }
+    .items-total { display: flex; justify-content: flex-end; align-items: center; gap: 14px; padding: 14px 6px 0; font-weight: 600; font-size: 1.05rem; }
+    .items-total span.amt { color: var(--primary); font-size: 1.2rem; }
+    .reimb-disclaimer { background: #fff8e1; border-left: 4px solid #f39c12; padding: 14px 18px; border-radius: 8px; margin: 20px 0; font-size: 0.9rem; line-height: 1.55; font-style: italic; }
+    .reimb-files { border: 2px dashed #c8d0d8; border-radius: 10px; padding: 20px; text-align: center; background: #fafbfc; cursor: pointer; transition: all .2s; }
+    .reimb-files.dragover { border-color: var(--primary); background: #f1f9f3; }
+    .reimb-files input[type=file] { display: none; }
+    .reimb-files-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+    .reimb-file-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #fff; border: 1px solid #e0e4ea; border-radius: 6px; font-size: 0.86rem; }
+    .reimb-file-row button { background: transparent; border: none; color: #c0392b; cursor: pointer; font-size: 1rem; }
+    .reimb-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+    .reimb-status { padding: 12px 16px; border-radius: 8px; margin-top: 14px; display: none; }
+    .reimb-status.error { background: #fde8e6; color: #8a1f12; display: block; }
+    .reimb-status.success { background: #e6f4ea; color: #1d5b2e; display: block; }
+    .my-requests-list { display:flex; flex-direction:column; gap: 10px; }
+    .my-request { display: grid; grid-template-columns: 1fr auto auto auto; gap: 14px; align-items: center; padding: 12px 16px; background: #fff; border: 1px solid #e0e4ea; border-radius: 8px; font-size: 0.9rem; }
+    .my-request .badge { padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; }
+    .badge-pending { background: #fff3cd; color: #856404; }
+    .badge-approved { background: #d4edda; color: #155724; }
+    .badge-denied { background: #f8d7da; color: #721c24; }
+    @media (max-width: 600px) { .my-request { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+  <!-- ========== NAVIGATION ========== -->
+  <nav class="navbar scrolled" id="navbar">
+    <div class="container">
+      <a href="index.html" class="nav-brand">
+        <img src="images/LogoFlower_Edited.png" alt="Glenridge Community Logo">
+        Glenridge Community
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="events.html">Events</a>
+        <a href="contact.html">Contact</a>
+        <a href="members.html" class="nav-cta active">Members</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========== HERO ========== -->
+  <section class="page-hero">
+    <div class="hero-shape hero-shape-1"></div>
+    <div class="hero-shape hero-shape-2"></div>
+    <div class="container">
+      <h1>Reimbursement Request</h1>
+      <p>Submit out-of-pocket expenses for HOA-approved purchases.</p>
+    </div>
+  </section>
+
+  <!-- ========== AUTH GATE ========== -->
+  <section class="section" id="authGate" style="display:none;">
+    <div class="container">
+      <div class="member-login-banner fade-in">
+        <h2>Members Only</h2>
+        <p>Please log in as a Glenridge resident to submit a reimbursement request.</p>
+        <div class="member-login-buttons">
+          <a class="btn btn-accent" href="members.html">Go to Member Login</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FORM ========== -->
+  <section class="section section-alt" id="formSection" style="display:none;">
+    <div class="reimb-wrap">
+
+      <div class="reimb-letterhead">
+        Capstone Realty Consultants<br>
+        4622 Country Club Road, Ste 160<br>
+        Winston Salem, NC 27104
+      </div>
+
+      <form id="reimbForm" class="reimb-card" enctype="multipart/form-data">
+        <h2>Reimbursement Request Form</h2>
+
+        <div class="reimb-row">
+          <div class="form-group">
+            <label for="associationName">Association Name *</label>
+            <input type="text" id="associationName" name="association_name" value="Glenridge Community HOA" required>
+          </div>
+          <div class="form-group">
+            <label for="reqDate">Date</label>
+            <input type="date" id="reqDate" disabled>
+          </div>
+        </div>
+
+        <div class="reimb-row">
+          <div class="form-group">
+            <label for="accountName">Account Name</label>
+            <input type="text" id="accountName" name="account_name" placeholder="e.g. Operating Account">
+          </div>
+          <div class="form-group">
+            <label for="accountNumber">Account Number</label>
+            <input type="text" id="accountNumber" name="account_number" placeholder="(if known)">
+          </div>
+        </div>
+
+        <h2 style="margin-top: 28px;">Items Purchased</h2>
+        <table class="items-table" id="itemsTable">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="col-amt" style="text-align:right;">Amount</th>
+              <th class="col-rm"></th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+        <div style="margin-top: 10px;">
+          <button type="button" class="btn btn-outline" id="addItemBtn" style="padding: 6px 14px; font-size: 0.85rem;">+ Add line</button>
+        </div>
+        <div class="items-total">Total: <span class="amt" id="totalDisplay">$0.00</span></div>
+
+        <div class="reimb-disclaimer">
+          Please note that all items purchased for the association must have receipts as proof of purchase.
+          All reimbursement requests must have two signatures from the board in order to release payment.
+          A check will be mailed to the address below.
+        </div>
+
+        <h2>Receipts (Proof of Purchase) *</h2>
+        <label class="reimb-files" id="dropZone">
+          <div>
+            <strong>Click to attach</strong> or drag &amp; drop receipts here<br>
+            <span style="font-size:0.82rem;color:var(--text-light);">JPG, PNG, WEBP, HEIC, or PDF — up to 10 MB each, 12 files max</span>
+          </div>
+          <input type="file" id="filesInput" name="receipts" accept=".jpg,.jpeg,.png,.webp,.heic,.pdf,application/pdf,image/*" multiple>
+          <div class="reimb-files-list" id="filesList"></div>
+        </label>
+
+        <h2 style="margin-top: 28px;">Mailing Address *</h2>
+        <p style="font-size:0.88rem;color:var(--text-light);margin-bottom:10px;">The check will be mailed here.</p>
+        <div class="form-group">
+          <textarea id="mailingAddress" name="mailing_address" rows="3" required placeholder="Street, City, State ZIP"></textarea>
+        </div>
+
+        <h2 style="margin-top: 28px;">Notes (optional)</h2>
+        <div class="form-group">
+          <textarea id="notes" name="notes" rows="3" placeholder="Anything the board should know about this request."></textarea>
+        </div>
+
+        <div class="reimb-status" id="formStatus"></div>
+
+        <div class="reimb-actions">
+          <a href="members.html" class="btn btn-outline">Cancel</a>
+          <button type="submit" class="btn btn-primary" id="submitBtn">Submit Request</button>
+        </div>
+      </form>
+
+      <!-- My past requests -->
+      <div class="reimb-card">
+        <h2>My Reimbursement Requests</h2>
+        <div class="my-requests-list" id="myRequestsList">
+          <p style="color:var(--text-light);font-size:0.9rem;">Loading…</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <script src="js/main.js"></script>
+  <script>
+  (() => {
+    const $ = id => document.getElementById(id);
+    const itemsBody = $('itemsBody');
+    const totalDisplay = $('totalDisplay');
+    const filesInput = $('filesInput');
+    const filesList = $('filesList');
+    const dropZone = $('dropZone');
+    let chosenFiles = [];
+
+    function newRow(desc = '', amt = '') {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" class="item-desc" value="${desc.replace(/"/g,'&quot;')}" placeholder="Item description"></td>
+        <td class="col-amt"><input type="number" step="0.01" min="0" class="item-amt" value="${amt}" placeholder="0.00"></td>
+        <td class="col-rm"><button type="button" class="row-rm" title="Remove">&times;</button></td>
+      `;
+      tr.querySelector('.row-rm').addEventListener('click', () => { tr.remove(); recalc(); ensureMinRows(); });
+      tr.querySelector('.item-amt').addEventListener('input', recalc);
+      itemsBody.appendChild(tr);
+    }
+    function ensureMinRows() {
+      while (itemsBody.children.length < 3) newRow();
+    }
+    function recalc() {
+      let total = 0;
+      itemsBody.querySelectorAll('.item-amt').forEach(i => { total += Number(i.value) || 0; });
+      totalDisplay.textContent = '$' + total.toFixed(2);
+    }
+    $('addItemBtn').addEventListener('click', () => newRow());
+    ensureMinRows();
+    recalc();
+
+    // Date
+    const today = new Date();
+    $('reqDate').value = today.toISOString().slice(0, 10);
+
+    // File handling
+    function renderFiles() {
+      filesList.innerHTML = '';
+      chosenFiles.forEach((f, idx) => {
+        const row = document.createElement('div');
+        row.className = 'reimb-file-row';
+        row.innerHTML = `<span>📎 ${f.name} <span style="color:#888;">(${(f.size/1024).toFixed(0)} KB)</span></span>
+                         <button type="button" data-i="${idx}" title="Remove">&times;</button>`;
+        row.querySelector('button').addEventListener('click', e => {
+          e.preventDefault(); e.stopPropagation();
+          chosenFiles.splice(Number(e.currentTarget.dataset.i), 1);
+          renderFiles();
+        });
+        filesList.appendChild(row);
+      });
+    }
+    filesInput.addEventListener('change', e => {
+      for (const f of e.target.files) chosenFiles.push(f);
+      filesInput.value = '';
+      renderFiles();
+    });
+    ['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+      e.preventDefault(); dropZone.classList.add('dragover');
+    }));
+    ['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+      e.preventDefault(); dropZone.classList.remove('dragover');
+    }));
+    dropZone.addEventListener('drop', e => {
+      for (const f of e.dataTransfer.files) chosenFiles.push(f);
+      renderFiles();
+    });
+
+    // Submit
+    $('reimbForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const status = $('formStatus');
+      status.className = 'reimb-status';
+      status.textContent = '';
+
+      const items = [];
+      itemsBody.querySelectorAll('tr').forEach(tr => {
+        const d = tr.querySelector('.item-desc').value.trim();
+        const a = Number(tr.querySelector('.item-amt').value) || 0;
+        if (d && a > 0) items.push({ description: d, amount: a });
+      });
+      if (items.length === 0) {
+        status.className = 'reimb-status error';
+        status.textContent = 'Please add at least one item with a description and amount.';
+        return;
+      }
+      if (chosenFiles.length === 0) {
+        status.className = 'reimb-status error';
+        status.textContent = 'Please attach at least one receipt as proof of purchase.';
+        return;
+      }
+      if (!$('mailingAddress').value.trim()) {
+        status.className = 'reimb-status error';
+        status.textContent = 'Mailing address is required.';
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('association_name', $('associationName').value.trim());
+      fd.append('account_name', $('accountName').value.trim());
+      fd.append('account_number', $('accountNumber').value.trim());
+      fd.append('mailing_address', $('mailingAddress').value.trim());
+      fd.append('notes', $('notes').value.trim());
+      fd.append('items', JSON.stringify(items));
+      for (const f of chosenFiles) fd.append('receipts', f, f.name);
+
+      $('submitBtn').disabled = true;
+      $('submitBtn').textContent = 'Submitting…';
+      try {
+        const res = await fetch('/api/reimbursements', { method: 'POST', body: fd, credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Submission failed.');
+        status.className = 'reimb-status success';
+        status.textContent = 'Request submitted! The board has been notified by email.';
+        $('reimbForm').reset();
+        chosenFiles = [];
+        renderFiles();
+        itemsBody.innerHTML = '';
+        ensureMinRows();
+        recalc();
+        $('associationName').value = 'Glenridge Community HOA';
+        loadMine();
+      } catch (err) {
+        status.className = 'reimb-status error';
+        status.textContent = err.message;
+      } finally {
+        $('submitBtn').disabled = false;
+        $('submitBtn').textContent = 'Submit Request';
+      }
+    });
+
+    // Auth + load mine
+    async function loadMine() {
+      try {
+        const r = await fetch('/api/reimbursements/mine', { credentials: 'include' });
+        if (!r.ok) return;
+        const { requests } = await r.json();
+        const list = $('myRequestsList');
+        if (!requests.length) {
+          list.innerHTML = '<p style="color:var(--text-light);font-size:0.9rem;">No requests yet.</p>';
+          return;
+        }
+        list.innerHTML = requests.map(r => {
+          const dt = new Date(r.submitted_at).toLocaleDateString();
+          const amt = '$' + (r.total_cents/100).toFixed(2);
+          return `<div class="my-request">
+            <div><strong>${r.association_name}</strong><br><span style="color:#888;font-size:0.82rem;">Submitted ${dt}</span></div>
+            <div>${amt}</div>
+            <div><span class="badge badge-${r.status}">${r.status}</span></div>
+          </div>`;
+        }).join('');
+      } catch (e) { /* ignore */ }
+    }
+
+    (async () => {
+      try {
+        const me = await fetch('/api/me', { credentials: 'include' });
+        const data = await me.json();
+        if (!data || !data.user) {
+          $('authGate').style.display = '';
+          return;
+        }
+        $('formSection').style.display = '';
+        loadMine();
+      } catch {
+        $('authGate').style.display = '';
+      }
+    })();
+  })();
+  </script>
+</body>
+</html>

@@ -75,6 +75,7 @@ const BRAND_NAME      = process.env.BRAND_NAME      || 'Glenridge Community HOA'
 const BRAND_SHORT     = process.env.BRAND_SHORT     || 'Glenridge Community';
 const BRAND_LOCATION  = process.env.BRAND_LOCATION  || 'Winston-Salem, NC';
 const ADMIN_EMAIL     = process.env.ADMIN_EMAIL     || 'admin@glenridgecommunity.com';
+const CAPSTONE_EMAIL  = process.env.CAPSTONE_EMAIL  || ''; // Property mgmt — receives final approved reimbursements
 const MAIL_FROM_EMAIL = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER || ADMIN_EMAIL;
 const SITE_URL        = (process.env.SITE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
@@ -280,6 +281,55 @@ async function initDb() {
       created_by_id TEXT NOT NULL,
       created_by_name TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+
+  // ── Reimbursement requests (member-submitted, admin-approved) ──
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS reimbursements (
+      id VARCHAR(36) PRIMARY KEY,
+      user_id VARCHAR(36) NOT NULL,
+      submitter_name VARCHAR(200) NOT NULL,
+      submitter_email VARCHAR(255) NOT NULL,
+      association_name VARCHAR(200) NOT NULL,
+      account_name VARCHAR(200),
+      account_number VARCHAR(100),
+      mailing_address TEXT NOT NULL,
+      items_json LONGTEXT NOT NULL,
+      total_cents INT NOT NULL DEFAULT 0,
+      notes TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      denial_reason TEXT,
+      submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      finalized_at DATETIME,
+      capstone_sent_at DATETIME,
+      INDEX (user_id), INDEX (status)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS reimbursement_receipts (
+      id VARCHAR(36) PRIMARY KEY,
+      reimbursement_id VARCHAR(36) NOT NULL,
+      original_name VARCHAR(255),
+      stored_path VARCHAR(500) NOT NULL,
+      mime_type VARCHAR(100),
+      size_bytes INT,
+      uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX (reimbursement_id)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS reimbursement_approvals (
+      id VARCHAR(36) PRIMARY KEY,
+      reimbursement_id VARCHAR(36) NOT NULL,
+      admin_user_id VARCHAR(36) NOT NULL,
+      admin_name VARCHAR(200) NOT NULL,
+      admin_email VARCHAR(255),
+      decision VARCHAR(10) NOT NULL,
+      comment TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_admin_per_request (reimbursement_id, admin_user_id),
+      INDEX (reimbursement_id)
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
@@ -786,13 +836,18 @@ transporter.verify().then(() => {
   console.warn('  Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in .env');
 });
 
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, opts = {}) {
   const mailOptions = {
     from: `"${BRAND_NAME}" <${MAIL_FROM_EMAIL}>`,
     to,
     subject,
     html,
   };
+  if (opts.cc) mailOptions.cc = opts.cc;
+  if (opts.replyTo) mailOptions.replyTo = opts.replyTo;
+  if (Array.isArray(opts.attachments) && opts.attachments.length) {
+    mailOptions.attachments = opts.attachments;
+  }
 
   try {
     await transporter.sendMail(mailOptions);
@@ -803,6 +858,7 @@ async function sendEmail(to, subject, html) {
     console.log(`  To: ${to}`);
     console.log(`  Subject: ${subject}`);
     console.log(`  Body: ${html.replace(/<[^>]*>/g, '').substring(0, 200)}...`);
+    if (mailOptions.attachments) console.log(`  Attachments: ${mailOptions.attachments.length}`);
     console.log('───────────────────────────────────────────────');
   }
 }
@@ -917,6 +973,16 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Block internal documentation from being served to the public website.
+// The /docs folder contains admin manuals, PRDs, hardware notes, etc. that
+// must never be reachable over HTTP.
+app.use((req, res, next) => {
+  if (/^\/docs(\/|$)/i.test(req.path)) {
+    return res.status(404).send('Not found');
+  }
+  next();
+});
 
 // Serve static files
 app.use(express.static(path.join(__dirname), {
@@ -1071,7 +1137,7 @@ app.post('/api/auth/social-complete', async (req, res) => {
 // ---------- Signup ----------
 app.post('/api/signup', async (req, res) => {
   try {
-    const { firstName, lastName, email, address, phone, password, confirmPassword } = req.body;
+    const { firstName, lastName, email, address, phone, password, confirmPassword, requestPoolAccess } = req.body;
 
     // Validation
     if (!firstName || !lastName || !email || !address || !password) {
@@ -1112,13 +1178,19 @@ app.post('/api/signup', async (req, res) => {
 
     // Send notification email to admin
     const adminUrl = `${SITE_URL}/admin.html`;
+    const wantsPool = !!requestPoolAccess;
+    const poolBadge = wantsPool
+      ? `<tr><td style="padding: 8px; font-weight: bold; color:#b45309;">Pool Access:</td><td style="padding: 8px; color:#b45309;"><strong>REQUESTED</strong> — please enroll in Pool Entry Management after approval.</td></tr>`
+      : '';
     await sendEmail(
       process.env.ADMIN_EMAIL,
-      '🏡 New Resident Signup — Approval Needed',
+      wantsPool
+        ? '🏡 New Resident Signup (Pool Access Requested) — Approval Needed'
+        : '🏡 New Resident Signup — Approval Needed',
       `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #2d6a4f; color: white; padding: 24px; border-radius: 12px 12px 0 0;">
-          <h1 style="margin: 0; font-size: 20px;">New Resident Signup</h1>
+          <h1 style="margin: 0; font-size: 20px;">New Resident Signup${wantsPool ? ' — Pool Access Requested' : ''}</h1>
         </div>
         <div style="background: #f8f9fa; padding: 24px; border: 1px solid #e0e0e0;">
           <p>A new resident has registered and is awaiting approval:</p>
@@ -1127,6 +1199,7 @@ app.post('/api/signup', async (req, res) => {
             <tr><td style="padding: 8px; font-weight: bold;">Email:</td><td style="padding: 8px;">${email}</td></tr>
             <tr><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">${address}</td></tr>
             <tr><td style="padding: 8px; font-weight: bold;">Phone:</td><td style="padding: 8px;">${phone || 'Not provided'}</td></tr>
+            ${poolBadge}
           </table>
           <div style="margin-top: 24px; text-align: center;">
             <a href="${adminUrl}" style="background: #2d6a4f; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; display: inline-block;">Review &amp; Approve</a>
@@ -2251,6 +2324,358 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   await dbRun('DELETE FROM users WHERE id = ?', [id]);
   res.json({ success: true });
+});
+
+// ── Reimbursement Routes ────────────────────────────────────
+
+const reimbBaseDir = path.join(__dirname, 'data', 'reimbursements');
+if (!fs.existsSync(reimbBaseDir)) fs.mkdirSync(reimbBaseDir, { recursive: true });
+
+const reimbStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const id = req._reimbursementId || (req._reimbursementId = uuidv4());
+    const dir = path.join(reimbBaseDir, id);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${uuidv4()}${ext}`);
+  }
+});
+const reimbUpload = multer({
+  storage: reimbStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 12 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.pdf', '.heic'];
+    if (allowed.includes(path.extname(file.originalname).toLowerCase())) cb(null, true);
+    else cb(new Error('Only JPG, PNG, WEBP, PDF, or HEIC files are allowed for receipts.'));
+  }
+});
+
+function fmtMoney(cents) {
+  const n = Number(cents) || 0;
+  return `$${(n / 100).toFixed(2)}`;
+}
+
+function reimbursementSummaryHtml(r, items) {
+  const itemRows = items.map(i =>
+    `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;">${escapeHtml(i.description || '')}</td>
+         <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${fmtMoney(Math.round(Number(i.amount || 0) * 100))}</td></tr>`
+  ).join('');
+  return `
+    <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+      <tr><td style="padding:6px 10px;font-weight:bold;width:170px;">Submitted by:</td><td style="padding:6px 10px;">${escapeHtml(r.submitter_name)} &lt;${escapeHtml(r.submitter_email)}&gt;</td></tr>
+      <tr><td style="padding:6px 10px;font-weight:bold;">Association:</td><td style="padding:6px 10px;">${escapeHtml(r.association_name)}</td></tr>
+      <tr><td style="padding:6px 10px;font-weight:bold;">Account name:</td><td style="padding:6px 10px;">${escapeHtml(r.account_name || '')}</td></tr>
+      <tr><td style="padding:6px 10px;font-weight:bold;">Account number:</td><td style="padding:6px 10px;">${escapeHtml(r.account_number || '')}</td></tr>
+      <tr><td style="padding:6px 10px;font-weight:bold;vertical-align:top;">Mailing address:</td><td style="padding:6px 10px;white-space:pre-line;">${escapeHtml(r.mailing_address)}</td></tr>
+    </table>
+    <h3 style="margin:18px 0 6px;font-family:Arial,sans-serif;font-size:15px;">Items</h3>
+    <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;border:1px solid #e0e0e0;">
+      <thead><tr style="background:#f1f3f5;">
+        <th style="padding:8px 10px;text-align:left;">Description</th>
+        <th style="padding:8px 10px;text-align:right;width:120px;">Amount</th>
+      </tr></thead>
+      <tbody>${itemRows}</tbody>
+      <tfoot><tr><td style="padding:8px 10px;text-align:right;font-weight:bold;border-top:2px solid #333;">Total:</td>
+        <td style="padding:8px 10px;text-align:right;font-weight:bold;border-top:2px solid #333;">${fmtMoney(r.total_cents)}</td></tr></tfoot>
+    </table>
+    ${r.notes ? `<p style="font-family:Arial,sans-serif;font-size:14px;margin-top:14px;"><strong>Notes:</strong><br>${escapeHtml(r.notes).replace(/\n/g, '<br>')}</p>` : ''}
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function loadReimbursementBundle(id) {
+  const r = await dbGet('SELECT * FROM reimbursements WHERE id = ?', [id]);
+  if (!r) return null;
+  const items = JSON.parse(r.items_json || '[]');
+  const receipts = await dbAll('SELECT * FROM reimbursement_receipts WHERE reimbursement_id = ? ORDER BY uploaded_at', [id]);
+  const approvals = await dbAll('SELECT id, admin_user_id, admin_name, admin_email, decision, comment, created_at FROM reimbursement_approvals WHERE reimbursement_id = ? ORDER BY created_at', [id]);
+  return { ...r, items, receipts, approvals };
+}
+
+// POST /api/reimbursements — member submits a new request (multipart, with receipts)
+app.post('/api/reimbursements', requireAuth, reimbUpload.array('receipts', 12), async (req, res) => {
+  try {
+    const id = req._reimbursementId || uuidv4();
+    const { association_name, account_name, account_number, mailing_address, items, notes } = req.body;
+
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(items || '[]'); } catch { parsedItems = []; }
+    parsedItems = (Array.isArray(parsedItems) ? parsedItems : [])
+      .map(i => ({ description: String(i.description || '').trim(), amount: Number(i.amount) || 0 }))
+      .filter(i => i.description && i.amount > 0);
+
+    if (!association_name || !mailing_address) {
+      return res.status(400).json({ error: 'Association name and mailing address are required.' });
+    }
+    if (parsedItems.length === 0) {
+      return res.status(400).json({ error: 'At least one line item with a description and amount is required.' });
+    }
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'At least one receipt file must be attached as proof of purchase.' });
+    }
+
+    const totalCents = parsedItems.reduce((sum, i) => sum + Math.round(i.amount * 100), 0);
+
+    const user = await dbGet('SELECT first_name, last_name, email FROM users WHERE id = ?', [req.session.userId]);
+    const submitterName = user ? `${user.first_name} ${user.last_name}` : (req.session.userName || 'Member');
+    const submitterEmail = user ? user.email : '';
+
+    await dbRun(`
+      INSERT INTO reimbursements
+        (id, user_id, submitter_name, submitter_email, association_name, account_name, account_number,
+         mailing_address, items_json, total_cents, notes, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `, [
+      id, req.session.userId, submitterName, submitterEmail,
+      String(association_name).trim(), String(account_name || '').trim(), String(account_number || '').trim(),
+      String(mailing_address).trim(), JSON.stringify(parsedItems), totalCents,
+      String(notes || '').trim() || null
+    ]);
+
+    for (const f of req.files) {
+      await dbRun(`
+        INSERT INTO reimbursement_receipts (id, reimbursement_id, original_name, stored_path, mime_type, size_bytes)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [uuidv4(), id, f.originalname, path.relative(__dirname, f.path), f.mimetype, f.size]);
+    }
+
+    const bundle = await loadReimbursementBundle(id);
+    const summaryHtml = reimbursementSummaryHtml(bundle, parsedItems);
+
+    // Email admin — include receipts as attachments so they can review immediately
+    const attachments = bundle.receipts.map(r => ({
+      filename: r.original_name || path.basename(r.stored_path),
+      path: path.join(__dirname, r.stored_path)
+    }));
+
+    await sendEmail(
+      ADMIN_EMAIL,
+      `🧾 New Reimbursement Request — ${submitterName} — ${fmtMoney(totalCents)}`,
+      `
+      <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;">
+        <div style="background:#2c5f3a;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
+          <h1 style="margin:0;font-size:20px;">New Reimbursement Request</h1>
+          <p style="margin:6px 0 0;opacity:.9;">Two board approvals required before payment is released.</p>
+        </div>
+        <div style="background:#f8f9fa;padding:20px 24px;border:1px solid #e0e0e0;border-top:none;">
+          ${summaryHtml}
+          <p style="margin-top:18px;font-size:13px;color:#666;">Receipts are attached. Review and approve in the admin panel:
+            <a href="${SITE_URL}/admin.html#reimbursements">${SITE_URL}/admin.html</a>
+          </p>
+        </div>
+      </div>
+      `,
+      { attachments, replyTo: submitterEmail || undefined }
+    );
+
+    res.json({ success: true, id });
+  } catch (err) {
+    console.error('Reimbursement submit error:', err);
+    res.status(500).json({ error: err.message || 'Failed to submit reimbursement.' });
+  }
+});
+
+// GET /api/reimbursements/mine — member's own requests
+app.get('/api/reimbursements/mine', requireAuth, async (req, res) => {
+  const rows = await dbAll(
+    'SELECT id, association_name, total_cents, status, submitted_at, finalized_at FROM reimbursements WHERE user_id = ? ORDER BY submitted_at DESC',
+    [req.session.userId]
+  );
+  res.json({ requests: rows });
+});
+
+// GET /api/reimbursements/:id — full detail (owner or admin)
+app.get('/api/reimbursements/:id', requireAuth, async (req, res) => {
+  const bundle = await loadReimbursementBundle(req.params.id);
+  if (!bundle) return res.status(404).json({ error: 'Not found' });
+  if (bundle.user_id !== req.session.userId && !req.session.isAdmin) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  // Don't expose raw filesystem paths
+  bundle.receipts = bundle.receipts.map(r => ({
+    id: r.id, original_name: r.original_name, mime_type: r.mime_type, size_bytes: r.size_bytes
+  }));
+  res.json(bundle);
+});
+
+// GET /api/reimbursements/:id/receipt/:receiptId — download a receipt
+app.get('/api/reimbursements/:id/receipt/:receiptId', requireAuth, async (req, res) => {
+  const r = await dbGet('SELECT * FROM reimbursements WHERE id = ?', [req.params.id]);
+  if (!r) return res.status(404).send('Not found');
+  if (r.user_id !== req.session.userId && !req.session.isAdmin) return res.status(403).send('Forbidden');
+  const rec = await dbGet('SELECT * FROM reimbursement_receipts WHERE id = ? AND reimbursement_id = ?',
+    [req.params.receiptId, req.params.id]);
+  if (!rec) return res.status(404).send('Not found');
+  const abs = path.join(__dirname, rec.stored_path);
+  if (!abs.startsWith(reimbBaseDir)) return res.status(400).send('Bad path');
+  res.download(abs, rec.original_name || path.basename(abs));
+});
+
+// ── Admin reimbursement endpoints ─────────────────────────
+
+// GET /api/admin/reimbursements — queue
+app.get('/api/admin/reimbursements', requireAdmin, async (req, res) => {
+  const status = req.query.status || 'pending';
+  let rows;
+  if (status === 'all') {
+    rows = await dbAll('SELECT id, submitter_name, submitter_email, association_name, total_cents, status, submitted_at, finalized_at FROM reimbursements ORDER BY submitted_at DESC');
+  } else {
+    rows = await dbAll('SELECT id, submitter_name, submitter_email, association_name, total_cents, status, submitted_at, finalized_at FROM reimbursements WHERE status = ? ORDER BY submitted_at DESC', [status]);
+  }
+  // Approval counts
+  for (const r of rows) {
+    const [{ c }] = await dbAll('SELECT COUNT(*) AS c FROM reimbursement_approvals WHERE reimbursement_id = ? AND decision = ?', [r.id, 'approve']);
+    r.approval_count = c;
+  }
+  res.json({ requests: rows });
+});
+
+// POST /api/admin/reimbursements/:id/approve — record an approval signature
+app.post('/api/admin/reimbursements/:id/approve', requireAdmin, async (req, res) => {
+  try {
+    const bundle = await loadReimbursementBundle(req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Not found' });
+    if (bundle.status !== 'pending') return res.status(400).json({ error: `Request is already ${bundle.status}.` });
+
+    const adminUser = await dbGet('SELECT id, first_name, last_name, email FROM users WHERE id = ?', [req.session.userId]);
+    const adminName = adminUser ? `${adminUser.first_name} ${adminUser.last_name}` : (req.session.userName || 'Admin');
+    const adminEmail = adminUser ? adminUser.email : '';
+
+    // Prevent same admin from double-approving
+    const existing = bundle.approvals.find(a => a.admin_user_id === req.session.userId && a.decision === 'approve');
+    if (existing) return res.status(400).json({ error: 'You have already approved this request.' });
+
+    await dbRun(`
+      INSERT INTO reimbursement_approvals (id, reimbursement_id, admin_user_id, admin_name, admin_email, decision, comment)
+      VALUES (?, ?, ?, ?, ?, 'approve', ?)
+    `, [uuidv4(), bundle.id, req.session.userId, adminName, adminEmail, String(req.body.comment || '').trim() || null]);
+
+    const refreshed = await loadReimbursementBundle(bundle.id);
+    const approvalCount = refreshed.approvals.filter(a => a.decision === 'approve').length;
+
+    let finalized = false;
+    if (approvalCount >= 2) {
+      // Two signatures collected → mark approved + forward to Capstone
+      await dbRun(`UPDATE reimbursements SET status = 'approved', finalized_at = NOW() WHERE id = ?`, [bundle.id]);
+      finalized = true;
+
+      const summaryHtml = reimbursementSummaryHtml(refreshed, refreshed.items);
+      const approverList = refreshed.approvals
+        .filter(a => a.decision === 'approve')
+        .map(a => `<li>${escapeHtml(a.admin_name)} &lt;${escapeHtml(a.admin_email || '')}&gt; — ${new Date(a.created_at).toLocaleString()}</li>`)
+        .join('');
+
+      const attachments = refreshed.receipts.map(r => ({
+        filename: r.original_name || path.basename(r.stored_path),
+        path: path.join(__dirname, r.stored_path)
+      }));
+
+      const capstoneTo = CAPSTONE_EMAIL || ADMIN_EMAIL;
+      await sendEmail(
+        capstoneTo,
+        `✅ Approved Reimbursement — ${refreshed.association_name} — ${fmtMoney(refreshed.total_cents)}`,
+        `
+        <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;">
+          <div style="background:#2c5f3a;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
+            <h1 style="margin:0;font-size:20px;">Reimbursement Approved by HOA Board</h1>
+            <p style="margin:6px 0 0;opacity:.9;">Two board signatures on file. Please process payment.</p>
+          </div>
+          <div style="background:#f8f9fa;padding:20px 24px;border:1px solid #e0e0e0;border-top:none;">
+            ${summaryHtml}
+            <h3 style="font-size:14px;margin:18px 0 6px;">Board Approvals</h3>
+            <ul style="margin:0;padding-left:20px;font-size:13px;">${approverList}</ul>
+            <p style="margin-top:16px;font-size:12px;color:#666;">Submitted by ${escapeHtml(refreshed.submitter_name)} on ${new Date(refreshed.submitted_at).toLocaleString()}.
+            Receipts are attached as proof of purchase.</p>
+          </div>
+        </div>
+        `,
+        { attachments, cc: ADMIN_EMAIL, replyTo: refreshed.submitter_email || undefined }
+      );
+
+      await dbRun(`UPDATE reimbursements SET capstone_sent_at = NOW() WHERE id = ?`, [bundle.id]);
+
+      // Notify submitter
+      if (refreshed.submitter_email) {
+        await sendEmail(
+          refreshed.submitter_email,
+          `Your reimbursement request has been approved — ${fmtMoney(refreshed.total_cents)}`,
+          `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <div style="background:#2c5f3a;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
+              <h1 style="margin:0;font-size:20px;">Reimbursement Approved</h1>
+            </div>
+            <div style="background:#f8f9fa;padding:20px 24px;border:1px solid #e0e0e0;border-top:none;font-size:14px;">
+              <p>Hi ${escapeHtml(refreshed.submitter_name.split(' ')[0])},</p>
+              <p>Your reimbursement request for <strong>${fmtMoney(refreshed.total_cents)}</strong> has received both required board signatures and has been forwarded to Capstone Realty Consultants for final payment processing.</p>
+              <p>A check will be mailed to the address you provided.</p>
+              <p style="margin-top:20px;color:#666;font-size:13px;">${BRAND_NAME}</p>
+            </div>
+          </div>
+          `
+        );
+      }
+    }
+
+    res.json({ success: true, finalized, approval_count: approvalCount });
+  } catch (err) {
+    console.error('Reimbursement approve error:', err);
+    res.status(500).json({ error: err.message || 'Failed to approve.' });
+  }
+});
+
+// POST /api/admin/reimbursements/:id/deny — deny a request
+app.post('/api/admin/reimbursements/:id/deny', requireAdmin, async (req, res) => {
+  try {
+    const bundle = await loadReimbursementBundle(req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Not found' });
+    if (bundle.status !== 'pending') return res.status(400).json({ error: `Request is already ${bundle.status}.` });
+
+    const reason = String(req.body.reason || '').trim();
+    const adminUser = await dbGet('SELECT id, first_name, last_name, email FROM users WHERE id = ?', [req.session.userId]);
+    const adminName = adminUser ? `${adminUser.first_name} ${adminUser.last_name}` : (req.session.userName || 'Admin');
+
+    await dbRun(`
+      INSERT INTO reimbursement_approvals (id, reimbursement_id, admin_user_id, admin_name, admin_email, decision, comment)
+      VALUES (?, ?, ?, ?, ?, 'deny', ?)
+    `, [uuidv4(), bundle.id, req.session.userId, adminName, adminUser ? adminUser.email : '', reason || null]);
+
+    await dbRun(`UPDATE reimbursements SET status = 'denied', denial_reason = ?, finalized_at = NOW() WHERE id = ?`,
+      [reason || null, bundle.id]);
+
+    if (bundle.submitter_email) {
+      await sendEmail(
+        bundle.submitter_email,
+        `Your reimbursement request was not approved`,
+        `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <div style="background:#c0392b;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
+            <h1 style="margin:0;font-size:20px;">Reimbursement Request Denied</h1>
+          </div>
+          <div style="background:#f8f9fa;padding:20px 24px;border:1px solid #e0e0e0;border-top:none;font-size:14px;">
+            <p>Hi ${escapeHtml(bundle.submitter_name.split(' ')[0])},</p>
+            <p>Your reimbursement request submitted on ${new Date(bundle.submitted_at).toLocaleString()} for <strong>${fmtMoney(bundle.total_cents)}</strong> was not approved by the board.</p>
+            ${reason ? `<p><strong>Reason:</strong><br>${escapeHtml(reason).replace(/\n/g, '<br>')}</p>` : ''}
+            <p>If you have questions, please reach out to the HOA board.</p>
+            <p style="margin-top:20px;color:#666;font-size:13px;">${BRAND_NAME}</p>
+          </div>
+        </div>
+        `
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reimbursement deny error:', err);
+    res.status(500).json({ error: err.message || 'Failed to deny.' });
+  }
 });
 
 // ── Newsletter Routes ────────────────────────────────────

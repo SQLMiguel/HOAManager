@@ -476,7 +476,8 @@ document.addEventListener('DOMContentLoaded', () => {
             address: document.getElementById('signupAddress').value,
             phone: document.getElementById('signupPhone').value,
             password,
-            confirmPassword
+            confirmPassword,
+            requestPoolAccess: !!(document.getElementById('signupRequestPool') && document.getElementById('signupRequestPool').checked)
           })
         });
         const data = await res.json();
