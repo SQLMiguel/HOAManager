@@ -23,7 +23,18 @@
     .items-table td { padding: 6px; vertical-align: top; }
     .items-table input { width: 100%; padding: 8px 10px; border: 1px solid #d0d4da; border-radius: 6px; font-family: var(--font-body); font-size: 0.92rem; }
     .items-table .col-amt { width: 140px; }
-    .items-table .col-amt input { text-align: right; }
+    .items-table .col-amt input { text-align: right; padding-left: 22px; }
+    .amt-wrap { position: relative; }
+    .amt-wrap::before {
+      content: '$';
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #555;
+      font-weight: 600;
+      pointer-events: none;
+    }
     .items-table .col-rm { width: 36px; text-align: center; }
     .items-table .row-rm { background: transparent; border: none; color: #c0392b; cursor: pointer; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; }
     .items-table .row-rm:hover { background: #fde8e6; }
@@ -141,7 +152,7 @@
           <tbody id="itemsBody"></tbody>
         </table>
         <div style="margin-top: 10px;">
-          <button type="button" class="btn btn-outline" id="addItemBtn" style="padding: 6px 14px; font-size: 0.85rem;">+ Add line</button>
+          <button type="button" class="btn btn-primary" id="addItemBtn" style="padding: 6px 14px; font-size: 0.85rem;">+ Add line</button>
         </div>
         <div class="items-total">Total: <span class="amt" id="totalDisplay">$0.00</span></div>
 
@@ -204,13 +215,23 @@
 
     function newRow(desc = '', amt = '') {
       const tr = document.createElement('tr');
+      const amtFormatted = amt === '' || amt == null ? '' : Number(amt).toFixed(2);
       tr.innerHTML = `
         <td><input type="text" class="item-desc" value="${desc.replace(/"/g,'&quot;')}" placeholder="Item description"></td>
-        <td class="col-amt"><input type="number" step="0.01" min="0" class="item-amt" value="${amt}" placeholder="0.00"></td>
+        <td class="col-amt"><span class="amt-wrap"><input type="text" inputmode="numeric" class="item-amt" value="${amtFormatted}" placeholder="0.00"></span></td>
         <td class="col-rm"><button type="button" class="row-rm" title="Remove">&times;</button></td>
       `;
       tr.querySelector('.row-rm').addEventListener('click', () => { tr.remove(); recalc(); ensureMinRows(); });
-      tr.querySelector('.item-amt').addEventListener('input', recalc);
+      const amtInput = tr.querySelector('.item-amt');
+      // Calculator-style: digits typed are treated as cents.
+      // Typing "1500" → 15.00, "15" → 0.15, "1" → 0.01.
+      amtInput.addEventListener('input', () => {
+        const digits = amtInput.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+        if (digits === '') { amtInput.value = ''; recalc(); return; }
+        const cents = parseInt(digits, 10);
+        amtInput.value = (cents / 100).toFixed(2);
+        recalc();
+      });
       itemsBody.appendChild(tr);
     }
     function ensureMinRows() {

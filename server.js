@@ -2492,11 +2492,17 @@ app.get('/api/reimbursements/mine', requireAuth, async (req, res) => {
   res.json({ requests: rows });
 });
 
+// Allow either an authenticated member OR an admin session.
+function requireAuthOrAdmin(req, res, next) {
+  if (req.session && (req.session.userId || req.session.isAdmin)) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
 // GET /api/reimbursements/:id — full detail (owner or admin)
-app.get('/api/reimbursements/:id', requireAuth, async (req, res) => {
+app.get('/api/reimbursements/:id', requireAuthOrAdmin, async (req, res) => {
   const bundle = await loadReimbursementBundle(req.params.id);
   if (!bundle) return res.status(404).json({ error: 'Not found' });
-  if (bundle.user_id !== req.session.userId && !req.session.isAdmin) {
+  if (!req.session.isAdmin && bundle.user_id !== req.session.userId) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   // Don't expose raw filesystem paths
@@ -2507,10 +2513,10 @@ app.get('/api/reimbursements/:id', requireAuth, async (req, res) => {
 });
 
 // GET /api/reimbursements/:id/receipt/:receiptId — view (?inline=1) or download a receipt
-app.get('/api/reimbursements/:id/receipt/:receiptId', requireAuth, async (req, res) => {
+app.get('/api/reimbursements/:id/receipt/:receiptId', requireAuthOrAdmin, async (req, res) => {
   const r = await dbGet('SELECT * FROM reimbursements WHERE id = ?', [req.params.id]);
   if (!r) return res.status(404).send('Not found');
-  if (r.user_id !== req.session.userId && !req.session.isAdmin) return res.status(403).send('Forbidden');
+  if (!req.session.isAdmin && r.user_id !== req.session.userId) return res.status(403).send('Forbidden');
   const rec = await dbGet('SELECT * FROM reimbursement_receipts WHERE id = ? AND reimbursement_id = ?',
     [req.params.receiptId, req.params.id]);
   if (!rec) return res.status(404).send('Not found');
@@ -2526,6 +2532,27 @@ app.get('/api/reimbursements/:id/receipt/:receiptId', requireAuth, async (req, r
 });
 
 // ── Admin reimbursement endpoints ─────────────────────────
+
+// GET /api/admin/reimbursements/stats — dashboard counters
+app.get('/api/admin/reimbursements/stats', requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbAll(
+      `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(total_cents), 0) AS total_cents
+       FROM reimbursements GROUP BY status`
+    );
+    const out = { pending: 0, approved: 0, denied: 0,
+                  pending_total_cents: 0, approved_total_cents: 0, denied_total_cents: 0 };
+    for (const r of rows) {
+      if (r.status === 'pending')       { out.pending       = Number(r.cnt); out.pending_total_cents       = Number(r.total_cents); }
+      else if (r.status === 'approved') { out.approved      = Number(r.cnt); out.approved_total_cents      = Number(r.total_cents); }
+      else if (r.status === 'denied')   { out.denied        = Number(r.cnt); out.denied_total_cents        = Number(r.total_cents); }
+    }
+    res.json(out);
+  } catch (err) {
+    console.error('Reimbursement stats error:', err);
+    res.status(500).json({ error: 'Failed to load stats.' });
+  }
+});
 
 // GET /api/admin/reimbursements — queue
 app.get('/api/admin/reimbursements', requireAdmin, async (req, res) => {
@@ -2545,24 +2572,38 @@ app.get('/api/admin/reimbursements', requireAdmin, async (req, res) => {
 });
 
 // POST /api/admin/reimbursements/:id/approve — record an approval signature
+// Requires the board member to re-authenticate with their member email + password.
 app.post('/api/admin/reimbursements/:id/approve', requireAdmin, async (req, res) => {
   try {
     const bundle = await loadReimbursementBundle(req.params.id);
     if (!bundle) return res.status(404).json({ error: 'Not found' });
     if (bundle.status !== 'pending') return res.status(400).json({ error: `Request is already ${bundle.status}.` });
 
-    const adminUser = await dbGet('SELECT id, first_name, last_name, email FROM users WHERE id = ?', [req.session.userId]);
-    const adminName = adminUser ? `${adminUser.first_name} ${adminUser.last_name}` : (req.session.userName || 'Admin');
-    const adminEmail = adminUser ? adminUser.email : '';
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Board member email and password are required to sign this approval.' });
+    }
+    const adminUser = await dbGet('SELECT id, first_name, last_name, email, password_hash, status FROM users WHERE LOWER(email) = ?', [email]);
+    if (!adminUser || !adminUser.password_hash) {
+      return res.status(401).json({ error: 'Invalid board member credentials.' });
+    }
+    const ok = await bcrypt.compare(password, adminUser.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Invalid board member credentials.' });
+    if (adminUser.status && adminUser.status !== 'approved') {
+      return res.status(403).json({ error: 'This member account is not active.' });
+    }
+    const adminName = `${adminUser.first_name} ${adminUser.last_name}`;
+    const adminEmail = adminUser.email;
 
-    // Prevent same admin from double-approving
-    const existing = bundle.approvals.find(a => a.admin_user_id === req.session.userId && a.decision === 'approve');
-    if (existing) return res.status(400).json({ error: 'You have already approved this request.' });
+    // Prevent same board member from double-approving
+    const existing = bundle.approvals.find(a => a.admin_user_id === adminUser.id && a.decision === 'approve');
+    if (existing) return res.status(400).json({ error: 'This board member has already approved this request.' });
 
     await dbRun(`
       INSERT INTO reimbursement_approvals (id, reimbursement_id, admin_user_id, admin_name, admin_email, decision, comment)
       VALUES (?, ?, ?, ?, ?, 'approve', ?)
-    `, [uuidv4(), bundle.id, req.session.userId, adminName, adminEmail, String(req.body.comment || '').trim() || null]);
+    `, [uuidv4(), bundle.id, adminUser.id, adminName, adminEmail, String(req.body.comment || '').trim() || null]);
 
     const refreshed = await loadReimbursementBundle(bundle.id);
     const approvalCount = refreshed.approvals.filter(a => a.decision === 'approve').length;
@@ -2637,7 +2678,7 @@ app.post('/api/admin/reimbursements/:id/approve', requireAdmin, async (req, res)
   }
 });
 
-// POST /api/admin/reimbursements/:id/deny — deny a request
+// POST /api/admin/reimbursements/:id/deny — deny a request (signed by a board member)
 app.post('/api/admin/reimbursements/:id/deny', requireAdmin, async (req, res) => {
   try {
     const bundle = await loadReimbursementBundle(req.params.id);
@@ -2645,13 +2686,26 @@ app.post('/api/admin/reimbursements/:id/deny', requireAdmin, async (req, res) =>
     if (bundle.status !== 'pending') return res.status(400).json({ error: `Request is already ${bundle.status}.` });
 
     const reason = String(req.body.reason || '').trim();
-    const adminUser = await dbGet('SELECT id, first_name, last_name, email FROM users WHERE id = ?', [req.session.userId]);
-    const adminName = adminUser ? `${adminUser.first_name} ${adminUser.last_name}` : (req.session.userName || 'Admin');
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Board member email and password are required to sign this denial.' });
+    }
+    const adminUser = await dbGet('SELECT id, first_name, last_name, email, password_hash, status FROM users WHERE LOWER(email) = ?', [email]);
+    if (!adminUser || !adminUser.password_hash) {
+      return res.status(401).json({ error: 'Invalid board member credentials.' });
+    }
+    const ok = await bcrypt.compare(password, adminUser.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Invalid board member credentials.' });
+    if (adminUser.status && adminUser.status !== 'approved') {
+      return res.status(403).json({ error: 'This member account is not active.' });
+    }
+    const adminName = `${adminUser.first_name} ${adminUser.last_name}`;
 
     await dbRun(`
       INSERT INTO reimbursement_approvals (id, reimbursement_id, admin_user_id, admin_name, admin_email, decision, comment)
       VALUES (?, ?, ?, ?, ?, 'deny', ?)
-    `, [uuidv4(), bundle.id, req.session.userId, adminName, adminUser ? adminUser.email : '', reason || null]);
+    `, [uuidv4(), bundle.id, adminUser.id, adminName, adminUser.email, reason || null]);
 
     await dbRun(`UPDATE reimbursements SET status = 'denied', denial_reason = ?, finalized_at = NOW() WHERE id = ?`,
       [reason || null, bundle.id]);

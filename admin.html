@@ -87,6 +87,7 @@
     tr.reimb-row { cursor: pointer; }
     tr.reimb-row:focus { outline: 2px solid var(--primary, #2c5f3a); outline-offset: -2px; }
     .reimb-meta { font-size: 0.78rem; color: var(--text-light); }
+    .reimb-stat-amt { display: inline-block; margin-top: 2px; font-size: 0.95rem; font-weight: 700; color: var(--primary, #2c5f3a); }
     .reimb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 30px 16px; overflow-y: auto; }
     .reimb-overlay.active { display: flex; }
     .reimb-modal { background: #fff; border-radius: 12px; max-width: 900px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
@@ -112,6 +113,9 @@
     .reimb-items { margin-top: 6px; }
     .reimb-modal-actions { margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }
     .reimb-comment { width: 100%; padding: 8px 10px; border: 1px solid #d0d5dd; border-radius: 6px; font-family: var(--font-body); font-size: 0.88rem; resize: vertical; }
+    .reimb-cred-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+    .reimb-cred-input { padding: 8px 10px; border: 1px solid #d0d5dd; border-radius: 6px; font-family: var(--font-body); font-size: 0.88rem; }
+    .reimb-sign-note { margin: 0 0 4px; }
     .reimb-btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
     .reimb-btn-row button { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.85rem; font-family: var(--font-body); }
     .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; }
@@ -368,6 +372,15 @@
             <div class="admin-stat"><div class="count" id="statPoolMonth">0</div><div class="label">This Month</div></div>
             <div class="admin-stat"><div class="count" id="statPoolHoliday">0</div><div class="label">Holiday</div></div>
             <div class="admin-stat"><div class="count" id="statPoolDenied">0</div><div class="label">Access Denied</div></div>
+          </div>
+        </div>
+        <div class="admin-stats-group" id="statsReimb">
+          <div class="admin-stats-group-label">Reimbursements</div>
+          <div class="admin-stats">
+            <div class="admin-stat"><div class="count" id="statReimbPending">0</div><div class="label">Pending<br><span id="statReimbPendingAmt" class="reimb-stat-amt">$0.00</span></div></div>
+            <div class="admin-stat"><div class="count" id="statReimbApproved">0</div><div class="label">Approved<br><span id="statReimbApprovedAmt" class="reimb-stat-amt">$0.00</span></div></div>
+            <div class="admin-stat"><div class="count" id="statReimbDenied">0</div><div class="label">Denied<br><span id="statReimbDeniedAmt" class="reimb-stat-amt">$0.00</span></div></div>
+            <div class="admin-stat"><div class="count" id="statReimbTotal">0</div><div class="label">Total Submitted<br><span id="statReimbTotalAmt" class="reimb-stat-amt">$0.00</span></div></div>
           </div>
         </div>
       </div>
@@ -922,6 +935,30 @@
       loadUsers();
       loadPoolStats();
       loadPoolTrend();
+      loadReimbStats();
+    }
+
+    async function loadReimbStats() {
+      try {
+        const res = await fetch('/api/admin/reimbursements/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+        const fmt = c => '$' + ((Number(c) || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const pending  = Number(data.pending)  || 0;
+        const approved = Number(data.approved) || 0;
+        const denied   = Number(data.denied)   || 0;
+        document.getElementById('statReimbPending').textContent = pending;
+        document.getElementById('statReimbApproved').textContent = approved;
+        document.getElementById('statReimbDenied').textContent = denied;
+        document.getElementById('statReimbTotal').textContent = pending + approved + denied;
+        document.getElementById('statReimbPendingAmt').textContent = fmt(data.pending_total_cents);
+        document.getElementById('statReimbApprovedAmt').textContent = fmt(data.approved_total_cents);
+        document.getElementById('statReimbDeniedAmt').textContent = fmt(data.denied_total_cents);
+        const totalCents = (Number(data.pending_total_cents) || 0)
+                         + (Number(data.approved_total_cents) || 0)
+                         + (Number(data.denied_total_cents) || 0);
+        document.getElementById('statReimbTotalAmt').textContent = fmt(totalCents);
+      } catch (e) { /* stats stay at 0 */ }
     }
 
     async function loadPoolStats() {
@@ -1548,12 +1585,17 @@
 
               ${isPending ? `
                 <div class="reimb-modal-actions">
+                  <p class="reimb-meta reimb-sign-note"><strong>Board signature required.</strong> Enter your member email and password to sign this decision.</p>
+                  <div class="reimb-cred-row">
+                    <input type="email" id="reimbEmail" placeholder="Board member email" autocomplete="username" class="reimb-cred-input">
+                    <input type="password" id="reimbPassword" placeholder="Password" autocomplete="current-password" class="reimb-cred-input">
+                  </div>
                   <textarea id="reimbComment" placeholder="Optional comment / denial reason" rows="2" class="reimb-comment"></textarea>
                   <div class="reimb-btn-row">
                     <button type="button" class="btn-deny" id="reimbDenyBtn">Deny</button>
                     <button type="button" class="btn-approve" id="reimbApproveBtn">Approve (sign)</button>
                   </div>
-                  <p class="reimb-meta">Two distinct admin approvals are required before this is forwarded to Capstone.</p>
+                  <p class="reimb-meta">Two distinct board approvals are required before this is forwarded to Capstone.</p>
                 </div>
               ` : `<p class="reimb-meta"><em>This request is already ${reimbEsc(r.status)}.</em></p>`}
             </div>
@@ -1587,14 +1629,20 @@
 
         const approveBtn = overlay.querySelector('#reimbApproveBtn');
         const denyBtn = overlay.querySelector('#reimbDenyBtn');
+        const getCreds = () => ({
+          email: (overlay.querySelector('#reimbEmail')?.value || '').trim(),
+          password: overlay.querySelector('#reimbPassword')?.value || ''
+        });
         if (approveBtn) approveBtn.addEventListener('click', async () => {
-          if (!confirm('Sign your approval for this reimbursement?')) return;
+          const creds = getCreds();
+          if (!creds.email || !creds.password) { alert('Enter your board member email and password to sign.'); return; }
+          if (!confirm('Sign your approval for this reimbursement as ' + creds.email + '?')) return;
           approveBtn.disabled = true; approveBtn.textContent = 'Submitting…';
           try {
             const cmt = overlay.querySelector('#reimbComment').value.trim();
             const res = await fetch('/api/admin/reimbursements/' + encodeURIComponent(r.id) + '/approve', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ comment: cmt })
+              body: JSON.stringify({ comment: cmt, email: creds.email, password: creds.password })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to approve.');
@@ -1608,13 +1656,15 @@
           }
         });
         if (denyBtn) denyBtn.addEventListener('click', async () => {
+          const creds = getCreds();
+          if (!creds.email || !creds.password) { alert('Enter your board member email and password to sign.'); return; }
           const cmt = overlay.querySelector('#reimbComment').value.trim();
-          if (!confirm('Deny this reimbursement request?' + (cmt ? '' : '\n\n(No reason provided. Continue?)'))) return;
+          if (!confirm('Deny this reimbursement request as ' + creds.email + '?' + (cmt ? '' : '\n\n(No reason provided. Continue?)'))) return;
           denyBtn.disabled = true; denyBtn.textContent = 'Submitting…';
           try {
             const res = await fetch('/api/admin/reimbursements/' + encodeURIComponent(r.id) + '/deny', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reason: cmt })
+              body: JSON.stringify({ reason: cmt, email: creds.email, password: creds.password })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to deny.');
