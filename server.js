@@ -2506,7 +2506,7 @@ app.get('/api/reimbursements/:id', requireAuth, async (req, res) => {
   res.json(bundle);
 });
 
-// GET /api/reimbursements/:id/receipt/:receiptId — download a receipt
+// GET /api/reimbursements/:id/receipt/:receiptId — view (?inline=1) or download a receipt
 app.get('/api/reimbursements/:id/receipt/:receiptId', requireAuth, async (req, res) => {
   const r = await dbGet('SELECT * FROM reimbursements WHERE id = ?', [req.params.id]);
   if (!r) return res.status(404).send('Not found');
@@ -2516,7 +2516,13 @@ app.get('/api/reimbursements/:id/receipt/:receiptId', requireAuth, async (req, r
   if (!rec) return res.status(404).send('Not found');
   const abs = path.join(__dirname, rec.stored_path);
   if (!abs.startsWith(reimbBaseDir)) return res.status(400).send('Bad path');
-  res.download(abs, rec.original_name || path.basename(abs));
+  const filename = rec.original_name || path.basename(abs);
+  if (req.query.inline === '1') {
+    if (rec.mime_type) res.type(rec.mime_type);
+    res.setHeader('Content-Disposition', `inline; filename="${filename.replace(/"/g, '')}"`);
+    return res.sendFile(abs);
+  }
+  res.download(abs, filename);
 });
 
 // ── Admin reimbursement endpoints ─────────────────────────

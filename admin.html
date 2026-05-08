@@ -87,7 +87,19 @@
     .reimb-meta { font-size: 0.78rem; color: var(--text-light); }
     .reimb-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 30px 16px; overflow-y: auto; }
     .reimb-overlay.active { display: flex; }
-    .reimb-modal { background: #fff; border-radius: 12px; max-width: 720px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+    .reimb-modal { background: #fff; border-radius: 12px; max-width: 900px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+    .reimb-receipts { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin: 8px 0 4px; padding: 0; list-style: none; }
+    .reimb-receipt-card { border: 1px solid #e0e4ea; border-radius: 8px; overflow: hidden; background: #fafbfc; display: flex; flex-direction: column; }
+    .reimb-receipt-thumb { display: block; width: 100%; height: 140px; object-fit: cover; background: #eef1f5; cursor: zoom-in; border: none; }
+    .reimb-receipt-thumb-pdf { display: flex; align-items: center; justify-content: center; height: 140px; background: #f4ecec; color: #b03434; font-weight: 700; font-size: 1.4rem; letter-spacing: 1px; cursor: pointer; }
+    .reimb-receipt-thumb-other { display: flex; align-items: center; justify-content: center; height: 140px; background: #eef1f5; color: #555; font-weight: 600; font-size: 0.9rem; }
+    .reimb-receipt-meta { padding: 8px 10px; font-size: 0.78rem; color: var(--text-light); display: flex; justify-content: space-between; align-items: center; gap: 6px; border-top: 1px solid #eef0f3; }
+    .reimb-receipt-meta a { color: var(--primary, #2c5f3a); text-decoration: none; font-weight: 600; }
+    .reimb-receipt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+    .reimb-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 30px; cursor: zoom-out; }
+    .reimb-lightbox img, .reimb-lightbox iframe { max-width: 100%; max-height: 100%; background: #fff; border: none; }
+    .reimb-lightbox iframe { width: 90vw; height: 90vh; cursor: default; }
+    .reimb-lightbox-close { position: absolute; top: 16px; right: 22px; color: #fff; background: transparent; border: none; font-size: 2rem; cursor: pointer; }
     .reimb-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid #eee; }
     .reimb-modal-head h3 { margin: 0; font-size: 1.15rem; }
     .reimb-close { background: transparent; border: none; font-size: 1.6rem; cursor: pointer; color: #666; }
@@ -1460,9 +1472,30 @@
           `<tr><td>${reimbEsc(i.description)}</td><td class="reimb-amt-cell">$${Number(i.amount).toFixed(2)}</td></tr>`
         ).join('');
 
-        const receiptsHtml = (r.receipts || []).map(rc =>
-          `<li><a href="/api/reimbursements/${encodeURIComponent(r.id)}/receipt/${encodeURIComponent(rc.id)}" target="_blank" rel="noopener">${reimbEsc(rc.original_name || 'receipt')}</a> <span class="reimb-meta">(${(rc.size_bytes/1024).toFixed(0)} KB)</span></li>`
-        ).join('') || '<li class="reimb-meta">No receipts attached.</li>';
+        const receiptsHtml = (r.receipts || []).map(rc => {
+          const viewUrl = '/api/reimbursements/' + encodeURIComponent(r.id) + '/receipt/' + encodeURIComponent(rc.id) + '?inline=1';
+          const dlUrl = '/api/reimbursements/' + encodeURIComponent(r.id) + '/receipt/' + encodeURIComponent(rc.id);
+          const mt = (rc.mime_type || '').toLowerCase();
+          const isImg = mt.startsWith('image/');
+          const isPdf = mt === 'application/pdf' || /\.pdf$/i.test(rc.original_name || '');
+          const sizeKb = (rc.size_bytes / 1024).toFixed(0) + ' KB';
+          let thumb;
+          if (isImg) {
+            thumb = `<img class="reimb-receipt-thumb" src="${viewUrl}" alt="${reimbEsc(rc.original_name || 'receipt')}" data-preview="img" data-url="${viewUrl}">`;
+          } else if (isPdf) {
+            thumb = `<button type="button" class="reimb-receipt-thumb-pdf" data-preview="pdf" data-url="${viewUrl}">PDF</button>`;
+          } else {
+            thumb = `<div class="reimb-receipt-thumb-other">FILE</div>`;
+          }
+          return `<li class="reimb-receipt-card">
+            ${thumb}
+            <div class="reimb-receipt-meta">
+              <span class="reimb-receipt-name" title="${reimbEsc(rc.original_name || '')}">${reimbEsc(rc.original_name || 'receipt')}</span>
+              <a href="${dlUrl}" download>↓</a>
+            </div>
+            <div class="reimb-receipt-meta"><span>${sizeKb}</span><a href="${viewUrl}" target="_blank" rel="noopener">Open</a></div>
+          </li>`;
+        }).join('') || '<li class="reimb-meta">No receipts attached.</li>';
 
         const approvalsHtml = (r.approvals || []).map(a =>
           `<li><strong>${reimbEsc(a.admin_name)}</strong> — ${reimbEsc(a.decision)} on ${new Date(a.created_at).toLocaleString()}${a.comment ? `<br><span class="reimb-meta">${reimbEsc(a.comment)}</span>` : ''}</li>`
@@ -1495,7 +1528,7 @@
               ${r.notes ? `<h4>Notes</h4><p class="reimb-pre">${reimbEsc(r.notes)}</p>` : ''}
 
               <h4>Receipts</h4>
-              <ul>${receiptsHtml}</ul>
+              <ul class="reimb-receipts">${receiptsHtml}</ul>
 
               <h4>Board decisions (${approvalCount}/2)</h4>
               <ul>${approvalsHtml}</ul>
@@ -1519,6 +1552,25 @@
         const close = () => overlay.remove();
         overlay.querySelector('.reimb-close').addEventListener('click', close);
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+        // Receipt previews — open in lightbox
+        overlay.querySelectorAll('[data-preview]').forEach(el => {
+          el.addEventListener('click', ev => {
+            ev.preventDefault();
+            const kind = el.dataset.preview;
+            const url = el.dataset.url;
+            const lb = document.createElement('div');
+            lb.className = 'reimb-lightbox';
+            lb.innerHTML = (kind === 'img'
+              ? `<img src="${url}" alt="receipt">`
+              : `<iframe src="${url}" title="receipt"></iframe>`)
+              + '<button type="button" class="reimb-lightbox-close" aria-label="Close">&times;</button>';
+            const closeLb = () => lb.remove();
+            lb.addEventListener('click', e => { if (e.target === lb) closeLb(); });
+            lb.querySelector('.reimb-lightbox-close').addEventListener('click', closeLb);
+            document.body.appendChild(lb);
+          });
+        });
 
         const approveBtn = overlay.querySelector('#reimbApproveBtn');
         const denyBtn = overlay.querySelector('#reimbDenyBtn');
