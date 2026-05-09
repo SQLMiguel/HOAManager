@@ -304,8 +304,8 @@
       <p>Enter your admin credentials to manage member accounts.</p>
       <form id="adminLoginForm">
         <div class="form-group">
-          <label for="adminUser">Username</label>
-          <input type="text" id="adminUser" name="username" required autocomplete="username">
+          <label for="adminUser">Username or Email</label>
+          <input type="text" id="adminUser" name="username" required autocomplete="username email">
         </div>
         <div class="form-group">
           <label for="adminPass">Password</label>
@@ -1069,7 +1069,7 @@
       const renderUserRow = (user) => `
         <div class="user-row ${user.status}">
           <div class="user-info">
-            <h3>${esc(user.first_name)} ${esc(user.last_name)} <span class="badge badge-${user.status}">${user.status}</span> <span class="badge" style="background:#4a90e2;color:#fff;">Primary</span></h3>
+            <h3>${esc(user.first_name)} ${esc(user.last_name)} <span class="badge badge-${user.status}">${user.status}</span> <span class="badge" style="background:#4a90e2;color:#fff;">Primary</span>${user.is_admin ? ' <span class="badge" style="background:#7b2d8b;color:#fff;">Admin</span>' : ''}</h3>
             <p><strong>Email:</strong> ${esc(user.email)}</p>
             <p><strong>Address:</strong> ${esc(user.address)}</p>
             ${user.phone ? `<p><strong>Phone:</strong> ${esc(user.phone)}</p>` : ''}
@@ -1083,6 +1083,9 @@
             ` : ''}
             ${user.status === 'denied' ? `
               <button class="btn-approve" onclick="approveUser('${user.id}')">Approve</button>
+            ` : ''}
+            ${user.status === 'approved' ? `
+              <button style="padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:0.82rem;background:${user.is_admin ? '#6c757d' : '#7b2d8b'};color:#fff;" onclick="toggleAdminRole('${user.id}', ${user.is_admin ? 1 : 0}, '${esc(user.first_name)} ${esc(user.last_name)}')">${user.is_admin ? 'Revoke Admin' : 'Grant Admin'}</button>
             ` : ''}
             <button class="btn-delete" onclick="deleteUser('${user.id}', '${esc(user.first_name)} ${esc(user.last_name)}')">Delete</button>
           </div>
@@ -1192,6 +1195,23 @@
         }
       } catch (err) {
         showAdminNotification('Error deleting user.', 'error');
+      }
+    };
+
+    window.toggleAdminRole = async (id, currentIsAdmin, name) => {
+      const action = currentIsAdmin ? 'revoke' : 'grant';
+      if (!confirm(`${action === 'grant' ? 'Grant' : 'Revoke'} Admin role for ${name}?${action === 'grant' ? '\n\nThis will allow them to log into the admin panel using their HOA member credentials.' : ''}`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${id}/toggle-admin`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          await loadUsers();
+          showAdminNotification(data.message, 'success');
+        } else {
+          showAdminNotification(data.error || 'Error updating admin role.', 'error');
+        }
+      } catch (err) {
+        showAdminNotification('Error updating admin role.', 'error');
       }
     };
 

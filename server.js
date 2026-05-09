@@ -171,8 +171,18 @@ async function initDb() {
     `ALTER TABLE users ADD COLUMN oauth_provider_id VARCHAR(255)`,
     `ALTER TABLE users ADD COLUMN sms_opt_out TINYINT(1) DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN sms_unsubscribe_token VARCHAR(36) UNIQUE`,
+    `ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0`,
   ];
   for (const sql of alterUsers) {
+    try { await conn.query(sql); } catch(e) { /* column already exists */ }
+  }
+
+  // Migrate community_events: add end_date / end_time columns
+  const alterEvents = [
+    `ALTER TABLE community_events ADD COLUMN end_date TEXT`,
+    `ALTER TABLE community_events ADD COLUMN end_time TEXT`,
+  ];
+  for (const sql of alterEvents) {
     try { await conn.query(sql); } catch(e) { /* column already exists */ }
   }
 
@@ -1433,6 +1443,8 @@ app.get('/api/me', async (req, res) => {
   if (req.session && req.session.userId) {
     res.json({
       authenticated: true,
+      userId: req.session.userId,
+      isAdmin: !!req.session.isAdmin,
       user: {
         firstName: req.session.userName?.split(' ')[0],
         lastName: req.session.userName?.split(' ').slice(1).join(' '),
@@ -1514,19 +1526,32 @@ app.get('/api/events', requireAuth, async (req, res) => {
 // Create event (members only)
 app.post('/api/events', requireAuth, async (req, res) => {
   try {
-    const { title, description, event_date, event_time, location } = req.body;
+    const { title, description, event_date, event_time, end_date, end_time, location } = req.body;
     if (!title || !event_date) {
       return res.status(400).json({ error: 'Title and date are required.' });
     }
-    // Validate date format YYYY-MM-DD
+    if (!end_date) {
+      return res.status(400).json({ error: 'End date is required.' });
+    }
+    // Validate date formats YYYY-MM-DD
     if (!/^\d{4}-\d{2}-\d{2}$/.test(event_date)) {
-      return res.status(400).json({ error: 'Invalid date format.' });
+      return res.status(400).json({ error: 'Invalid start date format.' });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(end_date)) {
+      return res.status(400).json({ error: 'Invalid end date format.' });
+    }
+    if (end_date < event_date) {
+      return res.status(400).json({ error: 'End date cannot be before the start date.' });
+    }
+    if (end_date === event_date && end_time && event_time && end_time < event_time) {
+      return res.status(400).json({ error: 'End time cannot be before the start time on the same day.' });
     }
     const id = uuidv4();
     await dbRun(`
-      INSERT INTO community_events (id, title, description, event_date, event_time, location, created_by_id, created_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, title.trim(), description?.trim() || null, event_date, event_time?.trim() || null, location?.trim() || null,
+      INSERT INTO community_events (id, title, description, event_date, event_time, end_date, end_time, location, created_by_id, created_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, title.trim(), description?.trim() || null, event_date, event_time?.trim() || null,
+        end_date, end_time?.trim() || null, location?.trim() || null,
         req.session.userId, req.session.userName]);
     const event = await dbGet('SELECT * FROM community_events WHERE id = ?', [id]);
 
@@ -1538,6 +1563,16 @@ app.post('/api/events', requireAuth, async (req, res) => {
       const [h, min] = event_time.split(':').map(Number);
       timeFmt = `${h % 12 || 12}:${String(min).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
     }
+    const [ey, em, ed] = end_date.split('-').map(Number);
+    const endDateFmt = new Date(ey, em - 1, ed).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    let endTimeFmt = '';
+    if (end_time) {
+      const [h, min] = end_time.split(':').map(Number);
+      endTimeFmt = `${h % 12 || 12}:${String(min).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
+    const endFmt = end_date !== event_date
+      ? `${endDateFmt}${endTimeFmt ? ' ' + endTimeFmt : ''}`
+      : (endTimeFmt || '');
 
     await sendEmail(
       process.env.ADMIN_EMAIL,
@@ -1551,8 +1586,8 @@ app.post('/api/events', requireAuth, async (req, res) => {
           <p>A member has added a new event to the community calendar:</p>
           <table style="width:100%;border-collapse:collapse;">
             <tr><td style="padding:8px;font-weight:bold;width:100px;">Event:</td><td style="padding:8px;">${title.trim()}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;">Date:</td><td style="padding:8px;">${dateFmt}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;">Time:</td><td style="padding:8px;">${timeFmt}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;">Start:</td><td style="padding:8px;">${dateFmt}${event_time ? ' ' + timeFmt : ''}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;">End:</td><td style="padding:8px;">${endFmt || endDateFmt}</td></tr>
             <tr><td style="padding:8px;font-weight:bold;">Location:</td><td style="padding:8px;">${location?.trim() || 'Not specified'}</td></tr>
             <tr><td style="padding:8px;font-weight:bold;">Description:</td><td style="padding:8px;">${description?.trim() || 'None'}</td></tr>
             <tr><td style="padding:8px;font-weight:bold;">Added by:</td><td style="padding:8px;">${req.session.userName}</td></tr>
@@ -2033,18 +2068,44 @@ app.delete('/api/directory/me/pool-phones/:id', requireAuth, async (req, res) =>
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
 
+  // 1. Check env-var admin credentials
   if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
     req.session.isAdmin = true;
-    req.session.save(err => {
+    return req.session.save(err => {
       if (err) {
         console.error('Session save error:', err);
         return res.status(500).json({ error: 'Session error. Please try again.' });
       }
       res.json({ success: true });
     });
-  } else {
-    res.status(401).json({ error: 'Invalid username or password.' });
   }
+
+  // 2. Check if an approved HOA member with is_admin=1 is logging in (email + password)
+  try {
+    const [rows] = await dbPool.query(
+      `SELECT id, password_hash, status, is_admin FROM users WHERE email = ? LIMIT 1`,
+      [(username || '').trim().toLowerCase()]
+    );
+    const member = rows[0];
+    if (member && member.is_admin && member.status === 'approved' && member.password_hash) {
+      const match = await bcrypt.compare(password, member.password_hash);
+      if (match) {
+        req.session.isAdmin = true;
+        req.session.adminUserId = member.id;
+        return req.session.save(err => {
+          if (err) {
+            console.error('Session save error:', err);
+            return res.status(500).json({ error: 'Session error. Please try again.' });
+          }
+          return res.json({ success: true });
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Admin member-login error:', err.message);
+  }
+
+  res.status(401).json({ error: 'Invalid credentials.' });
 });
 
 // Admin logout
@@ -2072,7 +2133,7 @@ app.get('/api/admin/users/pending', requireAdmin, async (req, res) => {
 // Get all users
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   const users = await dbAll(`
-    SELECT id, first_name, last_name, email, address, phone, status, created_at, approved_at
+    SELECT id, first_name, last_name, email, address, phone, status, is_admin, created_at, approved_at
     FROM users
     ORDER BY created_at DESC
   `);
@@ -2360,6 +2421,29 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   await dbRun('DELETE FROM users WHERE id = ?', [id]);
   res.json({ success: true });
+});
+
+// Toggle admin role for an HOA member
+app.post('/api/admin/users/:id/toggle-admin', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await dbPool.query(
+      `SELECT id, first_name, last_name, email, status, is_admin FROM users WHERE id = ? LIMIT 1`,
+      [id]
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    if (user.status !== 'approved') {
+      return res.status(400).json({ error: 'Only approved members can be assigned the Admin role.' });
+    }
+    const newValue = user.is_admin ? 0 : 1;
+    await dbPool.query(`UPDATE users SET is_admin = ? WHERE id = ?`, [newValue, id]);
+    const action = newValue ? 'granted' : 'revoked';
+    res.json({ success: true, is_admin: newValue, message: `Admin role ${action} for ${user.first_name} ${user.last_name}.` });
+  } catch (err) {
+    console.error('Toggle admin error:', err);
+    res.status(500).json({ error: 'An error occurred.' });
+  }
 });
 
 // ── Reimbursement Routes ────────────────────────────────────

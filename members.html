@@ -345,24 +345,69 @@
         </div>
       </div>
 
+      <!-- ── Event Detail Modal ── -->
+      <div id="eventDetailOverlay" class="ev-detail-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="evDetailTitle">
+        <div class="ev-detail-modal">
+          <button class="ev-detail-close" id="evDetailClose" aria-label="Close">&times;</button>
+          <div class="ev-detail-header">
+            <h2 class="ev-detail-title" id="evDetailTitle"></h2>
+            <span class="ev-detail-badge" id="evDetailBadge"></span>
+          </div>
+          <dl class="ev-detail-body">
+            <div class="ev-detail-row" id="evDetailDateRow">
+              <dt>📅 Date</dt>
+              <dd id="evDetailDate"></dd>
+            </div>
+            <div class="ev-detail-row" id="evDetailTimeRow">
+              <dt>🕐 Time</dt>
+              <dd id="evDetailTime"></dd>
+            </div>
+            <div class="ev-detail-row" id="evDetailLocRow">
+              <dt>📍 Location</dt>
+              <dd id="evDetailLoc"></dd>
+            </div>
+            <div class="ev-detail-row" id="evDetailDescRow">
+              <dt>📝 Description</dt>
+              <dd id="evDetailDesc"></dd>
+            </div>
+            <div class="ev-detail-row">
+              <dt>👤 Added by</dt>
+              <dd id="evDetailBy"></dd>
+            </div>
+          </dl>
+          <div class="ev-detail-actions">
+            <button class="btn btn-outline" id="evDetailCloseBtn" type="button">Close</button>
+            <button class="btn" id="evDetailDeleteBtn" type="button" style="display:none;background:#c0392b;color:#fff;">Delete Event</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Add Event Form (hidden by default) ── -->
       <div class="cal-add-form" id="addEventForm" style="display:none;">
         <h3>Add a Community Event</h3>
         <p>Your event will be visible to all approved members immediately.</p>
         <div class="cal-form-grid">
-          <div class="form-group">
+          <div class="form-group cal-form-full">
             <label for="evTitle">Event Title <span class="required">*</span></label>
             <input type="text" id="evTitle" placeholder="e.g. Block Party" maxlength="80">
           </div>
           <div class="form-group">
-            <label for="evDate">Date <span class="required">*</span></label>
+            <label for="evDate">Start Date <span class="required">*</span></label>
             <input type="date" id="evDate">
           </div>
           <div class="form-group">
-            <label for="evTime">Time</label>
+            <label for="evEndDate">End Date <span class="required">*</span></label>
+            <input type="date" id="evEndDate">
+          </div>
+          <div class="form-group">
+            <label for="evTime">Start Time</label>
             <input type="time" id="evTime">
           </div>
           <div class="form-group">
+            <label for="evEndTime">End Time</label>
+            <input type="time" id="evEndTime">
+          </div>
+          <div class="form-group cal-form-full">
             <label for="evLocation">Location</label>
             <input type="text" id="evLocation" placeholder="e.g. Pool Area" maxlength="100">
           </div>

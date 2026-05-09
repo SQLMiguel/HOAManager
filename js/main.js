@@ -200,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
           from { transform: translateX(0); opacity: 1; }
           to { transform: translateX(100%); opacity: 0; }
         }
+        .notification p { color: inherit; margin: 0; font-size: inherit; }
       `;
       document.head.appendChild(style);
     }
@@ -570,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewEventsBtn   = document.getElementById('viewEventsBtn');
 
   if (calendarSection && viewEventsBtn) {
-    let calYear, calMonth, allEvents = [], selectedDate = null;
+    let calYear, calMonth, allEvents = [], selectedDate = null, currentUserId = null, currentUserIsAdmin = false;
 
     viewEventsBtn.addEventListener('click', async () => {
       // Must be logged in
@@ -582,6 +583,8 @@ document.addEventListener('DOMContentLoaded', () => {
           document.getElementById('authSection')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
+        currentUserId = d.userId || d.id || null;
+        currentUserIsAdmin = !!d.isAdmin;
       } catch (e) {
         showNotification('Unable to connect to server.', 'error');
         return;
@@ -685,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       list.innerHTML = evs.map(e => eventCard(e, true)).join('');
-      attachDeleteHandlers(list);
+      attachCardHandlers(list);
     }
 
     function renderUpcoming() {
@@ -700,34 +703,170 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       container.innerHTML = upcoming.map(e => eventCard(e, false)).join('');
-      attachDeleteHandlers(container);
+      attachCardHandlers(container);
     }
 
     function eventCard(e, compact) {
-      const timeStr  = e.event_time ? formatTime(e.event_time) : 'All day';
-      const locStr   = e.location   ? `<span class="cal-ev-loc">📍 ${e.location}</span>` : '';
-      const descStr  = e.description ? `<p class="cal-ev-desc">${e.description}</p>` : '';
-      const dateStr  = !compact ? `<span class="cal-ev-date">${formatDateLabel(e.event_date)}</span>` : '';
-      return `
-        <div class="cal-event-item" data-id="${e.id}">
-          <div class="cal-ev-header">
-            <strong class="cal-ev-title">${e.title}</strong>
+      let timeStr = 'All day';
+      if (e.event_time) {
+        timeStr = formatTime(e.event_time);
+        if (e.end_time) {
+          if (e.end_date && e.end_date !== e.event_date) {
+            timeStr += ` – ${formatDateLabel(e.end_date)} ${formatTime(e.end_time)}`;
+          } else {
+            timeStr += ` – ${formatTime(e.end_time)}`;
+          }
+        } else if (e.end_date && e.end_date !== e.event_date) {
+          timeStr += ` – ${formatDateLabel(e.end_date)}`;
+        }
+      } else if (e.end_date && e.end_date !== e.event_date) {
+        timeStr = `Through ${formatDateLabel(e.end_date)}`;
+      }
+      const locStr  = e.location ? `<span class="cal-ev-loc">📍 ${e.location}</span>` : '';
+      const dateStr = !compact ? `<span class="cal-ev-date">${formatDateLabel(e.event_date)}</span>` : '';
+      const canDelete = currentUserIsAdmin || e.created_by_id === currentUserId;
+      const deleteBtn = canDelete ? `
             <button class="cal-ev-delete" data-id="${e.id}" title="Delete event" aria-label="Delete event">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
               </svg>
-            </button>
+            </button>` : '';
+      return `
+        <div class="cal-event-item" data-id="${e.id}" role="button" tabindex="0" title="Click to view details" style="cursor:pointer;">
+          <div class="cal-ev-header">
+            <strong class="cal-ev-title">${e.title}</strong>
+            ${deleteBtn}
           </div>
           ${dateStr}
           <span class="cal-ev-meta">${timeStr}</span>
-          ${locStr}${descStr}
+          ${locStr}
           <span class="cal-ev-by">Added by ${e.created_by_name}</span>
         </div>`;
     }
 
-    function attachDeleteHandlers(container) {
+    // ── Event Detail Modal ──
+    const evOverlay    = document.getElementById('eventDetailOverlay');
+    const evDetailClose  = document.getElementById('evDetailClose');
+    const evDetailCloseBtn = document.getElementById('evDetailCloseBtn');
+    const evDetailDeleteBtn = document.getElementById('evDetailDeleteBtn');
+    let detailEventId = null;
+
+    function openEventDetail(ev) {
+      detailEventId = ev.id;
+
+      document.getElementById('evDetailTitle').textContent = ev.title;
+
+      // Badge: pool party or multi-day
+      const badge = document.getElementById('evDetailBadge');
+      if (ev.end_date && ev.end_date !== ev.event_date) {
+        badge.textContent = 'Multi-Day';
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+
+      // Date
+      let dateDisplay = formatDateLabel(ev.event_date);
+      if (ev.end_date && ev.end_date !== ev.event_date) {
+        dateDisplay += ` – ${formatDateLabel(ev.end_date)}`;
+      }
+      document.getElementById('evDetailDate').textContent = dateDisplay;
+
+      // Time
+      const timeRow = document.getElementById('evDetailTimeRow');
+      if (ev.event_time) {
+        let t = formatTime(ev.event_time);
+        if (ev.end_time) t += ` – ${formatTime(ev.end_time)}`;
+        document.getElementById('evDetailTime').textContent = t;
+        timeRow.style.display = '';
+      } else {
+        timeRow.style.display = 'none';
+      }
+
+      // Location
+      const locRow = document.getElementById('evDetailLocRow');
+      if (ev.location) {
+        document.getElementById('evDetailLoc').textContent = ev.location;
+        locRow.style.display = '';
+      } else {
+        locRow.style.display = 'none';
+      }
+
+      // Description
+      const descRow = document.getElementById('evDetailDescRow');
+      if (ev.description) {
+        document.getElementById('evDetailDesc').textContent = ev.description;
+        descRow.style.display = '';
+      } else {
+        descRow.style.display = 'none';
+      }
+
+      // Added by
+      document.getElementById('evDetailBy').textContent = ev.created_by_name;
+
+      // Show delete button only for owner or admin
+      const canDelete = currentUserIsAdmin || ev.created_by_id === currentUserId;
+      evDetailDeleteBtn.style.display = canDelete ? '' : 'none';
+
+      evOverlay.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      evDetailClose.focus();
+    }
+
+    function closeEventDetail() {
+      evOverlay.style.display = 'none';
+      document.body.style.overflow = '';
+      detailEventId = null;
+    }
+
+    evDetailClose.addEventListener('click', closeEventDetail);
+    evDetailCloseBtn.addEventListener('click', closeEventDetail);
+    evOverlay.addEventListener('click', e => { if (e.target === evOverlay) closeEventDetail(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && evOverlay.style.display !== 'none') closeEventDetail(); });
+
+    evDetailDeleteBtn.addEventListener('click', async () => {
+      if (!confirm('Delete this event?')) return;
+      try {
+        const res = await fetch(`/api/events/${detailEventId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          closeEventDetail();
+          await loadEvents();
+          renderCalendar();
+          renderUpcoming();
+          if (selectedDate) renderDayEvents(selectedDate);
+          showNotification('Event deleted.', 'success');
+        } else {
+          showNotification(data.error || 'Could not delete event.', 'error');
+        }
+      } catch (e) {
+        showNotification('Unable to connect to server.', 'error');
+      }
+    });
+
+    function attachCardHandlers(container) {
+      // Click on card body → open detail modal
+      container.querySelectorAll('.cal-event-item').forEach(card => {
+        card.addEventListener('click', e => {
+          if (e.target.closest('.cal-ev-delete')) return; // let delete button handle it
+          const id = card.dataset.id;
+          const ev = allEvents.find(x => x.id === id);
+          if (ev) openEventDetail(ev);
+        });
+        card.addEventListener('keydown', e => {
+          if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.cal-ev-delete')) {
+            e.preventDefault();
+            const id = card.dataset.id;
+            const ev = allEvents.find(x => x.id === id);
+            if (ev) openEventDetail(ev);
+          }
+        });
+      });
+
+      // Delete button (small X on the card) → still works inline
       container.querySelectorAll('.cal-ev-delete').forEach(btn => {
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', async e => {
+          e.stopPropagation();
           if (!confirm('Delete this event?')) return;
           const id = btn.dataset.id;
           try {
@@ -769,10 +908,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     openAddBtn.addEventListener('click', () => {
       addForm.style.display = '';
-      // Pre-fill date with selected day
-      if (selectedDate) document.getElementById('evDate').value = selectedDate;
-      else document.getElementById('evDate').value = todayStr();
+      // Pre-fill start date with selected day (or today)
+      const startDate = selectedDate || todayStr();
+      document.getElementById('evDate').value = startDate;
+      // Default end date = same as start date
+      document.getElementById('evEndDate').value = startDate;
+      document.getElementById('evTime').value = '';
+      document.getElementById('evEndTime').value = '';
       addForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    // When start date changes → sync end date if end is blank or before new start
+    document.getElementById('evDate').addEventListener('change', function () {
+      const endDateEl = document.getElementById('evEndDate');
+      if (!endDateEl.value || endDateEl.value < this.value) {
+        endDateEl.value = this.value;
+      }
+    });
+
+    // When start time changes → sync end time if end time is blank
+    document.getElementById('evTime').addEventListener('change', function () {
+      const endTimeEl = document.getElementById('evEndTime');
+      if (!endTimeEl.value) {
+        endTimeEl.value = this.value;
+      }
     });
 
     // Pool party radio → show/hide AquaTech notice
@@ -787,6 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelBtn.addEventListener('click', () => {
       addForm.style.display = 'none';
       document.getElementById('addEventError').textContent = '';
+      ['evTitle','evDate','evEndDate','evTime','evEndTime','evLocation','evDesc'].forEach(id => document.getElementById(id).value = '');
       document.querySelectorAll('input[name="evPoolParty"]').forEach(r => r.checked = false);
       document.getElementById('aquatechNotice').style.display = 'none';
       document.getElementById('evAquatechAck').checked = false;
@@ -797,13 +957,27 @@ document.addEventListener('DOMContentLoaded', () => {
       errEl.textContent = '';
       const title    = document.getElementById('evTitle').value.trim();
       const date     = document.getElementById('evDate').value;
+      const endDate  = document.getElementById('evEndDate').value;
       const time     = document.getElementById('evTime').value;
+      const endTime  = document.getElementById('evEndTime').value;
       const location = document.getElementById('evLocation').value.trim();
       const desc     = document.getElementById('evDesc').value.trim();
       const poolPartyRadio = document.querySelector('input[name="evPoolParty"]:checked');
 
       if (!title || !date) {
-        errEl.textContent = 'Title and date are required.';
+        errEl.textContent = 'Title and start date are required.';
+        return;
+      }
+      if (!endDate) {
+        errEl.textContent = 'End date is required.';
+        return;
+      }
+      if (endDate < date) {
+        errEl.textContent = 'End date cannot be before the start date.';
+        return;
+      }
+      if (endDate === date && endTime && time && endTime < time) {
+        errEl.textContent = 'End time cannot be before the start time on the same day.';
         return;
       }
       if (!poolPartyRadio) {
@@ -822,12 +996,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('/api/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, event_date: date, event_time: time || null, location: location || null, description: desc || null })
+          body: JSON.stringify({
+            title,
+            event_date: date,
+            event_time: time || null,
+            end_date: endDate,
+            end_time: endTime || null,
+            location: location || null,
+            description: desc || null
+          })
         });
         const data = await res.json();
         if (data.success) {
           // Reset form
-          ['evTitle','evDate','evTime','evLocation','evDesc'].forEach(id => document.getElementById(id).value = '');
+          ['evTitle','evDate','evEndDate','evTime','evEndTime','evLocation','evDesc'].forEach(id => document.getElementById(id).value = '');
           document.querySelectorAll('input[name="evPoolParty"]').forEach(r => r.checked = false);
           document.getElementById('aquatechNotice').style.display = 'none';
           document.getElementById('evAquatechAck').checked = false;
