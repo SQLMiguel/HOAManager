@@ -136,13 +136,32 @@
             </button>
           </div>
 
-          <!-- Tab Nav -->
-          <div class="dir-tabs">
-            <button class="dir-tab active" data-tab="info">Household Info</button>
-            <button class="dir-tab" data-tab="family">Family &amp; Pets</button>
-            <button class="dir-tab" data-tab="social">Social Links</button>
-            <button class="dir-tab" data-tab="photos">Photos</button>
-            <button class="dir-tab" data-tab="publish">Privacy &amp; Publish</button>
+          <!-- Profile Wizard Stepper -->
+          <div class="profile-stepper">
+            <div class="profile-step-item active" data-pstep="1">
+              <div class="pstep-circle">1</div>
+              <div class="pstep-label">Your Info</div>
+            </div>
+            <div class="profile-step-connector"></div>
+            <div class="profile-step-item" data-pstep="2">
+              <div class="pstep-circle">2</div>
+              <div class="pstep-label">Family &amp; Pets</div>
+            </div>
+            <div class="profile-step-connector"></div>
+            <div class="profile-step-item" data-pstep="3">
+              <div class="pstep-circle">3</div>
+              <div class="pstep-label">Social Links</div>
+            </div>
+            <div class="profile-step-connector"></div>
+            <div class="profile-step-item" data-pstep="4">
+              <div class="pstep-circle">4</div>
+              <div class="pstep-label">Photos</div>
+            </div>
+            <div class="profile-step-connector"></div>
+            <div class="profile-step-item" data-pstep="5">
+              <div class="pstep-circle">5</div>
+              <div class="pstep-label">Privacy</div>
+            </div>
           </div>
 
           <!-- ── TAB: Household Info ── -->
@@ -239,8 +258,10 @@
               </div>
             </div>
 
-            <button class="btn btn-primary" id="saveInfoBtn" type="button">Save Info</button>
-            <span id="saveInfoMsg" class="dir-save-msg"></span>
+            <div class="pstep-nav pstep-nav-end">
+              <span id="autoSaveStatus" class="auto-save-status"></span>
+              <button class="btn btn-primary" id="profNextBtn1" type="button">Continue →</button>
+            </div>
           </div>
 
           <!-- ── TAB: Family & Pets ── -->
@@ -324,6 +345,10 @@
                 <button class="btn btn-primary dir-add-btn" id="addPetBtn" type="button">Add</button>
               </div>
             </div>
+            <div class="pstep-nav">
+              <button class="btn pstep-back-btn" type="button">← Back</button>
+              <button class="btn btn-primary pstep-next-btn" type="button">Continue →</button>
+            </div>
           </div>
 
           <!-- ── TAB: Social Links ── -->
@@ -345,6 +370,10 @@
                 </label>
                 <button class="btn btn-primary dir-add-btn" id="addSocialBtn" type="button">Add</button>
               </div>
+            </div>
+            <div class="pstep-nav">
+              <button class="btn pstep-back-btn" type="button">← Back</button>
+              <button class="btn btn-primary pstep-next-btn" type="button">Continue →</button>
             </div>
           </div>
 
@@ -373,6 +402,10 @@
                 <button class="btn btn-primary" id="uploadPhotoBtn" type="button">Upload</button>
               </div>
               <p id="photoUploadMsg" class="dir-save-msg"></p>
+            </div>
+            <div class="pstep-nav">
+              <button class="btn pstep-back-btn" type="button">← Back</button>
+              <button class="btn btn-primary pstep-next-btn" type="button">Continue →</button>
             </div>
           </div>
 
@@ -425,6 +458,10 @@
             <div class="dir-field-group dir-danger-zone">
               <h4>Content Guidelines</h4>
               <p class="dir-field-hint">Prohibited: commercial advertising, explicit content, harassment, or copyrighted material. The HOA board reserves the right to remove any content.</p>
+            </div>
+            <div class="pstep-nav">
+              <button class="btn pstep-back-btn" type="button">← Back</button>
+              <button class="btn btn-primary" id="profDoneBtn" type="button">Done ✓</button>
             </div>
           </div>
 

@@ -8,9 +8,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { StatusBadge, StatusTone } from '@/components/StatusBadge';
 import { colors, fontSize, isTabletWidth, spacing } from '@/theme';
 import { openGate, GateOpenResponse } from '@/api/gate';
@@ -31,12 +33,14 @@ export function GateOpenScreen() {
 
   async function onPress() {
     setResult({ kind: 'pending' });
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const biometricsEnabled = (await getSecureItem(StorageKeys.biometricsEnabled)) === '1';
       if (biometricsEnabled) {
         const ok = await runBiometric();
         if (!ok) {
           setResult({ kind: 'error', message: 'Biometric verification failed.' });
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           return;
         }
       }
@@ -52,11 +56,13 @@ export function GateOpenScreen() {
                   fence.distanceMeters ? ` (${fence.distanceMeters} m away)` : ''
                 }.`,
         });
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
 
       const data = await openGate({});
       setResult({ kind: 'success', data });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       const err = e as ApiError | Error;
       const status = (err as ApiError).status;
@@ -70,11 +76,13 @@ export function GateOpenScreen() {
         message = 'Too many attempts. Wait a moment and try again.';
       }
       setResult({ kind: 'error', message });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <OfflineBanner />
       <ScrollView contentContainerStyle={[styles.scroll, tablet && styles.scrollTablet]}>
         <View style={styles.center}>
           <Pressable

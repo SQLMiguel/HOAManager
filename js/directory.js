@@ -24,7 +24,7 @@
   // ── Init ─────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', async () => {
     await checkAuth();
-    initTabs();
+    initProfileWizard();
     initSearch();
     initPrintBtn();
     initProfileToggle();
@@ -33,7 +33,6 @@
     initPhotosTab();
     initPublishTab();
     initSmsPreferences();
-    initInfoTab();
     initPoolPhones();
     loadDirectory();
     loadMyProfile();
@@ -265,24 +264,18 @@
       const sec    = document.getElementById('profileSection');
       const hidden = sec.style.display === 'none' || sec.style.display === '';
       sec.style.display = hidden ? 'block' : 'none';
-      if (hidden) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (hidden) {
+        goToProfileStep(1);
+        sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
     document.getElementById('closeProfileBtn').addEventListener('click', () => {
       document.getElementById('profileSection').style.display = 'none';
     });
   }
 
-  // ── Tabs ─────────────────────────────────────────────────────
-  function initTabs() {
-    document.querySelectorAll('.dir-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.dir-tab').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.dir-tab-panel').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-      });
-    });
-  }
+  // ── Tabs (kept for hash-based auto-open compatibility) ───────
+  function initTabs() { /* replaced by initProfileWizard */ }
 
   // ── Load My Profile ──────────────────────────────────────────
   async function loadMyProfile() {
@@ -407,53 +400,136 @@
     refreshPoolPhones();
   }
 
-  // ── Info Tab ─────────────────────────────────────────────────
-  function initInfoTab() {
-    document.getElementById('saveInfoBtn').addEventListener('click', saveInfo);
-    // Phone auto-formatter is handled by validation.js (auto-init)
+  // ── Profile Wizard State ─────────────────────────────────────
+  let _profileStep = 1;
+
+  function initProfileWizard() {
+    // Clicking a stepper indicator navigates to that step (auto-saving step 1 first if needed)
+    document.querySelectorAll('.profile-step-item').forEach(el => {
+      el.addEventListener('click', async () => {
+        const target = parseInt(el.dataset.pstep);
+        if (target === _profileStep) return;
+        if (_profileStep === 1) {
+          const saved = await autoSaveInfo();
+          if (!saved) return;
+        }
+        goToProfileStep(target);
+      });
+    });
+
+    // Step 1 → 2: auto-save then advance
+    document.getElementById('profNextBtn1').addEventListener('click', async () => {
+      const saved = await autoSaveInfo();
+      if (saved) goToProfileStep(2);
+    });
+
+    // Generic next buttons on steps 2–4
+    document.querySelectorAll('.pstep-next-btn').forEach(btn => {
+      btn.addEventListener('click', () => goToProfileStep(_profileStep + 1));
+    });
+
+    // Generic back buttons on steps 2–5
+    document.querySelectorAll('.pstep-back-btn').forEach(btn => {
+      btn.addEventListener('click', () => goToProfileStep(_profileStep - 1));
+    });
+
+    // Done button on step 5
+    document.getElementById('profDoneBtn').addEventListener('click', () => {
+      document.getElementById('profileSection').style.display = 'none';
+    });
 
     // SMS opt-in/out toggle on the Household Info tab
     const smsToggle = document.getElementById('profSmsOptIn');
     if (smsToggle) {
       smsToggle.addEventListener('change', async () => {
         const optedOut = !smsToggle.checked;
-        const [ok, msg] = await apiPost('/api/sms/preferences', { opted_out: optedOut ? 1 : 0 });
-        if (!ok) { smsToggle.checked = !smsToggle.checked; }
+        const [ok] = await apiPost('/api/sms/preferences', { opted_out: optedOut ? 1 : 0 });
+        if (!ok) smsToggle.checked = !smsToggle.checked;
         await loadSmsPreferences();
       });
     }
   }
 
-  async function saveInfo() {
-    const displayName = val('profDisplayName');
-    if (!displayName) {
-      showMsg('saveInfoMsg', 'Display Name is required.', true);
+  function goToProfileStep(step) {
+    step = Math.max(1, Math.min(5, step));
+    const panelIds = ['tab-info', 'tab-family', 'tab-social', 'tab-photos', 'tab-publish'];
+    panelIds.forEach((id, i) => {
+      const panel = document.getElementById(id);
+      if (panel) panel.classList.toggle('active', i + 1 === step);
+    });
+
+    document.querySelectorAll('.profile-step-item').forEach((el, i) => {
+      const n = i + 1;
+      const circle = el.querySelector('.pstep-circle');
+      el.classList.remove('active', 'done');
+      if (n === step) {
+        el.classList.add('active');
+        circle.textContent = n;
+      } else if (n < step) {
+        el.classList.add('done');
+        circle.textContent = '✓';
+      } else {
+        circle.textContent = n;
+      }
+    });
+
+    document.querySelectorAll('.profile-step-connector').forEach((el, i) => {
+      el.classList.toggle('done', i + 1 < step);
+    });
+
+    _profileStep = step;
+    document.getElementById('profileSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function autoSaveInfo() {
+    const statusEl = document.getElementById('autoSaveStatus');
+    const displayNameVal = val('profDisplayName');
+
+    if (!displayNameVal) {
+      statusEl.textContent = '⚠ Display Name is required.';
+      statusEl.className   = 'auto-save-status auto-save-error';
       document.getElementById('profDisplayName').focus();
-      return;
+      return false;
     }
-    if (!FormValidation.isValidPhone(val('profPhone'))) {
-      showMsg('saveInfoMsg', 'Phone number must be 10 digits.', true);
+    const phoneVal = val('profPhone');
+    if (phoneVal && !FormValidation.isValidPhone(phoneVal)) {
+      statusEl.textContent = '⚠ Phone number must be 10 digits.';
+      statusEl.className   = 'auto-save-status auto-save-error';
       document.getElementById('profPhone').focus();
-      return;
+      return false;
     }
+
+    statusEl.textContent = 'Saving…';
+    statusEl.className   = 'auto-save-status auto-save-pending';
+
     const payload = {
-      display_name:     displayName,
-      phone:            val('profPhone'),
-      show_phone:       chk('profShowPhone')        ? 1 : 0,
+      display_name:      displayNameVal,
+      phone:             phoneVal,
+      show_phone:        chk('profShowPhone')       ? 1 : 0,
       anniversary:       val('profAnniversary'),
-      show_anniversary:  chk('profShowAnniversary')  ? 1 : 0,
+      show_anniversary:  chk('profShowAnniversary') ? 1 : 0,
       interests:         val('profInterests'),
-      show_interests:    chk('profShowInterests')    ? 1 : 0,
+      show_interests:    chk('profShowInterests')   ? 1 : 0,
       notes:             val('profNotes'),
-      show_notes:        chk('profShowNotes')        ? 1 : 0,
+      show_notes:        chk('profShowNotes')       ? 1 : 0,
     };
+
     const [ok, msg] = await apiPost('/api/directory/profile', payload);
-    showMsg('saveInfoMsg', msg, !ok);
     if (ok) {
-      markSaved(document.getElementById('saveInfoBtn'));
+      statusEl.textContent = '✓ Saved';
+      statusEl.className   = 'auto-save-status auto-save-ok';
       myProfile = await (await fetch('/api/directory/me')).json();
       loadDirectory();
       await loadSmsPreferences();
+      setTimeout(() => {
+        statusEl.textContent = '';
+        statusEl.className   = 'auto-save-status';
+      }, 3000);
+      return true;
+    } else {
+      statusEl.textContent = '⚠ ' + msg;
+      statusEl.className   = 'auto-save-status auto-save-error';
+      return false;
     }
   }
 

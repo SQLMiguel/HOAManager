@@ -52,8 +52,8 @@
     ],
     "extra": {
       "apiBaseUrl": "http://localhost:3000",
-      "poolLatitude": 0,
-      "poolLongitude": 0,
+      "poolLatitude": 36.1146,
+      "poolLongitude": -80.3226,
       "poolGeofenceMeters": 250
     }
   }

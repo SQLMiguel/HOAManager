@@ -11,7 +11,7 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export function HomeScreen({ navigation }: Props) {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const tablet = isTabletWidth(width);
 
@@ -79,14 +79,6 @@ export function HomeScreen({ navigation }: Props) {
             />
           </Card>
         </View>
-
-        <Button
-          variant="danger"
-          title="Sign out"
-          onPress={signOut}
-          fullWidth
-          style={{ marginTop: spacing.lg }}
-        />
       </ScrollView>
     </SafeAreaView>
   );

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useAuth } from '@/auth/AuthContext';
 import { colors, fontSize, isTabletWidth, spacing } from '@/theme';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -11,12 +12,13 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export function HomeScreen({ navigation }: Props) {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const tablet = isTabletWidth(width);
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <OfflineBanner />
       <ScrollView contentContainerStyle={[styles.scroll, tablet && styles.scrollTablet]}>
         <Text style={styles.greeting}>
           {user ? `Hi, ${user.firstName}` : 'Welcome'}
@@ -80,14 +82,6 @@ export function HomeScreen({ navigation }: Props) {
             />
           </Card>
         </View>
-
-        <Button
-          variant="danger"
-          title="Sign out"
-          onPress={signOut}
-          fullWidth
-          style={{ marginTop: spacing.lg }}
-        />
       </ScrollView>
     </SafeAreaView>
   );

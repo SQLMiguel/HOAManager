@@ -242,7 +242,7 @@
 }
 .dir-close-btn:hover { color: var(--primary); background: #f0f0f0; }
 
-/* Tabs */
+/* Tabs (kept for backwards compat; replaced visually by profile-stepper) */
 .dir-tabs {
   display: flex;
   overflow-x: auto;
@@ -269,6 +269,126 @@
 /* Tab panels */
 .dir-tab-panel { display: none; padding: 2rem; }
 .dir-tab-panel.active { display: block; }
+
+/* ── Profile Wizard Stepper ─────────────────────────────────── */
+.profile-stepper {
+  display: flex;
+  align-items: flex-start;
+  padding: 1.4rem 2rem 0;
+  background: #fff;
+  border-bottom: 2px solid #eee;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.profile-stepper::-webkit-scrollbar { display: none; }
+
+.profile-step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 1rem;
+  min-width: 72px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pstep-circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #ddd;
+  background: #fff;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: .82rem;
+  transition: background .25s ease, border-color .25s ease, color .25s ease;
+  flex-shrink: 0;
+}
+
+.profile-step-item.active .pstep-circle {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.profile-step-item.done .pstep-circle {
+  background: var(--primary-light, #52b788);
+  border-color: var(--primary-light, #52b788);
+  color: #fff;
+}
+
+.pstep-label {
+  font-size: .68rem;
+  color: #aaa;
+  font-weight: 500;
+  white-space: nowrap;
+  text-align: center;
+  transition: color .2s;
+}
+
+.profile-step-item.active .pstep-label { color: var(--primary); font-weight: 700; }
+.profile-step-item.done  .pstep-label  { color: var(--primary-light, #52b788); }
+
+.profile-step-connector {
+  flex: 1;
+  height: 2px;
+  background: #ddd;
+  margin-top: 14px;
+  min-width: 20px;
+  transition: background .25s ease;
+  flex-shrink: 0;
+}
+.profile-step-connector.done { background: var(--primary-light, #52b788); }
+
+/* ── Step Navigation Buttons ────────────────────────────────── */
+.pstep-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #eee;
+}
+
+.pstep-nav-end { justify-content: flex-end; }
+
+.pstep-back-btn {
+  background: transparent;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  font-size: .9rem;
+  padding: .6rem 1.4rem;
+}
+.pstep-back-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.pstep-nav .btn-primary { font-size: .9rem; padding: .65rem 1.6rem; }
+
+/* ── Auto-save status indicator ─────────────────────────────── */
+.auto-save-status {
+  font-size: .82rem;
+  font-weight: 500;
+  transition: color .2s;
+}
+.auto-save-pending { color: #888; }
+.auto-save-ok      { color: var(--primary, #2d6a4f); }
+.auto-save-error   { color: #c0392b; }
+
+@media (max-width: 600px) {
+  .profile-stepper  { padding: 1rem 1rem 0; }
+  .profile-step-item { min-width: 52px; }
+  .pstep-label       { font-size: .6rem; }
+  .pstep-nav         { flex-wrap: wrap; }
+  .pstep-nav .btn    { flex: 1; justify-content: center; min-width: 120px; }
+}
 
 /* Field groups */
 .dir-field-group { margin-bottom: 2rem; }

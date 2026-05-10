@@ -260,10 +260,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const switchToSignup = document.getElementById('switchToSignup');
     const switchToLogin = document.getElementById('switchToLogin');
     const loginForm = document.getElementById('loginForm');
-    const signupForm = document.getElementById('signupForm');
     const socialCompleteForm = document.getElementById('socialCompleteForm');
     const loginError = document.getElementById('loginError');
-    const signupError = document.getElementById('signupError');
     const logoutBtn = document.getElementById('logoutBtn');
     const welcomeName = document.getElementById('welcomeName');
 
@@ -369,11 +367,149 @@ document.addEventListener('DOMContentLoaded', () => {
       loginCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
+    // ── Signup Wizard ──────────────────────────────────────
+    function resetWizard() {
+      goToStep(1);
+      ['signupFirst','signupLast','signupAddress','signupEmail',
+       'signupPassword','signupConfirm','signupPhone'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      const pool = document.getElementById('signupRequestPool');
+      if (pool) pool.checked = false;
+      ['signupError1','signupError2','signupError3'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+      });
+    }
+
+    function goToStep(step) {
+      [1, 2, 3].forEach(n => {
+        const panel = document.getElementById(`signupStep${n}`);
+        if (panel) panel.style.display = n === step ? 'block' : 'none';
+      });
+
+      signupCard.querySelectorAll('.signup-step-item').forEach((el, i) => {
+        const n = i + 1;
+        const circle = el.querySelector('.step-circle');
+        el.classList.remove('active', 'done');
+        if (n === step) {
+          el.classList.add('active');
+          circle.textContent = n;
+        } else if (n < step) {
+          el.classList.add('done');
+          circle.textContent = '✓';
+        } else {
+          circle.textContent = n;
+        }
+      });
+
+      signupCard.querySelectorAll('.signup-step-connector').forEach((el, i) => {
+        el.classList.toggle('done', i + 1 < step);
+      });
+
+      signupCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function validateStep1() {
+      const err = document.getElementById('signupError1');
+      err.textContent = '';
+      const first = document.getElementById('signupFirst').value.trim();
+      const last  = document.getElementById('signupLast').value.trim();
+      const addr  = document.getElementById('signupAddress').value.trim();
+      if (!first || !last) { err.textContent = 'Please enter your full name.'; return false; }
+      if (!addr)           { err.textContent = 'Please enter your Glenridge street address.'; return false; }
+      return true;
+    }
+
+    function validateStep2() {
+      const err = document.getElementById('signupError2');
+      err.textContent = '';
+      const email    = document.getElementById('signupEmail').value;
+      const password = document.getElementById('signupPassword').value;
+      const confirm  = document.getElementById('signupConfirm').value;
+      if (!FormValidation.isValidEmail(email)) { err.textContent = 'Please enter a valid email address.'; return false; }
+      if (password.length < 8)                 { err.textContent = 'Password must be at least 8 characters.'; return false; }
+      if (password !== confirm)                 { err.textContent = 'Passwords do not match.'; return false; }
+      return true;
+    }
+
+    function validateStep3() {
+      const err   = document.getElementById('signupError3');
+      err.textContent = '';
+      const phone = document.getElementById('signupPhone').value.trim();
+      if (!phone) {
+        err.textContent = 'A phone number is required.';
+        return false;
+      }
+      if (!FormValidation.isValidPhone(phone)) {
+        err.textContent = 'Phone number must be 10 digits (numbers only).';
+        return false;
+      }
+      return true;
+    }
+
+    document.getElementById('step1Next').addEventListener('click', () => {
+      if (validateStep1()) goToStep(2);
+    });
+
+    document.getElementById('step2Back').addEventListener('click', () => goToStep(1));
+
+    document.getElementById('step2Next').addEventListener('click', () => {
+      if (validateStep2()) goToStep(3);
+    });
+
+    document.getElementById('step3Back').addEventListener('click', () => goToStep(2));
+
+    document.getElementById('signupSubmitBtn').addEventListener('click', async () => {
+      if (!validateStep3()) return;
+
+      const btn = document.getElementById('signupSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Creating Account...';
+
+      try {
+        const res = await fetch('/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            firstName:         document.getElementById('signupFirst').value,
+            lastName:          document.getElementById('signupLast').value,
+            email:             document.getElementById('signupEmail').value,
+            address:           document.getElementById('signupAddress').value,
+            phone:             document.getElementById('signupPhone').value,
+            password:          document.getElementById('signupPassword').value,
+            confirmPassword:   document.getElementById('signupConfirm').value,
+            requestPoolAccess: document.getElementById('signupRequestPool').checked
+          })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          signupCard.innerHTML = `
+            <div class="auth-success">
+              <h3 style="margin-bottom:8px; color:#155724;">Account Created!</h3>
+              <p>${data.message}</p>
+            </div>
+            <p class="auth-toggle"><a href="#" onclick="location.reload(); return false;">Back to Login</a></p>
+          `;
+        } else {
+          document.getElementById('signupError3').textContent = data.error;
+          btn.disabled = false;
+          btn.textContent = 'Create Account';
+        }
+      } catch (err) {
+        document.getElementById('signupError3').textContent = 'Unable to connect to server. Please try again later.';
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    });
+
     showSignupBtn.addEventListener('click', () => {
       signupCard.style.display = 'block';
       loginCard.style.display = 'none';
       if (socialCompleteCard) socialCompleteCard.style.display = 'none';
-      signupCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      resetWizard();
     });
 
     switchToSignup.addEventListener('click', (e) => {
@@ -381,7 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
       signupCard.style.display = 'block';
       loginCard.style.display = 'none';
       if (socialCompleteCard) socialCompleteCard.style.display = 'none';
-      signupCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      resetWizard();
     });
 
     switchToLogin.addEventListener('click', (e) => {
@@ -423,84 +559,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       btn.disabled = false;
       btn.textContent = 'Log In';
-    });
-
-    // Signup form submit
-    signupForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      signupError.textContent = '';
-      const btn = document.getElementById('signupSubmitBtn');
-      btn.disabled = true;
-      btn.textContent = 'Creating Account...';
-
-      const emailVal = document.getElementById('signupEmail').value;
-      if (!FormValidation.isValidEmail(emailVal)) {
-        signupError.textContent = 'Please enter a valid email address.';
-        btn.disabled = false;
-        btn.textContent = 'Create Account';
-        return;
-      }
-
-      const phoneVal = document.getElementById('signupPhone').value;
-      if (!FormValidation.isValidPhone(phoneVal)) {
-        signupError.textContent = 'Phone number must be 10 digits.';
-        btn.disabled = false;
-        btn.textContent = 'Create Account';
-        return;
-      }
-
-      const password = document.getElementById('signupPassword').value;
-      const confirmPassword = document.getElementById('signupConfirm').value;
-
-      if (password !== confirmPassword) {
-        signupError.textContent = 'Passwords do not match.';
-        btn.disabled = false;
-        btn.textContent = 'Create Account';
-        return;
-      }
-
-      if (password.length < 8) {
-        signupError.textContent = 'Password must be at least 8 characters.';
-        btn.disabled = false;
-        btn.textContent = 'Create Account';
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            firstName: document.getElementById('signupFirst').value,
-            lastName: document.getElementById('signupLast').value,
-            email: document.getElementById('signupEmail').value,
-            address: document.getElementById('signupAddress').value,
-            phone: document.getElementById('signupPhone').value,
-            password,
-            confirmPassword,
-            requestPoolAccess: !!(document.getElementById('signupRequestPool') && document.getElementById('signupRequestPool').checked)
-          })
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          signupForm.reset();
-          signupCard.innerHTML = `
-            <div class="auth-success">
-              <h3 style="margin-bottom:8px; color:#155724;">Account Created!</h3>
-              <p>${data.message}</p>
-            </div>
-            <p class="auth-toggle"><a href="#" onclick="location.reload(); return false;">Back to Login</a></p>
-          `;
-        } else {
-          signupError.textContent = data.error;
-        }
-      } catch (err) {
-        signupError.textContent = 'Unable to connect to server. Please try again later.';
-      }
-
-      btn.disabled = false;
-      btn.textContent = 'Create Account';
     });
 
     // Social complete form submit

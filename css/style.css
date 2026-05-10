@@ -950,6 +950,195 @@ p {
   }
 }
 
+/* ---------- Multi-Step Signup Wizard ---------- */
+.signup-stepper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.signup-step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+}
+
+.step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #e0e0e0;
+  background: var(--white);
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.signup-step-item.active .step-circle {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--white);
+}
+
+.signup-step-item.done .step-circle {
+  background: var(--primary-light);
+  border-color: var(--primary-light);
+  color: var(--white);
+}
+
+.step-label {
+  font-size: 0.7rem;
+  color: var(--text-light);
+  font-weight: 500;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.signup-step-item.active .step-label {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.signup-step-connector {
+  flex: 1;
+  height: 2px;
+  background: #e0e0e0;
+  margin-top: 15px;
+  min-width: 28px;
+  transition: background 0.3s ease;
+}
+
+.signup-step-connector.done {
+  background: var(--primary-light);
+}
+
+.signup-panel .step-title {
+  text-align: center;
+  margin-bottom: 6px;
+  font-size: 1.25rem;
+}
+
+.step-intro {
+  text-align: center;
+  color: var(--text-light);
+  font-size: 0.875rem;
+  margin-bottom: 22px !important;
+  line-height: 1.5;
+}
+
+.field-hint {
+  display: block;
+  font-size: 0.77rem;
+  color: var(--text-light);
+  margin-top: 5px;
+}
+
+.optional-tag {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-light);
+  background: #f0f0f0;
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+.pool-access-card {
+  background: #f0f7f3;
+  border: 2px solid #b7dfca;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  transition: border-color 0.2s ease;
+}
+
+.pool-access-card:has(input:checked) {
+  border-color: var(--primary);
+}
+
+.pool-access-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  font-weight: normal !important;
+  margin: 0;
+}
+
+.pool-access-label input[type="checkbox"] {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.pool-access-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pool-access-content strong {
+  font-size: 0.9rem;
+  color: var(--primary-dark);
+}
+
+.pool-access-content span {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  line-height: 1.5;
+}
+
+.step-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.step-nav .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.step-back-btn {
+  background: transparent;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+}
+
+.step-back-btn:hover {
+  background: var(--primary);
+  color: var(--white);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 480px) {
+  .signup-step-item {
+    min-width: 56px;
+  }
+  .step-label {
+    font-size: 0.62rem;
+  }
+  .step-nav {
+    flex-direction: column-reverse;
+  }
+  .step-nav .btn {
+    width: 100%;
+  }
+}
+
 /* ---------- Social Auth Buttons ---------- */
 .social-auth-divider {
   display: flex;

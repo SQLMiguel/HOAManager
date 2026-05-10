@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +26,19 @@ export function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showServer, setShowServer] = useState(false);
+  const [devTaps, setDevTaps] = useState(0);
+  const devTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleBrandTap() {
+    if (devTimer.current) clearTimeout(devTimer.current);
+    const next = devTaps + 1;
+    setDevTaps(next);
+    if (next >= 5) {
+      setShowServer(true);
+    } else {
+      devTimer.current = setTimeout(() => setDevTaps(0), 10_000);
+    }
+  }
 
   async function onSubmit() {
     setError(null);
@@ -49,7 +63,9 @@ export function LoginScreen() {
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={[styles.formWrap, tablet && styles.formWrapTablet]}>
-            <Text style={styles.brand}>Glenridge HOA</Text>
+            <Pressable onPress={handleBrandTap}>
+              <Text style={styles.brand}>Glenridge HOA</Text>
+            </Pressable>
             <Text style={styles.heading}>Pool Member Sign In</Text>
 
             <Text style={styles.label}>Email</Text>
@@ -75,7 +91,7 @@ export function LoginScreen() {
 
             {showServer && (
               <>
-                <Text style={styles.label}>Server URL</Text>
+                <Text style={[styles.label, { color: colors.textMuted }]}>🛠 Developer · Server URL</Text>
                 <TextInput
                   autoCapitalize="none"
                   keyboardType="url"
@@ -95,13 +111,6 @@ export function LoginScreen() {
               loading={submitting}
               fullWidth
               style={{ marginTop: spacing.md }}
-            />
-            <Button
-              variant="secondary"
-              title={showServer ? 'Hide server settings' : 'Use a different server'}
-              onPress={() => setShowServer((v) => !v)}
-              fullWidth
-              style={{ marginTop: spacing.sm }}
             />
           </View>
         </ScrollView>

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -28,6 +29,9 @@ export function SettingsScreen() {
   const [server, setServer] = useState('');
   const [biometrics, setBiometrics] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [devTaps, setDevTaps] = useState(0);
+  const [showServerDev, setShowServerDev] = useState(false);
+  const devTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -46,6 +50,17 @@ export function SettingsScreen() {
   async function toggleBiometrics(next: boolean) {
     setBiometrics(next);
     await setSecureItem(StorageKeys.biometricsEnabled, next ? '1' : '0');
+  }
+
+  function handleServerTap() {
+    if (devTimer.current) clearTimeout(devTimer.current);
+    const next = devTaps + 1;
+    setDevTaps(next);
+    if (next >= 5) {
+      setShowServerDev(true);
+    } else {
+      devTimer.current = setTimeout(() => setDevTaps(0), 10_000);
+    }
   }
 
   return (
@@ -81,24 +96,32 @@ export function SettingsScreen() {
         </Card>
 
         <Card style={{ marginTop: spacing.md }}>
-          <Text style={styles.section}>Server</Text>
-          <Text style={styles.muted}>
-            URL of the Glenridge HOA server.
-          </Text>
-          <TextInput
-            style={styles.input}
-            value={server}
-            onChangeText={setServer}
-            autoCapitalize="none"
-            keyboardType="url"
-          />
-          <Button
-            title="Save server URL"
-            onPress={saveServer}
-            fullWidth
-            style={{ marginTop: spacing.sm }}
-          />
-          {savedMsg && <Text style={styles.success}>{savedMsg}</Text>}
+          <Pressable onPress={handleServerTap}>
+            <Text style={styles.section}>
+              {showServerDev ? '🛠 Developer · Server' : 'Server'}
+            </Text>
+          </Pressable>
+          {showServerDev ? (
+            <>
+              <Text style={styles.muted}>
+                URL of the Glenridge HOA server.
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={server}
+                onChangeText={setServer}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+              <Button
+                title="Save server URL"
+                onPress={saveServer}
+                fullWidth
+                style={{ marginTop: spacing.sm }}
+              />
+              {savedMsg ? <Text style={styles.success}>{savedMsg}</Text> : null}
+            </>
+          ) : null}
         </Card>
       </ScrollView>
     </SafeAreaView>

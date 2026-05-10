@@ -30,6 +30,8 @@ export function CheckinsScreen() {
   const tablet = isTabletWidth(width);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [unmask, setUnmask] = useState(false);
+  const [lastDeniedId, setLastDeniedId] = useState<string | null>(null);
+  const [deniedAlert, setDeniedAlert] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -56,6 +58,23 @@ export function CheckinsScreen() {
     });
   }, [query.data, filterMode]);
 
+  useEffect(() => {
+    if (!query.data) return;
+    const latest = query.data.find((r) => r.status === 'denied');
+    if (latest && String(latest.id) !== lastDeniedId) {
+      setLastDeniedId(String(latest.id));
+      if (lastDeniedId !== null) {
+        setDeniedAlert(`${latest.first_name} ${latest.last_name}`);
+      }
+    }
+  }, [query.data, lastDeniedId]);
+
+  useEffect(() => {
+    if (!deniedAlert) return;
+    const t = setTimeout(() => setDeniedAlert(null), 5_000);
+    return () => clearTimeout(t);
+  }, [deniedAlert]);
+
   if (query.isLoading) {
     return (
       <View style={styles.loading}>
@@ -74,6 +93,13 @@ export function CheckinsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {deniedAlert ? (
+        <View style={styles.deniedAlert}>
+          <Text style={styles.deniedAlertText}>
+            ⛔ Entry denied: {deniedAlert}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.filterRow}>
         {filters.map((f) => (
           <Pressable
@@ -135,6 +161,13 @@ export function CheckinsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  deniedAlert: {
+    backgroundColor: colors.danger,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  deniedAlertText: { color: '#fff', fontSize: fontSize.sm, fontWeight: '700', textAlign: 'center' },
   filterRow: { flexDirection: 'row', gap: spacing.sm, padding: spacing.md, paddingBottom: 0 },
   filterChip: {
     paddingHorizontal: spacing.md,

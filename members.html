@@ -120,33 +120,59 @@
         </form>
       </div>
 
-      <!-- ===== SIGNUP FORM ===== -->
+      <!-- ===== SIGNUP WIZARD ===== -->
       <div class="auth-form-card" id="signupCard" style="display:none;">
-        <h2>Create Account</h2>
-        <p>Sign up as a Glenridge Community resident. Your account will be reviewed and approved within 3–5 business days.</p>
 
-        <form id="signupForm">
+        <!-- Step progress indicator -->
+        <div class="signup-stepper">
+          <div class="signup-step-item active" data-step="1">
+            <div class="step-circle">1</div>
+            <div class="step-label">Who You Are</div>
+          </div>
+          <div class="signup-step-connector"></div>
+          <div class="signup-step-item" data-step="2">
+            <div class="step-circle">2</div>
+            <div class="step-label">Login Setup</div>
+          </div>
+          <div class="signup-step-connector"></div>
+          <div class="signup-step-item" data-step="3">
+            <div class="step-circle">3</div>
+            <div class="step-label">Last Step</div>
+          </div>
+        </div>
+
+        <!-- Step 1: Residency Info -->
+        <div class="signup-panel" id="signupStep1">
+          <h3 class="step-title">Tell us who you are</h3>
+          <p class="step-intro">We use your address to verify you're a current Glenridge resident before approving your account.</p>
           <div class="form-row">
             <div class="form-group">
               <label for="signupFirst">First Name <span class="required">*</span></label>
-              <input type="text" id="signupFirst" name="firstName" required placeholder="First name">
+              <input type="text" id="signupFirst" name="firstName" required placeholder="First name" autocomplete="given-name">
             </div>
             <div class="form-group">
               <label for="signupLast">Last Name <span class="required">*</span></label>
-              <input type="text" id="signupLast" name="lastName" required placeholder="Last name">
+              <input type="text" id="signupLast" name="lastName" required placeholder="Last name" autocomplete="family-name">
             </div>
           </div>
           <div class="form-group">
+            <label for="signupAddress">Glenridge Street Address <span class="required">*</span></label>
+            <input type="text" id="signupAddress" name="address" required placeholder="e.g. 123 Oak Lane" autocomplete="street-address">
+            <span class="field-hint">Used only to verify your residency — not shared publicly</span>
+          </div>
+          <div id="signupError1" class="auth-error"></div>
+          <div class="step-nav">
+            <button class="btn btn-primary" type="button" id="step1Next">Continue →</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Login Setup -->
+        <div class="signup-panel" id="signupStep2" style="display:none;">
+          <h3 class="step-title">Create your login</h3>
+          <p class="step-intro">You'll use these credentials to sign in to the member portal.</p>
+          <div class="form-group">
             <label for="signupEmail">Email Address <span class="required">*</span></label>
             <input type="email" id="signupEmail" name="email" required autocomplete="email" placeholder="you@email.com">
-          </div>
-          <div class="form-group">
-            <label for="signupAddress">Street Address <span class="required">*</span></label>
-            <input type="text" id="signupAddress" name="address" required placeholder="Your Glenridge address">
-          </div>
-          <div class="form-group">
-            <label for="signupPhone">Phone Number</label>
-            <input type="tel" id="signupPhone" name="phone" placeholder="(optional)">
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -158,18 +184,38 @@
               <input type="password" id="signupConfirm" name="confirmPassword" required minlength="8" autocomplete="new-password" placeholder="Re-enter password">
             </div>
           </div>
-          <div class="form-group" style="margin-top:8px;">
-            <label style="display:flex;align-items:flex-start;gap:8px;font-weight:normal;cursor:pointer;">
-              <input type="checkbox" id="signupRequestPool" name="requestPoolAccess" style="margin-top:4px;">
-              <span>
-                <strong>Request pool access</strong><br>
-                <span style="font-size:0.85rem;color:#666;">Check this if you would like to be enrolled for community pool gate access. The HOA admin will review and follow up by email.</span>
-              </span>
+          <div id="signupError2" class="auth-error"></div>
+          <div class="step-nav">
+            <button class="btn step-back-btn" type="button" id="step2Back">← Back</button>
+            <button class="btn btn-primary" type="button" id="step2Next">Continue →</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Optional extras -->
+        <div class="signup-panel" id="signupStep3" style="display:none;">
+          <h3 class="step-title">Almost done!</h3>
+          <p class="step-intro">One more required field, then pool access is optional.</p>
+          <div class="form-group">
+            <label for="signupPhone">Phone Number <span class="required">*</span></label>
+            <input type="tel" id="signupPhone" name="phone" required placeholder="(555) 555-5555" autocomplete="tel">
+            <span class="field-hint">Used only for HOA communications, never shared publicly</span>
+          </div>
+          <div class="pool-access-card">
+            <label class="pool-access-label">
+              <input type="checkbox" id="signupRequestPool" name="requestPoolAccess">
+              <div class="pool-access-content">
+                <strong>🏊 Request Pool Gate Access</strong>
+                <span>Check this to be enrolled for electronic pool gate entry. The HOA admin will review and contact you by email — typically within the same 3–5 business day window as your account approval.</span>
+              </div>
             </label>
           </div>
-          <div id="signupError" class="auth-error"></div>
-          <button type="submit" class="btn btn-primary auth-submit-btn" id="signupSubmitBtn">Create Account</button>
-        </form>
+          <div id="signupError3" class="auth-error"></div>
+          <div class="step-nav">
+            <button class="btn step-back-btn" type="button" id="step3Back">← Back</button>
+            <button class="btn btn-primary auth-submit-btn" type="button" id="signupSubmitBtn">Create Account</button>
+          </div>
+        </div>
+
         <p class="auth-toggle">Already have an account? <a href="#" id="switchToLogin">Log In</a></p>
       </div>
     </div>
