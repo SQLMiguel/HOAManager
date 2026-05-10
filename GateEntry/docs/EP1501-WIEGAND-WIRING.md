@@ -203,15 +203,19 @@ If both lines remain stuck high or stuck low after a card tap, recheck:
 
 ---
 
-## 9. Next Step — Software
+## 9. Software
 
-Once GPIOs 17 and 27 reliably toggle on a card tap, a `wiegand.js` decoder
-module will be added under `GateEntry/src/` that:
+Once GPIOs 17 and 27 reliably toggle on a card tap, the gate controller is ready. The Wiegand decoder (`GateEntry/src/wiegand.js`) handles this automatically:
 
-- Listens for falling edges on GPIO 17 (D0) and GPIO 27 (D1)
-- Assembles 26- or 34-bit Wiegand frames
-- Emits the card UID into the existing scan handler in
-  `GateEntry/src/scanHandler.js`, reusing the current online-database
-  validation flow.
+- Listens for falling edges on GPIO 17 (D0) and GPIO 27 (D1) using the `onoff` library
+- Assembles 26- or 34-bit Wiegand frames (frame end detected by 50 ms of silence)
+- Strips leading/trailing parity bits and returns an uppercase hex card ID
+- Feeds the card UID into the existing scan handler (`GateEntry/src/scanHandler.js`), reusing the current access-check and database validation flow
 
-No changes to the EP1501's own configuration or firmware are required.
+Set `READER_TYPE=wiegand` in your `.env` file (this is the default). No changes to the EP1501's own configuration or firmware are required.
+
+**Card ID format:** The decoded UID is the hex representation of the data bits (parity stripped):
+- Wiegand 26 → 24 data bits → 6 hex chars, e.g. `007B1234`
+- Wiegand 34 → 32 data bits → 8 hex chars
+
+When enrolling a card in the admin panel, tap the card at the gate first (check the Pi console output for the hex ID), then enter that value as the member's RFID tag.

@@ -15,10 +15,12 @@ const config = {
   deviceId: process.env.DEVICE_ID || 'gate-pi-001',
 
   // GPIO pins (BCM numbering)
-  relayPin: parseInt(process.env.RELAY_PIN) || 17,
-  ledGreenPin: parseInt(process.env.LED_GREEN_PIN) || 27,
-  ledRedPin: parseInt(process.env.LED_RED_PIN) || 22,
-  buzzerPin: parseInt(process.env.BUZZER_PIN) || 23,
+  // NOTE: GPIO17 and GPIO27 are reserved for Wiegand D0/D1 (inputs from EP1501).
+  // Relay, LEDs, and buzzer must use different pins.
+  relayPin: parseInt(process.env.RELAY_PIN) || 5,
+  ledGreenPin: parseInt(process.env.LED_GREEN_PIN) || 6,
+  ledRedPin: parseInt(process.env.LED_RED_PIN) || 13,
+  buzzerPin: parseInt(process.env.BUZZER_PIN) || 19,
 
   // Timing
   gateOpenDurationMs: parseInt(process.env.GATE_OPEN_DURATION_MS) || 5000,
@@ -28,8 +30,13 @@ const config = {
   spiBus: parseInt(process.env.SPI_BUS) || 0,
   spiDevice: parseInt(process.env.SPI_DEVICE) || 0,
 
-  // RFID reader selection: 'mfrc522' (SPI) | 'serial' (RS485 USB) | 'auto'
+  // RFID reader selection: 'wiegand' (EP1501 GPIO) | 'mfrc522' (SPI) | 'serial' (RS485 USB) | 'auto'
   readerType: (process.env.READER_TYPE || 'auto').toLowerCase(),
+
+  // Wiegand reader pins (BCM numbering) — must match wiring diagram
+  // EP1501 DAT/D0 → GPIO17 (Pi pin 11); CLK/D1 → GPIO27 (Pi pin 13)
+  wiegandD0Pin: parseInt(process.env.WIEGAND_D0_PIN) || 17,
+  wiegandD1Pin: parseInt(process.env.WIEGAND_D1_PIN) || 27,
 
   // Serial / RS485-USB reader settings
   serialPort: process.env.SERIAL_PORT || '/dev/ttyUSB0',

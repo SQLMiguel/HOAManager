@@ -1,14 +1,17 @@
-# Relay Wiring — `RELAY_PIN=17`
+# Relay Wiring — `RELAY_PIN=5`
 
-How the Pi's GPIO 17 controls the magnetic lock through a relay module.
+How the Pi's GPIO 5 controls the magnetic lock through a relay module.
 
-## What `RELAY_PIN=17` does
+> ⚠️ **GPIO 17 (pin 11) and GPIO 27 (pin 13) are reserved for the EP1501
+> Wiegand reader (D0 and D1 inputs). The relay must use a different GPIO.**
 
-The Pi's GPIO 17 is a digital output (3.3 V logic) that drives the **control input of a relay module**. The relay is an electrically-isolated switch that can pass the much higher current (12 V/24 V, several amps) needed to power a magnetic lock or strike. The Pi never touches the lock's power circuit directly — it just tells the relay "open" or "closed."
+## What `RELAY_PIN=5` does
+
+The Pi's GPIO 5 is a digital output (3.3 V logic) that drives the **control input of a relay module**. The relay is an electrically-isolated switch that can pass the much higher current (12 V/24 V, several amps) needed to power a magnetic lock or strike. The Pi never touches the lock's power circuit directly — it just tells the relay "open" or "closed."
 
 ```
 ┌────────┐  3.3V signal   ┌─────────┐   12V switched   ┌──────────┐
-│  Pi    │  ───GPIO 17───►│  Relay  │ ────NO contact──►│ Mag-lock │
+│  Pi    │  ───GPIO 5 ───►│  Relay  │ ────NO contact──►│ Mag-lock │
 │        │                │ Module  │                  │          │
 │   GND  │ ──────GND─────►│         │◄──── 12V PSU ────│          │
 └────────┘                └─────────┘                  └──────────┘
@@ -26,13 +29,13 @@ The Pi's GPIO 17 is a digital output (3.3 V logic) that drives the **control inp
 | 1N4007 flyback diode | If the lock's datasheet doesn't confirm one is built in |
 | 10 kΩ resistor | Optional pull-up from GPIO 17 to 3.3 V for fail-secure on a floating pin |
 
-## How the code uses GPIO 17
+## How the code uses GPIO 5
 
 From [src/gate.js](../src/gate.js):
 
 | Step | Code | Electrical effect |
 |------|------|------|
-| 1. App start | `relay = new Gpio(17, 'out'); relay.writeSync(1);` | Pin driven HIGH (3.3 V). On an active-LOW relay module, that **de-energizes** the coil → contacts in default state (NO=open) → **lock engaged** |
+| 1. App start | `relay = new Gpio(5, 'out'); relay.writeSync(1);` | Pin driven HIGH (3.3 V). On an active-LOW relay module, that **de-energizes** the coil → contacts in default state (NO=open) → **lock engaged** |
 | 2. Valid scan | `relay.writeSync(0);` | Pin driven LOW (0 V). Relay coil energizes → COM connects to NO → 12 V flows to the lock → **lock releases** |
 | 3. Timer expires after `GATE_OPEN_DURATION_MS` (5 s) | `relay.writeSync(1);` | Pin back HIGH → relay drops out → **lock re-engages** |
 | 4. Shutdown / crash | `relay.writeSync(1); relay.unexport();` | Pin re-asserted HIGH so the gate **always fails locked** |
@@ -50,9 +53,9 @@ Unplug the Pi and the 12 V supply. Don't work on a live mag-lock circuit.
 |--------|---------------|-------------|---------|
 | 5 V | 2 (or 4) | **VCC** | Powers the relay coil. Some 3.3 V-tolerant modules accept 3.3 V — check the silkscreen. |
 | GND | 6 (or 9, 14, 20…) | **GND** | Common ground |
-| **GPIO 17** | **11** | **IN / IN1 / SIG** | Control signal |
+| **GPIO 5** | **29** | **IN / IN1 / SIG** | Control signal |
 
-> Use Pi physical pin **11** for GPIO 17. (BCM 17 ≠ pin 17 on the header — don't confuse them. Run `pinout` on the Pi to confirm.)
+> Use Pi physical pin **29** for GPIO 5. (BCM 5 ≠ pin 5 on the header — don't confuse them. Run `pinout` on the Pi to confirm.)
 
 ### Step 3 — Identify the relay output terminals
 The screw-terminal block on the relay has three contacts labeled:
@@ -81,7 +84,7 @@ The Pi's GND, the relay module's GND, and the 12 V supply's negative line do **n
 ### Step 7 — Power-on order
 1. Plug in the 12 V supply for the lock — lock should be **engaged** (silent click, magnet active).
 2. Power up the Pi.
-3. As the gate-entry service starts, `gate.init()` drives GPIO 17 HIGH → relay stays de-energized → lock stays engaged. You should hear nothing.
+3. As the gate-entry service starts, `gate.init()` drives GPIO 5 HIGH → relay stays de-energized → lock stays engaged. You should hear nothing.
 4. The green LED steady on = system ready.
 
 ### Step 8 — Bench test before mounting
@@ -92,10 +95,10 @@ node src/index.js
 ```
 Tap a known card. You should hear a distinct **click** from the relay module (LED on the module lights up) for 5 seconds, then another click as it re-locks. If that works, the wiring is correct.
 
-If the relay clicks but the lock doesn't release, swap NO ↔ NC. If the relay doesn't click at all, double-check physical pin 11 (GPIO 17) and that the module's VCC has 5 V.
+If the relay clicks but the lock doesn't release, swap NO ↔ NC. If the relay doesn't click at all, double-check physical pin 29 (GPIO 5) and that the module's VCC has 5 V.
 
 ### Step 9 — Failure-mode behaviors to verify
-- **Pi crashes mid-cycle**: The `uncaughtException` handler in [src/index.js](../src/index.js) keeps the process alive. Even on a hard crash, GPIO 17 floats — add a **pull-up resistor (10 kΩ) from GPIO 17 to 3.3 V** so a floating pin still reads HIGH and keeps the lock engaged.
+- **Pi crashes mid-cycle**: The `uncaughtException` handler in [src/index.js](../src/index.js) keeps the process alive. Even on a hard crash, GPIO 5 floats — add a **pull-up resistor (10 kΩ) from GPIO 5 to 3.3 V** so a floating pin still reads HIGH and keeps the lock engaged.
 - **Power loss to the Pi**: The 12 V supply is independent, so the lock stays engaged. (Fail-secure.)
 - **Power loss to the lock supply**: The lock disengages. Add a small UPS to the 12 V supply if your community requires the gate to remain locked through outages.
 

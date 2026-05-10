@@ -1,17 +1,24 @@
 // ─── RFID Reader Module ─────────────────────────────────
-// Supports three reader backends, selected via config.readerType:
+// Supports four reader backends, selected via config.readerType:
+//   'wiegand' — EP1501 Wiegand reader via GPIO (D0/D1 edge detection)
 //   'mfrc522' — MFRC522 over SPI/SoftSPI (GPIO-attached)
 //   'serial'  — RS485/USB serial reader on /dev/ttyUSB* (ASCII line protocol)
-//   'auto'    — try mfrc522 first, then serial, else simulation
+//   'auto'    — try wiegand first, then mfrc522, then serial, else simulation
 //
 // On a desktop with no hardware, falls back to keyboard simulation.
 
 const config = require('./config');
+const wiegand = require('./wiegand');
 
 let reader = null;
 let serialReader = null;
 let isSimulated = false;
-let mode = 'simulated'; // 'mfrc522' | 'serial' | 'simulated'
+let mode = 'simulated'; // 'wiegand' | 'mfrc522' | 'serial' | 'simulated'
+
+function initWiegand() {
+  wiegand.init();
+  mode = 'wiegand';
+}
 
 function initMfrc522() {
   const Mfrc522 = require('mfrc522-rpi');
@@ -65,14 +72,16 @@ function initSerial() {
 
 function init() {
   const want = config.readerType;
-  const tryOrder = want === 'mfrc522' ? ['mfrc522']
+  const tryOrder = want === 'wiegand' ? ['wiegand']
+                 : want === 'mfrc522' ? ['mfrc522']
                  : want === 'serial'  ? ['serial']
-                 : ['mfrc522', 'serial']; // 'auto'
+                 : ['wiegand', 'mfrc522', 'serial']; // 'auto'
 
   for (const m of tryOrder) {
     try {
-      if (m === 'mfrc522') initMfrc522();
-      else if (m === 'serial') initSerial();
+      if (m === 'wiegand')      initWiegand();
+      else if (m === 'mfrc522') initMfrc522();
+      else if (m === 'serial')  initSerial();
       isSimulated = false;
       return;
     } catch (e) {
@@ -117,6 +126,11 @@ function normalizeSerialTag(raw) {
 }
 
 function startPolling(onTag, debounceMs = 3000) {
+  // ── Wiegand (EP1501 GPIO) ──────────────────────────────
+  if (mode === 'wiegand') {
+    return wiegand.startPolling(onTag, debounceMs);
+  }
+
   // ── Serial / RS485-USB ─────────────────────────────────
   if (mode === 'serial' && serialReader && serialReader.parser) {
     let lastTag = null;
