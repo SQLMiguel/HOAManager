@@ -172,6 +172,7 @@ async function initDb() {
     `ALTER TABLE users ADD COLUMN sms_opt_out TINYINT(1) DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN sms_unsubscribe_token VARCHAR(36) UNIQUE`,
     `ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN is_pool_manager TINYINT(1) NOT NULL DEFAULT 0`,
   ];
   for (const sql of alterUsers) {
     try { await conn.query(sql); } catch(e) { /* column already exists */ }
@@ -1060,6 +1061,14 @@ function requireAdmin(req, res, next) {
     return next();
   }
   return res.status(403).json({ error: 'Admin access required' });
+}
+
+// Allows full admins OR pool managers (for pool/gate routes)
+function requirePoolManager(req, res, next) {
+  if (req.session && (req.session.isAdmin || req.session.isPoolManager)) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Pool manager access required' });
 }
 
 // ── API Routes ──────────────────────────────────────────
@@ -2180,28 +2189,31 @@ app.post('/api/admin/login', async (req, res) => {
         console.error('Session save error:', err);
         return res.status(500).json({ error: 'Session error. Please try again.' });
       }
-      res.json({ success: true });
+      res.json({ success: true, isAdmin: true, isPoolManager: false });
     });
   }
 
-  // 2. Check if an approved HOA member with is_admin=1 is logging in (email + password)
+  // 2. Check if an approved HOA member with is_admin=1 or is_pool_manager=1 is logging in (email + password)
   try {
     const [rows] = await dbPool.query(
-      `SELECT id, password_hash, status, is_admin FROM users WHERE email = ? LIMIT 1`,
+      `SELECT id, password_hash, status, is_admin, is_pool_manager FROM users WHERE email = ? LIMIT 1`,
       [(username || '').trim().toLowerCase()]
     );
     const member = rows[0];
-    if (member && member.is_admin && member.status === 'approved' && member.password_hash) {
+    const hasAccess = member && member.status === 'approved' && member.password_hash &&
+                      (member.is_admin || member.is_pool_manager);
+    if (hasAccess) {
       const match = await bcrypt.compare(password, member.password_hash);
       if (match) {
-        req.session.isAdmin = true;
+        req.session.isAdmin = !!member.is_admin;
+        req.session.isPoolManager = !!member.is_pool_manager;
         req.session.adminUserId = member.id;
         return req.session.save(err => {
           if (err) {
             console.error('Session save error:', err);
             return res.status(500).json({ error: 'Session error. Please try again.' });
           }
-          return res.json({ success: true });
+          return res.json({ success: true, isAdmin: !!member.is_admin, isPoolManager: !!member.is_pool_manager });
         });
       }
     }
@@ -2221,7 +2233,10 @@ app.post('/api/admin/logout', async (req, res) => {
 
 // Check admin status
 app.get('/api/admin/status', async (req, res) => {
-  res.json({ isAdmin: !!(req.session && req.session.isAdmin) });
+  res.json({
+    isAdmin: !!(req.session && req.session.isAdmin),
+    isPoolManager: !!(req.session && req.session.isPoolManager),
+  });
 });
 
 // Get all pending users
@@ -2237,7 +2252,7 @@ app.get('/api/admin/users/pending', requireAdmin, async (req, res) => {
 // Get all users
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   const users = await dbAll(`
-    SELECT id, first_name, last_name, email, address, phone, status, is_admin, created_at, approved_at
+    SELECT id, first_name, last_name, email, address, phone, status, is_admin, is_pool_manager, created_at, approved_at
     FROM users
     ORDER BY created_at DESC
   `);
@@ -2546,6 +2561,29 @@ app.post('/api/admin/users/:id/toggle-admin', requireAdmin, async (req, res) => 
     res.json({ success: true, is_admin: newValue, message: `Admin role ${action} for ${user.first_name} ${user.last_name}.` });
   } catch (err) {
     console.error('Toggle admin error:', err);
+    res.status(500).json({ error: 'An error occurred.' });
+  }
+});
+
+// Toggle Pool Manager role for an HOA member
+app.post('/api/admin/users/:id/toggle-pool-manager', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await dbPool.query(
+      `SELECT id, first_name, last_name, email, status, is_pool_manager FROM users WHERE id = ? LIMIT 1`,
+      [id]
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    if (user.status !== 'approved') {
+      return res.status(400).json({ error: 'Only approved members can be assigned the Pool Manager role.' });
+    }
+    const newValue = user.is_pool_manager ? 0 : 1;
+    await dbPool.query(`UPDATE users SET is_pool_manager = ? WHERE id = ?`, [newValue, id]);
+    const action = newValue ? 'granted' : 'revoked';
+    res.json({ success: true, is_pool_manager: newValue, message: `Pool Manager role ${action} for ${user.first_name} ${user.last_name}.` });
+  } catch (err) {
+    console.error('Toggle pool manager error:', err);
     res.status(500).json({ error: 'An error occurred.' });
   }
 });
@@ -3418,7 +3456,7 @@ app.get('/api/nl/unsubscribe', async (req, res) => {
 // ── Pool Management Routes ───────────────────────────────
 
 // Sync approved members + family into pool_members as Residents
-app.post('/api/admin/pool/sync-residents', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/sync-residents', requirePoolManager, async (req, res) => {
   try {
     const residentType = await dbGet("SELECT id FROM pool_entry_types WHERE name='Resident'");
     if (!residentType) return res.status(500).json({ error: 'Resident entry type not found.' });
@@ -3476,7 +3514,7 @@ app.post('/api/admin/pool/sync-residents', requireAdmin, async (req, res) => {
 // POST /api/admin/pool/cleanup-orphans — remove Resident pool_members that
 // have no household (owning dir_adult/dir_child deleted, or owning user
 // removed). Callable on demand from the admin UI.
-app.post('/api/admin/pool/cleanup-orphans', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/cleanup-orphans', requirePoolManager, async (req, res) => {
   try {
     const removed = await cleanupOrphanedResidentPoolMembers();
     res.json({ success: true, removed,
@@ -3490,13 +3528,13 @@ app.post('/api/admin/pool/cleanup-orphans', requireAdmin, async (req, res) => {
 });
 
 // GET entry types
-app.get('/api/admin/pool/entry-types', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/entry-types', requirePoolManager, async (req, res) => {
   const types = await dbAll('SELECT * FROM pool_entry_types ORDER BY is_system DESC, name ASC');
   res.json(types);
 });
 
 // POST new entry type
-app.post('/api/admin/pool/entry-types', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/entry-types', requirePoolManager, async (req, res) => {
   const { name, description } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
   const existing = await dbGet('SELECT id FROM pool_entry_types WHERE name = ?', [name.trim()]);
@@ -3508,7 +3546,7 @@ app.post('/api/admin/pool/entry-types', requireAdmin, async (req, res) => {
 });
 
 // DELETE entry type (not system ones)
-app.delete('/api/admin/pool/entry-types/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/pool/entry-types/:id', requirePoolManager, async (req, res) => {
   const type = await dbGet('SELECT * FROM pool_entry_types WHERE id = ?', [req.params.id]);
   if (!type) return res.status(404).json({ error: 'Entry type not found.' });
   if (type.is_system) return res.status(400).json({ error: 'Cannot delete a system entry type.' });
@@ -3520,7 +3558,7 @@ app.delete('/api/admin/pool/entry-types/:id', requireAdmin, async (req, res) => 
 });
 
 // GET pool members
-app.get('/api/admin/pool/members', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/members', requirePoolManager, async (req, res) => {
   const members = await dbAll(`
     SELECT pm.*, pet.name as entry_type_name
     FROM pool_members pm
@@ -3585,7 +3623,7 @@ app.get('/api/admin/pool/members', requireAdmin, async (req, res) => {
 });
 
 // POST new pool member (manual — for non-residents)
-app.post('/api/admin/pool/members', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/members', requirePoolManager, async (req, res) => {
   const { first_name, last_name, entry_type_id, notes, rfid_tag } = req.body;
   if (!first_name || !last_name || !entry_type_id) {
     return res.status(400).json({ error: 'First name, last name, and entry type are required.' });
@@ -3622,7 +3660,7 @@ app.post('/api/admin/pool/members', requireAdmin, async (req, res) => {
 });
 
 // PUT update pool member
-app.put('/api/admin/pool/members/:id', requireAdmin, async (req, res) => {
+app.put('/api/admin/pool/members/:id', requirePoolManager, async (req, res) => {
   const member = await dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
   if (!member) return res.status(404).json({ error: 'Pool member not found.' });
   const { first_name, last_name, entry_type_id, status, notes, rfid_tag } = req.body;
@@ -3664,7 +3702,7 @@ app.put('/api/admin/pool/members/:id', requireAdmin, async (req, res) => {
 });
 
 // Add an additional RFID card credential to a pool member
-app.post('/api/admin/pool/members/:id/credentials/rfid', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/members/:id/credentials/rfid', requirePoolManager, async (req, res) => {
   const member = await dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
   if (!member) return res.status(404).json({ error: 'Pool member not found.' });
 
@@ -3679,7 +3717,7 @@ app.post('/api/admin/pool/members/:id/credentials/rfid', requireAdmin, async (re
 });
 
 // DELETE pool member
-app.delete('/api/admin/pool/members/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/pool/members/:id', requirePoolManager, async (req, res) => {
   await dbRun('DELETE FROM pool_schedules WHERE pool_member_id = ?', [req.params.id]);
   await dbRun('DELETE FROM pool_members WHERE id = ?', [req.params.id]);
   res.json({ success: true });
@@ -3689,7 +3727,7 @@ app.delete('/api/admin/pool/members/:id', requireAdmin, async (req, res) => {
 
 // GET /api/admin/pool/wallet-requests — list all active phone registrations
 // with their wallet pass status so admin can see who needs a pass emailed.
-app.get('/api/admin/pool/wallet-requests', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/wallet-requests', requirePoolManager, async (req, res) => {
   try {
     const rows = await dbAll(
       `SELECT p.*, u.email AS user_email
@@ -3715,7 +3753,7 @@ app.get('/api/admin/pool/wallet-requests', requireAdmin, async (req, res) => {
 
 // POST /api/admin/pool/wallet-requests/:id/mark-sent — mark a wallet pass
 // request as sent (admin has emailed the pass to the member).
-app.post('/api/admin/pool/wallet-requests/:id/mark-sent', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/wallet-requests/:id/mark-sent', requirePoolManager, async (req, res) => {
   try {
     const row = await dbGet('SELECT * FROM dir_pool_phones WHERE id=?', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Phone registration not found.' });
@@ -3732,7 +3770,7 @@ app.post('/api/admin/pool/wallet-requests/:id/mark-sent', requireAdmin, async (r
 // ── Apple Wallet Pass Generation ────────────────────
 
 // Generate Apple Wallet pass (.pkpass) for a pool member
-app.post('/api/admin/pool/members/:id/generate-apple-pass', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/members/:id/generate-apple-pass', requirePoolManager, async (req, res) => {
   const member = await dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
   if (!member) return res.status(404).json({ error: 'Pool member not found.' });
 
@@ -3830,7 +3868,7 @@ app.post('/api/admin/pool/members/:id/generate-apple-pass', requireAdmin, async 
 });
 
 // Generate Google Wallet pass (JWT save link) for a pool member
-app.post('/api/admin/pool/members/:id/generate-google-pass', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/members/:id/generate-google-pass', requirePoolManager, async (req, res) => {
   const member = await dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
   if (!member) return res.status(404).json({ error: 'Pool member not found.' });
 
@@ -3905,7 +3943,7 @@ app.post('/api/admin/pool/members/:id/generate-google-pass', requireAdmin, async
 });
 
 // GET NFC credentials for a member
-app.get('/api/admin/pool/members/:id/credentials', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/members/:id/credentials', requirePoolManager, async (req, res) => {
   const member = await dbGet('SELECT * FROM pool_members WHERE id = ?', [req.params.id]);
   if (!member) return res.status(404).json({ error: 'Pool member not found.' });
 
@@ -3926,7 +3964,7 @@ app.get('/api/admin/pool/members/:id/credentials', requireAdmin, async (req, res
 });
 
 // Revoke NFC credential
-app.post('/api/admin/pool/members/:id/credentials/:credId/revoke', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/members/:id/credentials/:credId/revoke', requirePoolManager, async (req, res) => {
   const cred = await dbGet('SELECT * FROM pool_nfc_credentials WHERE id = ? AND pool_member_id = ?', [req.params.credId, req.params.id]);
   if (!cred) return res.status(404).json({ error: 'Credential not found.' });
   
@@ -3935,7 +3973,7 @@ app.post('/api/admin/pool/members/:id/credentials/:credId/revoke', requireAdmin,
 });
 
 // GET schedules
-app.get('/api/admin/pool/schedules', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/schedules', requirePoolManager, async (req, res) => {
   const schedules = await dbAll(`
     SELECT ps.*,
            pet.name as entry_type_name,
@@ -3950,7 +3988,7 @@ app.get('/api/admin/pool/schedules', requireAdmin, async (req, res) => {
 });
 
 // POST new schedule
-app.post('/api/admin/pool/schedules', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/schedules', requirePoolManager, async (req, res) => {
   const { name, entry_type_id, pool_member_id, schedule_type, days_of_week, start_time, end_time, specific_date, start_date, end_date } = req.body;
   if (!name || !schedule_type) {
     return res.status(400).json({ error: 'Name and schedule type are required.' });
@@ -3983,7 +4021,7 @@ app.post('/api/admin/pool/schedules', requireAdmin, async (req, res) => {
 });
 
 // PUT update schedule
-app.put('/api/admin/pool/schedules/:id', requireAdmin, async (req, res) => {
+app.put('/api/admin/pool/schedules/:id', requirePoolManager, async (req, res) => {
   const sched = await dbGet('SELECT * FROM pool_schedules WHERE id = ?', [req.params.id]);
   if (!sched) return res.status(404).json({ error: 'Schedule not found.' });
   const { name, entry_type_id, pool_member_id, schedule_type, days_of_week, start_time, end_time, specific_date, start_date, end_date, is_active } = req.body;
@@ -3999,13 +4037,13 @@ app.put('/api/admin/pool/schedules/:id', requireAdmin, async (req, res) => {
 });
 
 // DELETE schedule
-app.delete('/api/admin/pool/schedules/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/pool/schedules/:id', requirePoolManager, async (req, res) => {
   await dbRun('DELETE FROM pool_schedules WHERE id = ?', [req.params.id]);
   res.json({ success: true });
 });
 
 // GET pool access check — who can enter now or at a given time
-app.get('/api/admin/pool/access-check', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/access-check', requirePoolManager, async (req, res) => {
   const checkDate = req.query.date || new Date().toISOString().split('T')[0];
   const checkTime = req.query.time || new Date().toTimeString().slice(0, 5);
   const dayOfWeek = new Date(checkDate + 'T12:00:00').getDay(); // 0=Sun..6=Sat
@@ -4076,7 +4114,7 @@ app.get('/api/admin/pool/access-check', requireAdmin, async (req, res) => {
 });
 
 // POST pool check-in (record attendance)
-app.post('/api/admin/pool/checkin', requireAdmin, async (req, res) => {
+app.post('/api/admin/pool/checkin', requirePoolManager, async (req, res) => {
   const { pool_member_id, status, is_holiday, notes } = req.body;
   if (!pool_member_id) return res.status(400).json({ error: 'Pool member is required.' });
   const member = await dbGet('SELECT * FROM pool_members WHERE id = ?', [pool_member_id]);
@@ -4089,7 +4127,7 @@ app.post('/api/admin/pool/checkin', requireAdmin, async (req, res) => {
 });
 
 // GET pool attendance stats
-app.get('/api/admin/pool/stats', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/stats', requirePoolManager, async (req, res) => {
   const now = new Date();
 
   // Week boundaries: Sunday to Saturday
@@ -4132,7 +4170,7 @@ app.get('/api/admin/pool/stats', requireAdmin, async (req, res) => {
 });
 
 // GET pool trend — rolling 30-day daily entry counts
-app.get('/api/admin/pool/trend', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/trend', requirePoolManager, async (req, res) => {
   const days = parseInt(req.query.days) || 30;
   const now = new Date();
   const start = new Date(now);
@@ -4170,7 +4208,7 @@ app.get('/api/admin/pool/trend', requireAdmin, async (req, res) => {
 });
 
 // GET pool check-in log
-app.get('/api/admin/pool/checkins', requireAdmin, async (req, res) => {
+app.get('/api/admin/pool/checkins', requirePoolManager, async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const rows = await dbAll(`
     SELECT pc.*, pm.first_name, pm.last_name, pet.name as entry_type_name
@@ -4318,7 +4356,7 @@ async function fetchGateViewer(pathSuffix, { method = 'GET', body = null, timeou
   }
 }
 
-app.get('/api/admin/gate/snapshot', requireAdmin, async (req, res) => {
+app.get('/api/admin/gate/snapshot', requirePoolManager, async (req, res) => {
   try {
     const parts = await Promise.allSettled([
       fetchGateViewer('/api/viewer/summary'),
@@ -4354,7 +4392,7 @@ app.get('/api/admin/gate/snapshot', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/gate/sync', requireAdmin, async (req, res) => {
+app.post('/api/admin/gate/sync', requirePoolManager, async (req, res) => {
   try {
     const r = await fetchGateViewer('/api/viewer/sync', { method: 'POST', body: {}, timeoutMs: 60000 });
     if (!r.ok) {

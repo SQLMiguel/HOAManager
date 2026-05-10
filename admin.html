@@ -884,12 +884,17 @@
     // Check admin status on load
     checkAdminStatus();
 
+    let currentUserIsAdmin = false;
+    let currentUserIsPoolManager = false;
+
     async function checkAdminStatus() {
       try {
         const res = await fetch('/api/admin/status');
         const data = await res.json();
-        if (data.isAdmin) {
-          showPanel();
+        if (data.isAdmin || data.isPoolManager) {
+          currentUserIsAdmin = !!data.isAdmin;
+          currentUserIsPoolManager = !!data.isPoolManager;
+          showPanel(data);
         }
       } catch (e) {}
     }
@@ -911,7 +916,9 @@
         const data = await res.json();
 
         if (data.success) {
-          showPanel();
+          currentUserIsAdmin = !!data.isAdmin;
+          currentUserIsPoolManager = !!data.isPoolManager;
+          showPanel(data);
         } else {
           loginError.textContent = data.error;
           loginError.style.display = 'block';
@@ -925,17 +932,39 @@
     // Logout
     logoutBtn.addEventListener('click', async () => {
       await fetch('/api/admin/logout', { method: 'POST' });
+      currentUserIsAdmin = false;
+      currentUserIsPoolManager = false;
       loginSection.style.display = '';
       adminPanel.style.display = 'none';
     });
 
-    function showPanel() {
+    function showPanel(roleData) {
       loginSection.style.display = 'none';
       adminPanel.style.display = 'block';
-      loadUsers();
-      loadPoolStats();
-      loadPoolTrend();
-      loadReimbStats();
+
+      const isAdmin = !!(roleData && roleData.isAdmin);
+      const isPoolManager = !!(roleData && roleData.isPoolManager);
+
+      // For pool-manager-only users: hide Members tabs and non-pool management tabs,
+      // then auto-navigate to Pool Management
+      if (!isAdmin && isPoolManager) {
+        document.querySelectorAll('.admin-tab-group-label').forEach(lbl => {
+          if (lbl.textContent.trim() === 'Members') lbl.closest('div').style.display = 'none';
+        });
+        // Hide SMS, Reimbursements, Newsletter tabs
+        document.querySelectorAll('.admin-tab[data-filter="sms"], .admin-tab[data-filter="reimbursements"]').forEach(t => t.style.display = 'none');
+        document.querySelectorAll('a.admin-tab').forEach(t => t.style.display = 'none');
+        // Auto-navigate to Pool Management
+        const poolTab = document.querySelector('.admin-tab[data-filter="pool"]');
+        if (poolTab) setTimeout(() => poolTab.click(), 50);
+        loadPoolStats();
+        loadPoolTrend();
+      } else {
+        loadUsers();
+        loadPoolStats();
+        loadPoolTrend();
+        loadReimbStats();
+      }
     }
 
     async function loadReimbStats() {
@@ -1069,7 +1098,7 @@
       const renderUserRow = (user) => `
         <div class="user-row ${user.status}">
           <div class="user-info">
-            <h3>${esc(user.first_name)} ${esc(user.last_name)} <span class="badge badge-${user.status}">${user.status}</span> <span class="badge" style="background:#4a90e2;color:#fff;">Primary</span>${user.is_admin ? ' <span class="badge" style="background:#7b2d8b;color:#fff;">Admin</span>' : ''}</h3>
+            <h3>${esc(user.first_name)} ${esc(user.last_name)} <span class="badge badge-${user.status}">${user.status}</span> <span class="badge" style="background:#4a90e2;color:#fff;">Primary</span>${user.is_admin ? ' <span class="badge" style="background:#7b2d8b;color:#fff;">Admin</span>' : ''}${user.is_pool_manager ? ' <span class="badge" style="background:#1e7e74;color:#fff;">Pool Manager</span>' : ''}</h3>
             <p><strong>Email:</strong> ${esc(user.email)}</p>
             <p><strong>Address:</strong> ${esc(user.address)}</p>
             ${user.phone ? `<p><strong>Phone:</strong> ${esc(user.phone)}</p>` : ''}
@@ -1086,6 +1115,7 @@
             ` : ''}
             ${user.status === 'approved' ? `
               <button style="padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:0.82rem;background:${user.is_admin ? '#6c757d' : '#7b2d8b'};color:#fff;" onclick="toggleAdminRole('${user.id}', ${user.is_admin ? 1 : 0}, '${esc(user.first_name)} ${esc(user.last_name)}')">${user.is_admin ? 'Revoke Admin' : 'Grant Admin'}</button>
+              <button style="padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:0.82rem;background:${user.is_pool_manager ? '#6c757d' : '#1e7e74'};color:#fff;" onclick="togglePoolManagerRole('${user.id}', ${user.is_pool_manager ? 1 : 0}, '${esc(user.first_name)} ${esc(user.last_name)}')">${user.is_pool_manager ? 'Revoke Pool Mgr' : 'Grant Pool Mgr'}</button>
             ` : ''}
             <button class="btn-delete" onclick="deleteUser('${user.id}', '${esc(user.first_name)} ${esc(user.last_name)}')">Delete</button>
           </div>
@@ -1212,6 +1242,23 @@
         }
       } catch (err) {
         showAdminNotification('Error updating admin role.', 'error');
+      }
+    };
+
+    window.togglePoolManagerRole = async (id, currentIsPoolManager, name) => {
+      const action = currentIsPoolManager ? 'revoke' : 'grant';
+      if (!confirm(`${action === 'grant' ? 'Grant' : 'Revoke'} Pool Manager role for ${name}?\n\n${action === 'grant' ? 'This will allow them to log into the admin panel and access Pool Management only. They will not see member data, SMS, reimbursements, or other admin features.' : 'They will no longer have pool management access.'}`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${id}/toggle-pool-manager`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          await loadUsers();
+          showAdminNotification(data.message, 'success');
+        } else {
+          showAdminNotification(data.error || 'Error updating pool manager role.', 'error');
+        }
+      } catch (err) {
+        showAdminNotification('Error updating pool manager role.', 'error');
       }
     };
 
