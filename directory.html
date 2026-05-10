@@ -150,16 +150,21 @@
             <div class="profile-step-connector"></div>
             <div class="profile-step-item" data-pstep="3">
               <div class="pstep-circle">3</div>
-              <div class="pstep-label">Social Links</div>
+              <div class="pstep-label">Pool Gate</div>
             </div>
             <div class="profile-step-connector"></div>
             <div class="profile-step-item" data-pstep="4">
               <div class="pstep-circle">4</div>
-              <div class="pstep-label">Photos</div>
+              <div class="pstep-label">Social Links</div>
             </div>
             <div class="profile-step-connector"></div>
             <div class="profile-step-item" data-pstep="5">
               <div class="pstep-circle">5</div>
+              <div class="pstep-label">Photos</div>
+            </div>
+            <div class="profile-step-connector"></div>
+            <div class="profile-step-item" data-pstep="6">
+              <div class="pstep-circle">6</div>
               <div class="pstep-label">Privacy</div>
             </div>
           </div>
@@ -276,16 +281,6 @@
               </div>
             </div>
 
-            <!-- Pool Phone Access (primary member) -->
-            <div class="dir-field-group">
-              <h4>Pool Gate — My Phone Access</h4>
-              <p class="dir-field-hint">
-                Register your iPhone or Android phone as your pool gate access method. The pool admin must
-                also list you as an active pool guest for entry to be granted.
-              </p>
-              <div id="poolPhoneSelf" class="dir-pool-phone-row"></div>
-            </div>
-
             <!-- Adults -->
             <div class="dir-field-group">
               <h4>Additional Adults in Household</h4>
@@ -345,6 +340,61 @@
                 <button class="btn btn-primary dir-add-btn" id="addPetBtn" type="button">Add</button>
               </div>
             </div>
+            <div class="pstep-nav">
+              <button class="btn pstep-back-btn" type="button">← Back</button>
+              <button class="btn btn-primary pstep-next-btn" type="button">Continue →</button>
+            </div>
+          </div>
+
+          <!-- ── TAB: Pool Gate Access ── -->
+          <div class="dir-tab-panel" id="tab-pool-gate">
+
+            <div class="dir-field-group">
+              <h4>Pool Gate Access</h4>
+              <p class="dir-field-hint">
+                Choose how your household accesses the pool gate. You can register a phone
+                (using the Glenridge Pool mobile app), request an RFID key card, or use both.
+                The pool admin must approve each method before it will open the gate.
+              </p>
+            </div>
+
+            <!-- Phone Access -->
+            <div class="dir-field-group">
+              <h4>📱 Phone Access</h4>
+              <p class="dir-field-hint">
+                Register your iPhone or Android phone. Once registered, use the
+                <strong>Glenridge Pool</strong> app to tap the gate open.
+              </p>
+              <div class="pool-gate-phone-section">
+                <div id="poolPhoneSelf" class="dir-pool-phone-row"></div>
+                <div id="poolGateHouseholdPhones"></div>
+              </div>
+            </div>
+
+            <!-- RFID Card Access -->
+            <div class="dir-field-group">
+              <h4>💳 RFID Key Card</h4>
+              <p class="dir-field-hint">
+                An RFID key card opens the gate with a tap — no phone needed.
+                <strong>Each family may request up to 2 key cards.</strong>
+                Cards are registered at the pool entry gate — bring your card (or yourself) to the pool
+                and a staff member will complete the registration.
+              </p>
+              <div id="poolCardStatus"></div>
+              <div class="pool-gate-info-box" id="poolCardInstructions" style="display:none;">
+                <strong>📋 How to register your key card:</strong>
+                <ul style="margin:.5rem 0 0 1.2rem;padding:0;">
+                  <li style="margin-bottom:.3rem;"><strong>Need a new card?</strong> Request one below. The pool admin will have it ready for you.</li>
+                  <li><strong>Already have a card?</strong> Bring it to the pool gate entry — a staff member will scan and register it to your account.</li>
+                </ul>
+                <p style="margin:.6rem 0 0;font-size:.85rem;color:#555;">
+                  ⚠ Cards are not active until registered in person at the pool.
+                </p>
+              </div>
+              <div id="poolCardActions" style="margin-top:.75rem;"></div>
+              <p id="poolCardRequestStatus" class="dir-save-msg" style="margin-top:.5rem;"></p>
+            </div>
+
             <div class="pstep-nav">
               <button class="btn pstep-back-btn" type="button">← Back</button>
               <button class="btn btn-primary pstep-next-btn" type="button">Continue →</button>

@@ -527,6 +527,8 @@ async function initDb() {
   ];
   const alterPoolMembers = [
     `ALTER TABLE pool_members ADD COLUMN rfid_tag VARCHAR(100) UNIQUE`,
+    `ALTER TABLE pool_members ADD COLUMN card_requested_at DATETIME`,
+    `ALTER TABLE pool_members ADD COLUMN cards_requested_count INT NOT NULL DEFAULT 0`,
   ];
   const alterPoolCheckins = [
     `ALTER TABLE pool_checkins ADD COLUMN person_name VARCHAR(120)`,
@@ -940,10 +942,17 @@ const sessionStore = new MySQLStore({
   user:               process.env.DB_USER     || 'root',
   password:           process.env.DB_PASSWORD || '',
   database:           process.env.DB_NAME     || 'glenridge',
-  clearExpired:       true,
+  // Avoid background expiration sweeps crashing the process when DNS/network
+  // to MySQL briefly flakes. Expired sessions can be cleaned by a scheduled
+  // DB job in production if desired.
+  clearExpired:       false,
   checkExpirationInterval: 900000,
   expiration:         86400000,
   createDatabaseTable: true,
+});
+
+sessionStore.on('error', (err) => {
+  console.error('Session store error:', err && (err.code || err.message) ? (err.code || err.message) : err);
 });
 
 app.use(session({
@@ -2063,6 +2072,96 @@ app.delete('/api/directory/me/pool-phones/:id', requireAuth, async (req, res) =>
 });
 
 // ── Admin Routes ────────────────────────────────────────
+
+// GET /api/directory/me/pool-card-status — RFID card status for the logged-in member
+app.get('/api/directory/me/pool-card-status', requireAuth, async (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const pm = await dbGet(
+      `SELECT * FROM pool_members WHERE user_id=? AND source='member' AND status='active' LIMIT 1`,
+      [uid]
+    );
+    if (!pm) {
+      return res.json({ active_cards: 0, cards_requested: 0, can_request_more: false, no_pool_record: true });
+    }
+
+    // Count active RFID NFC credentials for this pool member
+    const nfcRows = await dbAll(
+      `SELECT * FROM pool_nfc_credentials WHERE pool_member_id=? AND credential_type='rfid' AND status='active'`,
+      [pm.id]
+    );
+    // Also count legacy rfid_tag on pool_members as an active card
+    const legacyCard = pm.rfid_tag ? 1 : 0;
+    const activeCards = Math.min(2, nfcRows.length + legacyCard);
+
+    const cardsRequested = Math.max(0, (pm.cards_requested_count || 0));
+    const maxCards = 2;
+    const canRequestMore = (activeCards + cardsRequested) < maxCards;
+
+    res.json({
+      active_cards: activeCards,
+      cards_requested: cardsRequested,
+      can_request_more: canRequestMore,
+      max_cards: maxCards,
+      no_pool_record: false
+    });
+  } catch (err) {
+    console.error('GET /api/directory/me/pool-card-status error:', err.message);
+    res.status(500).json({ error: 'Failed to load card status.' });
+  }
+});
+
+// POST /api/directory/me/pool-card-request — request (or cancel) an RFID card
+app.post('/api/directory/me/pool-card-request', requireAuth, async (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const { quantity, cancel } = req.body || {};
+    const pm = await dbGet(
+      `SELECT * FROM pool_members WHERE user_id=? AND source='member' AND status='active' LIMIT 1`,
+      [uid]
+    );
+    if (!pm) {
+      return res.status(404).json({ error: 'No pool member record found. Contact the HOA admin to be added first.' });
+    }
+
+    if (cancel) {
+      await dbRun(`UPDATE pool_members SET cards_requested_count=0, card_requested_at=NULL WHERE id=?`, [pm.id]);
+      dirAudit(uid, 'pool_card_request_cancelled', 'Member cancelled RFID card request');
+      return res.json({ success: true, cards_requested: 0 });
+    }
+
+    const qty = parseInt(quantity) || 1;
+    if (qty < 1 || qty > 2) {
+      return res.status(400).json({ error: 'quantity must be 1 or 2.' });
+    }
+
+    // Count active cards to enforce 2-card household limit
+    const nfcCount = (await dbAll(
+      `SELECT id FROM pool_nfc_credentials WHERE pool_member_id=? AND credential_type='rfid' AND status='active'`,
+      [pm.id]
+    )).length;
+    const legacyCard = pm.rfid_tag ? 1 : 0;
+    const activeCards = nfcCount + legacyCard;
+    const currentRequested = pm.cards_requested_count || 0;
+    const newTotal = Math.min(2, activeCards + currentRequested + qty);
+    const newRequested = Math.max(0, newTotal - activeCards);
+
+    if (newRequested === currentRequested) {
+      return res.status(400).json({ error: 'Your family already has the maximum of 2 RFID key cards.' });
+    }
+
+    const ts = currentRequested === 0 ? new Date().toISOString() : pm.card_requested_at;
+    await dbRun(
+      `UPDATE pool_members SET cards_requested_count=?, card_requested_at=? WHERE id=?`,
+      [newRequested, ts, pm.id]
+    );
+    dirAudit(uid, 'pool_card_requested', `Member requested ${newRequested} RFID key card(s)`);
+    res.json({ success: true, cards_requested: newRequested });
+  } catch (err) {
+    console.error('POST /api/directory/me/pool-card-request error:', err.message);
+    res.status(500).json({ error: 'Failed to process card request.' });
+  }
+});
 
 // Admin login
 app.post('/api/admin/login', async (req, res) => {

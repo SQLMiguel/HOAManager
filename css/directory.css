@@ -774,6 +774,30 @@
 .dir-save-msg-ok    { color: #276749; }
 .dir-save-msg-error { color: #c0392b; }
 
+/* Pool Gate Step */
+.pool-gate-phone-section { display: flex; flex-direction: column; gap: .75rem; }
+.pool-gate-info-box {
+  background: #f0f6ff;
+  border: 1px solid #b6d4f5;
+  border-radius: 6px;
+  padding: .75rem 1rem;
+  font-size: .9rem;
+  line-height: 1.5;
+  margin-top: .5rem;
+  color: #2a3a5c;
+}
+.pool-card-slot {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  padding: .5rem .25rem;
+  border-bottom: 1px solid #eee;
+  font-size: .9rem;
+}
+.pool-card-slot:last-child { border-bottom: none; }
+.pool-card-slot-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+.dir-danger-btn { color: #c0392b !important; border-color: #c0392b !important; }
+
 /* ── Saved Button Feedback ─────────────────────────────────── */
 .btn-saved {
   background: #6c757d !important;

@@ -423,17 +423,17 @@
       if (saved) goToProfileStep(2);
     });
 
-    // Generic next buttons on steps 2–4
+    // Generic next buttons on steps 2–5
     document.querySelectorAll('.pstep-next-btn').forEach(btn => {
       btn.addEventListener('click', () => goToProfileStep(_profileStep + 1));
     });
 
-    // Generic back buttons on steps 2–5
+    // Generic back buttons on steps 2–6
     document.querySelectorAll('.pstep-back-btn').forEach(btn => {
       btn.addEventListener('click', () => goToProfileStep(_profileStep - 1));
     });
 
-    // Done button on step 5
+    // Done button on step 6
     document.getElementById('profDoneBtn').addEventListener('click', () => {
       document.getElementById('profileSection').style.display = 'none';
     });
@@ -451,8 +451,8 @@
   }
 
   function goToProfileStep(step) {
-    step = Math.max(1, Math.min(5, step));
-    const panelIds = ['tab-info', 'tab-family', 'tab-social', 'tab-photos', 'tab-publish'];
+    step = Math.max(1, Math.min(6, step));
+    const panelIds = ['tab-info', 'tab-family', 'tab-pool-gate', 'tab-social', 'tab-photos', 'tab-publish'];
     panelIds.forEach((id, i) => {
       const panel = document.getElementById(id);
       if (panel) panel.classList.toggle('active', i + 1 === step);
@@ -479,6 +479,9 @@
 
     _profileStep = step;
     document.getElementById('profileSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Refresh pool gate data whenever step 3 is entered
+    if (step === 3) refreshPoolGateStep();
   }
 
   async function autoSaveInfo() {
@@ -585,8 +588,7 @@
           <button class="btn btn-primary dir-save-btn" data-id="${a.id}" data-type="adult" type="button">Save</button>
           <button class="btn btn-outline dir-cancel-btn" data-id="${a.id}" data-type="adult" type="button">Cancel</button>
         </div>
-      </div>
-      <div class="dir-pool-phone-row" data-pp-person-type="adult" data-pp-person-id="${a.id}" data-pp-person-name="${e(a.name)}"></div>`;
+      </div>`;
     }).join('');
     document.querySelectorAll('#adultsList .dir-del-btn').forEach(btn =>
       btn.addEventListener('click', () => {
@@ -659,8 +661,7 @@
           <button class="btn btn-primary dir-save-btn" data-id="${c.id}" data-type="child" type="button">Save</button>
           <button class="btn btn-outline dir-cancel-btn" data-id="${c.id}" data-type="child" type="button">Cancel</button>
         </div>
-      </div>
-      ${is16 ? `<div class="dir-pool-phone-row" data-pp-person-type="child" data-pp-person-id="${c.id}" data-pp-person-name="${e(c.first_name)}"></div>` : ''}`;
+      </div>`;
     }).join('');
     document.querySelectorAll('#childrenList .dir-del-btn').forEach(btn =>
       btn.addEventListener('click', () => {
@@ -949,6 +950,155 @@
   async function saveDoNotList() {
     await apiPost('/api/directory/profile', { do_not_list: chk('profDoNotList') ? 1 : 0 });
     loadDirectory();
+  }
+
+  // ── Pool Gate Step ───────────────────────────────────────────
+  let _poolCardStatus = null;
+
+  async function refreshPoolGateStep() {
+    await refreshPoolPhones();
+    renderPoolGateHouseholdPhones();
+    await loadPoolCardStatus();
+  }
+
+  function renderPoolGateHouseholdPhones() {
+    const container = document.getElementById('poolGateHouseholdPhones');
+    if (!container) return;
+    const adults   = (myProfile && myProfile.adults)   || [];
+    const children = (myProfile && myProfile.children) || [];
+    const rows = [
+      ...adults.map(a => ({ type: 'adult', id: a.id, name: a.name })),
+      ...children.filter(c => c.is_16_plus).map(c => ({ type: 'child', id: c.id, name: c.first_name }))
+    ];
+    if (!rows.length) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = rows.map(r =>
+      `<div class="dir-pool-phone-row" data-pp-person-type="${r.type}" data-pp-person-id="${e(String(r.id))}" data-pp-person-name="${e(r.name)}"></div>`
+    ).join('');
+    container.querySelectorAll('.dir-pool-phone-row').forEach(box => {
+      const pt = box.dataset.ppPersonType;
+      const pid = box.dataset.ppPersonId;
+      const pname = box.dataset.ppPersonName;
+      box.innerHTML = buildPhoneRowInner(pt, pid, pname);
+      attachRowHandlers(box);
+    });
+  }
+
+  async function loadPoolCardStatus() {
+    try {
+      const r = await fetch('/api/directory/me/pool-card-status');
+      if (!r.ok) return;
+      _poolCardStatus = await r.json();
+      renderPoolCardStatus();
+    } catch {}
+  }
+
+  function renderPoolCardStatus() {
+    const statusEl    = document.getElementById('poolCardStatus');
+    const instructEl  = document.getElementById('poolCardInstructions');
+    const actionsEl   = document.getElementById('poolCardActions');
+    if (!statusEl || !actionsEl) return;
+
+    if (!_poolCardStatus) {
+      statusEl.innerHTML = '<span class="dir-pp-status-none">Unable to load card status.</span>';
+      instructEl.style.display = 'none';
+      actionsEl.innerHTML = '';
+      return;
+    }
+
+    if (_poolCardStatus.no_pool_record) {
+      statusEl.innerHTML = `<div class="dir-pp-info"><span class="dir-pp-status-none">
+        Your pool membership record has not been set up yet.
+        Contact the HOA admin to be added as a pool member before requesting key cards.
+      </span></div>`;
+      instructEl.style.display = 'none';
+      actionsEl.innerHTML = '';
+      return;
+    }
+
+    const active    = _poolCardStatus.active_cards    || 0;
+    const requested = _poolCardStatus.cards_requested || 0;
+    const max       = _poolCardStatus.max_cards       || 2;
+    const total     = active + requested;
+
+    // Build card slot rows
+    let slotsHtml = '';
+    for (let i = 0; i < active; i++) {
+      slotsHtml += `<div class="pool-card-slot">
+        <span class="pool-card-slot-icon">💳</span>
+        <span class="dir-pp-status-active">Key Card ${i + 1} — Active (registered at pool)</span>
+      </div>`;
+    }
+    for (let i = 0; i < requested; i++) {
+      slotsHtml += `<div class="pool-card-slot">
+        <span class="pool-card-slot-icon">💳</span>
+        <span class="dir-pp-status-pending">Key Card ${active + i + 1} — Request pending
+          &nbsp;<small style="font-weight:400;color:#888;">Present at the pool entry gate to complete registration.</small>
+        </span>
+      </div>`;
+    }
+    statusEl.innerHTML = slotsHtml || `<div class="dir-pp-info"><span class="dir-pp-status-none">No key cards on file</span></div>`;
+
+    // Instructions box
+    instructEl.style.display = (total < max) ? '' : 'none';
+
+    // Action buttons
+    const canRequest = total < max;
+    const canRequestTwo = (total + 1) < max;
+    let actionsHtml = '';
+
+    if (canRequest) {
+      actionsHtml += `<button class="btn btn-primary" type="button" id="requestCard1Btn">Request 1 Key Card</button>`;
+      if (canRequestTwo) {
+        actionsHtml += ` <button class="btn btn-outline" type="button" id="requestCard2Btn" style="margin-left:.5rem;">Request 2 Key Cards</button>`;
+      }
+    }
+    if (requested > 0) {
+      actionsHtml += `<button class="btn btn-outline dir-danger-btn" type="button" id="cancelCardRequestBtn" style="margin-left:.5rem;">Cancel ${requested === 2 ? 'All ' : ''}Requests</button>`;
+    }
+    if (active === max) {
+      actionsHtml = `<p class="dir-field-hint" style="margin:0;">Your family has reached the maximum of ${max} RFID key cards. To replace or deactivate a card, visit the pool office.</p>`;
+    }
+
+    actionsEl.innerHTML = actionsHtml;
+
+    const btn1 = document.getElementById('requestCard1Btn');
+    if (btn1) btn1.addEventListener('click', () => requestPoolCard(1));
+    const btn2 = document.getElementById('requestCard2Btn');
+    if (btn2) btn2.addEventListener('click', () => requestPoolCard(2));
+    const cancelBtn = document.getElementById('cancelCardRequestBtn');
+    if (cancelBtn) cancelBtn.addEventListener('click', cancelPoolCardRequest);
+  }
+
+  async function requestPoolCard(quantity) {
+    const statusEl = document.getElementById('poolCardRequestStatus');
+    statusEl.textContent = 'Sending request…';
+    statusEl.className = 'dir-save-msg';
+    const [ok, msg] = await apiPost('/api/directory/me/pool-card-request', { quantity });
+    if (ok) {
+      const label = quantity === 2 ? '2 key cards' : '1 key card';
+      statusEl.textContent = `✓ Request for ${label} sent! Bring yourself to the pool gate to complete registration.`;
+      statusEl.className = 'dir-save-msg dir-save-msg-ok';
+      await loadPoolCardStatus();
+    } else {
+      statusEl.textContent = '⚠ ' + msg;
+      statusEl.className = 'dir-save-msg dir-save-msg-error';
+    }
+    setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'dir-save-msg'; }, 6000);
+  }
+
+  async function cancelPoolCardRequest() {
+    const statusEl = document.getElementById('poolCardRequestStatus');
+    const [ok, msg] = await apiPost('/api/directory/me/pool-card-request', { cancel: true });
+    if (ok) {
+      await loadPoolCardStatus();
+    } else {
+      statusEl.textContent = '⚠ ' + msg;
+      statusEl.className = 'dir-save-msg dir-save-msg-error';
+      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'dir-save-msg'; }, 4000);
+    }
   }
 
   // ── Pool Phone Access ────────────────────────────────────────
