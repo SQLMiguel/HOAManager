@@ -210,6 +210,7 @@
                 </label>
                 <span id="profSmsStatus" class="dir-sms-inline-status"></span>
               </div>
+              <p class="dir-field-hint" style="margin-top:.5rem;font-style:italic;">To enroll additional household members for SMS alerts, add them in the <strong>Family &amp; Pets</strong> tab and enable SMS when adding their phone number.</p>
             </div>
 
             <div class="dir-field-group">
@@ -295,6 +296,10 @@
                   <input type="checkbox" id="adultShowBday"><span class="dir-toggle-slider"></span>
                   <span class="dir-toggle-label">Show bday</span>
                 </label>
+                <label class="dir-toggle" title="Enroll in HOA SMS text alerts">
+                  <input type="checkbox" id="adultSmsOptIn"><span class="dir-toggle-slider"></span>
+                  <span class="dir-toggle-label">SMS alerts</span>
+                </label>
                 <button class="btn btn-primary dir-add-btn" id="addAdultBtn" type="button">Add</button>
               </div>
             </div>
@@ -344,6 +349,16 @@
               <button class="btn pstep-back-btn" type="button">← Back</button>
               <button class="btn btn-primary pstep-next-btn" type="button">Continue →</button>
             </div>
+
+            <!-- Pool access cross-link callout -->
+            <div class="dir-pool-crosslink-callout">
+              <span>🏊</span>
+              <div>
+                <strong>Pool gate access</strong> for each family member is managed in the next step.
+                <button class="btn-link" type="button" onclick="goToProfileStepPublic(3)">Go to Pool Gate →</button>
+              </div>
+            </div>
+
           </div>
 
           <!-- ── TAB: Pool Gate Access ── -->
@@ -365,6 +380,11 @@
                 Register your iPhone or Android phone. Once registered, use the
                 <strong>Glenridge Pool</strong> app to tap the gate open.
               </p>
+              <div class="dir-pool-family-note">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Family members appear here once added in the
+                <button class="btn-link" type="button" onclick="goToProfileStepPublic(2)">Family &amp; Pets tab</button>.
+              </div>
               <div class="pool-gate-phone-section">
                 <div id="poolPhoneSelf" class="dir-pool-phone-row"></div>
                 <div id="poolGateHouseholdPhones"></div>

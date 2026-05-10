@@ -153,10 +153,13 @@
   function buildFamilyBadges(m) {
     const parts = [];
     (m.adults   || []).filter(a => a.is_visible !== 0).forEach(a => {
-      const contact = [a.email, a.phone].filter(Boolean).map(v => `<span class="dir-badge-email">${e(v)}</span>`).join('');
+      const contact = [
+        a.show_phone !== 0 && a.email ? `<span class="dir-badge-email">${e(a.email)}</span>` : '',
+        a.show_email !== 0 && a.phone ? `<span class="dir-badge-email">${e(a.phone)}</span>` : ''
+      ].filter(Boolean).join('');
       parts.push(`<span class="dir-badge">${e(a.name)}${contact}</span>`);
     });
-    (m.children || []).forEach(c => parts.push(`<span class="dir-badge dir-badge-child">${e(c.first_name)}</span>`));
+    (m.children || []).filter(c => c.is_visible !== 0).forEach(c => parts.push(`<span class="dir-badge dir-badge-child">${e(c.first_name)}</span>`));
     (m.pets     || []).forEach(p => parts.push(`<span class="dir-badge dir-badge-pet">🐾 ${e(p.name)}</span>`));
     return parts.join('');
   }
@@ -554,16 +557,21 @@
     document.getElementById('adultsList').innerHTML = list.map(a => {
       const details = [
         a.birthday ? e(a.birthday) : '',
-        a.phone ? `📞 ${e(a.phone)}` : '',
-        a.email ? `✉ ${e(a.email)}` : ''
+        a.phone && a.show_phone !== 0 ? `📞 ${e(a.phone)}` : (a.phone ? '📞 <em class="dir-hidden-hint">(hidden)</em>' : ''),
+        a.email && a.show_email !== 0 ? `✉ ${e(a.email)}` : (a.email ? '✉ <em class="dir-hidden-hint">(hidden)</em>' : '')
       ].filter(Boolean).join(' · ');
       const smsOn = a.sms_opt_in ? 1 : 0;
+      const showPhoneChk = a.show_phone !== 0 ? 'checked' : '';
+      const showEmailChk = a.show_email !== 0 ? 'checked' : '';
       return `<div class="dir-list-item">
-        <span>${e(a.name)}${details ? ` · ${details}` : ''}${smsOn ? ' · <span class="dir-badge-sms">📱 SMS</span>' : ''}</span>
-        <div class="dir-item-actions">
-          <button class="dir-edit-btn" data-id="${a.id}" data-type="adult" title="Edit">✎</button>
-          <button class="dir-del-btn" data-id="${a.id}" data-type="adult" title="Remove">✕</button>
+        <div class="dir-member-header">
+          <strong class="dir-member-name">${e(a.name)}</strong>
+          <div class="dir-item-actions">
+            <button class="dir-edit-btn" data-id="${a.id}" data-type="adult" title="Edit">✎</button>
+            <button class="dir-del-btn" data-id="${a.id}" data-type="adult" title="Remove">✕</button>
+          </div>
         </div>
+        ${details ? `<div class="dir-member-details">${details}${smsOn ? ' · <span class="dir-badge-sms">📱 SMS</span>' : ''}</div>` : (smsOn ? `<div class="dir-member-details"><span class="dir-badge-sms">📱 SMS</span></div>` : '')}
       </div>
       <div class="dir-edit-form" id="edit-adult-${a.id}" style="display:none;">
         <div class="dir-edit-fields">
@@ -574,6 +582,18 @@
           <div class="dir-edit-field">
             <label>Email</label>
             <input type="email" class="dir-input" id="edit-adult-email-${a.id}" value="${e(a.email || '')}" placeholder="Email address">
+          </div>
+          <div class="dir-edit-field dir-edit-field-full dir-edit-visibility-row">
+            <label class="dir-toggle" title="Show phone in directory">
+              <input type="checkbox" id="edit-adult-showphone-${a.id}" ${showPhoneChk}>
+              <span class="dir-toggle-slider"></span>
+              <span class="dir-toggle-label">Show phone in directory</span>
+            </label>
+            <label class="dir-toggle" title="Show email in directory">
+              <input type="checkbox" id="edit-adult-showemail-${a.id}" ${showEmailChk}>
+              <span class="dir-toggle-slider"></span>
+              <span class="dir-toggle-label">Show email in directory</span>
+            </label>
           </div>
           <div class="dir-edit-field dir-edit-field-full">
             <label class="dir-toggle dir-toggle-sms">
@@ -617,17 +637,22 @@
       const bday = c.birth_month ? ` · ${e(c.birth_month)}${c.birth_day ? ' ' + c.birth_day : ''}` : '';
       const is16 = c.is_16_plus ? 1 : 0;
       const smsOn = c.sms_opt_in ? 1 : 0;
+      const isVis = c.is_visible !== 0;
       const ageLabel = is16 ? ' · <span class="dir-badge-16plus">16+</span>' : '';
       const contactDetails = [
         c.phone ? `📞 ${e(c.phone)}` : '',
         c.email ? `✉ ${e(c.email)}` : ''
       ].filter(Boolean).join(' · ');
+      const hiddenBadge = !isVis ? ' · <span class="dir-badge-hidden">hidden from directory</span>' : '';
       return `<div class="dir-list-item">
-        <span>${e(c.first_name)}${bday}${ageLabel}${contactDetails ? ` · ${contactDetails}` : ''}${is16 && smsOn ? ' · <span class="dir-badge-sms">📱 SMS</span>' : ''}</span>
-        <div class="dir-item-actions">
-          <button class="dir-edit-btn" data-id="${c.id}" data-type="child" title="Edit">✎</button>
-          <button class="dir-del-btn" data-id="${c.id}" data-type="child" title="Remove">✕</button>
+        <div class="dir-member-header">
+          <strong class="dir-member-name">${e(c.first_name)}</strong>${ageLabel}
+          <div class="dir-item-actions">
+            <button class="dir-edit-btn" data-id="${c.id}" data-type="child" title="Edit">✎</button>
+            <button class="dir-del-btn" data-id="${c.id}" data-type="child" title="Remove">✕</button>
+          </div>
         </div>
+        ${(bday || contactDetails || smsOn || !isVis) ? `<div class="dir-member-details">${bday.replace(' · ', '')}${contactDetails ? (bday ? ' · ' : '') + contactDetails : ''}${is16 && smsOn ? ' · <span class="dir-badge-sms">📱 SMS</span>' : ''}${hiddenBadge}</div>` : ''}
       </div>
       <div class="dir-edit-form" id="edit-child-${c.id}" style="display:none;">
         <div class="dir-edit-fields">
@@ -655,6 +680,14 @@
               </label>
               <p class="dir-field-hint" style="margin-top:4px;">Requires a valid phone number above.</p>
             </div>
+          </div>
+          <div class="dir-edit-field dir-edit-field-full">
+            <label class="dir-toggle">
+              <input type="checkbox" id="edit-child-visible-${c.id}" ${isVis ? 'checked' : ''}>
+              <span class="dir-toggle-slider"></span>
+              <span class="dir-toggle-label">Show in directory</span>
+            </label>
+            <p class="dir-field-hint" style="margin-top:4px;">Hiding from the directory does not affect pool gate access or SMS alerts.</p>
           </div>
         </div>
         <div class="dir-edit-actions">
@@ -695,8 +728,10 @@
   function renderPets(list) {
     document.getElementById('petsList').innerHTML = list.map(p =>
       `<div class="dir-list-item">
-        <span>${e(p.name)}${p.pet_type ? ` (${e(p.pet_type)})` : ''}</span>
-        <button class="dir-del-btn" data-id="${p.id}" data-type="pet" title="Remove">✕</button>
+        <div class="dir-member-header">
+          <span>${e(p.name)}${p.pet_type ? ` <em style="color:#888;font-size:.85em;">(${e(p.pet_type)})</em>` : ''}</span>
+          <button class="dir-del-btn" data-id="${p.id}" data-type="pet" title="Remove">✕</button>
+        </div>
       </div>`
     ).join('');
     document.querySelectorAll('#petsList .dir-del-btn').forEach(btn =>
@@ -713,14 +748,16 @@
   async function saveAdult(id) {
     const phone = document.getElementById('edit-adult-phone-' + id)?.value.trim() || '';
     const email = document.getElementById('edit-adult-email-' + id)?.value.trim() || '';
-    const sms_opt_in = document.getElementById('edit-adult-sms-' + id)?.checked ? 1 : 0;
+    const sms_opt_in  = document.getElementById('edit-adult-sms-'       + id)?.checked ? 1 : 0;
+    const show_phone  = document.getElementById('edit-adult-showphone-'  + id)?.checked ? 1 : 0;
+    const show_email  = document.getElementById('edit-adult-showemail-'  + id)?.checked ? 1 : 0;
     if (sms_opt_in && !phone) { alert('A phone number is required to enroll in SMS alerts.'); return; }
     if (phone && !FormValidation.isValidPhone(phone)) { alert('Please enter a valid phone number.'); return; }
     if (email && !FormValidation.isValidEmail(email)) { alert('Please enter a valid email address.'); return; }
     const r = await fetch('/api/directory/adults/' + encodeURIComponent(id), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, email, sms_opt_in })
+      body: JSON.stringify({ phone, email, sms_opt_in, show_phone, show_email })
     });
     const data = await r.json();
     if (!r.ok || !data.success) { alert(data.error || 'Failed to save.'); return; }
@@ -738,13 +775,14 @@
     const phone = is_16_plus ? (document.getElementById('edit-child-phone-' + id)?.value.trim() || '') : '';
     const email = is_16_plus ? (document.getElementById('edit-child-email-' + id)?.value.trim() || '') : '';
     const sms_opt_in = is_16_plus ? (document.getElementById('edit-child-sms-' + id)?.checked ? 1 : 0) : 0;
+    const is_visible = document.getElementById('edit-child-visible-' + id)?.checked ? 1 : 0;
     if (sms_opt_in && !phone) { alert('A phone number is required to enroll in SMS alerts.'); return; }
     if (phone && !FormValidation.isValidPhone(phone)) { alert('Please enter a valid phone number.'); return; }
     if (email && !FormValidation.isValidEmail(email)) { alert('Please enter a valid email address.'); return; }
     const r = await fetch('/api/directory/children/' + encodeURIComponent(id), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_16_plus, phone, email, sms_opt_in })
+      body: JSON.stringify({ is_16_plus, phone, email, sms_opt_in, is_visible })
     });
     const data = await r.json();
     if (!r.ok || !data.success) { alert(data.error || 'Failed to save.'); return; }
@@ -763,10 +801,16 @@
     const show_birthday = chk('adultShowBday') ? 1 : 0;
     const phone        = val('adultPhone');
     const email        = val('adultEmail');
+    const sms_opt_in   = chk('adultSmsOptIn') ? 1 : 0;
     if (phone && !FormValidation.isValidPhone(phone)) return;
     if (email && !FormValidation.isValidEmail(email)) return;
-    const [ok] = await apiPost('/api/directory/adults', { name, birthday, show_birthday, phone, email });
-    if (ok) { clearInputs('adultName', 'adultBirthday', 'adultPhone', 'adultEmail'); await refreshProfile(); }
+    if (sms_opt_in && !phone) { alert('A phone number is required to enroll in SMS alerts.'); return; }
+    const [ok] = await apiPost('/api/directory/adults', { name, birthday, show_birthday, phone, email, sms_opt_in });
+    if (ok) {
+      clearInputs('adultName', 'adultBirthday', 'adultPhone', 'adultEmail');
+      document.getElementById('adultSmsOptIn').checked = false;
+      await refreshProfile();
+    }
   }
 
   async function addChild() {
@@ -810,8 +854,10 @@
   function renderSocial(list) {
     document.getElementById('socialList').innerHTML = list.map(s =>
       `<div class="dir-list-item">
-        <span>${e(s.platform)} — <a href="${e(s.url)}" target="_blank" rel="noopener">${e(s.url)}</a></span>
-        <button class="dir-del-btn" data-id="${s.id}" data-type="social" title="Remove">✕</button>
+        <div class="dir-member-header">
+          <span>${e(s.platform)} — <a href="${e(s.url)}" target="_blank" rel="noopener">${e(s.url)}</a></span>
+          <button class="dir-del-btn" data-id="${s.id}" data-type="social" title="Remove">✕</button>
+        </div>
       </div>`
     ).join('');
     document.querySelectorAll('#socialList .dir-del-btn').forEach(btn =>
@@ -1345,5 +1391,8 @@
     setTimeout(() => n.classList.add('dir-notif-show'), 10);
     setTimeout(() => { n.classList.remove('dir-notif-show'); setTimeout(() => n.remove(), 400); }, 3500);
   }
+
+  // Expose for inline onclick in HTML cross-link buttons
+  window.goToProfileStepPublic = goToProfileStep;
 
 })();

@@ -518,6 +518,8 @@ async function initDb() {
     `ALTER TABLE dir_adults ADD COLUMN phone VARCHAR(30)`,
     `ALTER TABLE dir_adults ADD COLUMN email VARCHAR(255)`,
     `ALTER TABLE dir_adults ADD COLUMN sms_opt_in TINYINT(1) DEFAULT 0`,
+    `ALTER TABLE dir_adults ADD COLUMN show_phone TINYINT(1) DEFAULT 1`,
+    `ALTER TABLE dir_adults ADD COLUMN show_email TINYINT(1) DEFAULT 1`,
   ];
   const alterChildren = [
     `ALTER TABLE dir_children ADD COLUMN is_16_plus TINYINT(1) DEFAULT 0`,
@@ -1789,9 +1791,11 @@ app.put('/api/directory/adults/:id', requireAuth, async (req, res) => {
   if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
   const row = await dbGet('SELECT * FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
   if (!row) return res.status(404).json({ error: 'Adult not found.' });
-  const sms_opt_in_val = req.body.sms_opt_in !== undefined ? (req.body.sms_opt_in ? 1 : 0) : (row.sms_opt_in || 0);
-  await dbRun('UPDATE dir_adults SET phone=?, email=?, sms_opt_in=? WHERE id=? AND user_id=?',
-    [phone?.trim()||null, email?.trim()||null, sms_opt_in_val, req.params.id, req.session.userId]);
+  const sms_opt_in_val  = req.body.sms_opt_in  !== undefined ? (req.body.sms_opt_in  ? 1 : 0) : (row.sms_opt_in  || 0);
+  const show_phone_val  = req.body.show_phone  !== undefined ? (req.body.show_phone  ? 1 : 0) : (row.show_phone  ?? 1);
+  const show_email_val  = req.body.show_email  !== undefined ? (req.body.show_email  ? 1 : 0) : (row.show_email  ?? 1);
+  await dbRun('UPDATE dir_adults SET phone=?, email=?, sms_opt_in=?, show_phone=?, show_email=? WHERE id=? AND user_id=?',
+    [phone?.trim()||null, email?.trim()||null, sms_opt_in_val, show_phone_val, show_email_val, req.params.id, req.session.userId]);
   res.json({ success: true, adult: await dbGet('SELECT * FROM dir_adults WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/adults/:id', requireAuth, async (req, res) => {
@@ -1820,9 +1824,10 @@ app.put('/api/directory/children/:id', requireAuth, async (req, res) => {
   if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
   const row = await dbGet('SELECT * FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
   if (!row) return res.status(404).json({ error: 'Child not found.' });
-  const sms_opt_in_val = req.body.sms_opt_in !== undefined ? (req.body.sms_opt_in ? 1 : 0) : (row.sms_opt_in || 0);
-  await dbRun('UPDATE dir_children SET is_16_plus=?, phone=?, email=?, sms_opt_in=? WHERE id=? AND user_id=?',
-    [is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val, req.params.id, req.session.userId]);
+  const sms_opt_in_val = req.body.sms_opt_in  !== undefined ? (req.body.sms_opt_in  ? 1 : 0) : (row.sms_opt_in  || 0);
+  const is_visible_val = req.body.is_visible   !== undefined ? (req.body.is_visible  ? 1 : 0) : (row.is_visible  ?? 1);
+  await dbRun('UPDATE dir_children SET is_16_plus=?, phone=?, email=?, sms_opt_in=?, is_visible=? WHERE id=? AND user_id=?',
+    [is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val, is_visible_val, req.params.id, req.session.userId]);
   res.json({ success: true, child: await dbGet('SELECT * FROM dir_children WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/children/:id', requireAuth, async (req, res) => {

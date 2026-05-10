@@ -1917,8 +1917,17 @@
 
     document.getElementById('poolExpandAllHouseholds').addEventListener('click', () => {
       expandedPoolHouseholds = new Set(
-        poolMembers
-          .map(member => member.street_address ? (member.household_key || member.street_address.toLowerCase()) : '__no_household_address__')
+        poolMembers.map(member => {
+          if (member.street_address) {
+            return member.household_owner_user_id
+              ? `owner:${member.household_owner_user_id}`
+              : (member.household_key || member.street_address.toLowerCase());
+          } else if (member.household_owner_user_id) {
+            return `owner:${member.household_owner_user_id}`;
+          } else {
+            return '__no_household_address__';
+          }
+        })
       );
       renderPoolHouseholdSummary();
     });

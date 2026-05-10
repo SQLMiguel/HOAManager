@@ -490,14 +490,12 @@
 /* ── Lists (adults/children/pets/social) ───────────────────── */
 .dir-list { margin-bottom: .9rem; }
 .dir-list-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: .45rem .7rem;
-  background: #f9f9f9;
-  border: 1px solid #eee;
+  display: block;
+  padding: .6rem .75rem .55rem;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
   border-radius: .4rem;
-  margin-bottom: .4rem;
+  margin-bottom: .5rem;
   font-size: .88rem;
   color: #444;
 }
@@ -546,6 +544,17 @@
   font-weight: 600;
   color: #555;
   margin-bottom: .2rem;
+}
+/* Override generic label block-display for toggle labels inside edit fields */
+.dir-edit-field label.dir-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .88rem;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 0;
+  cursor: pointer;
 }
 .dir-edit-field-full {
   flex: 1 1 100%;
@@ -898,6 +907,94 @@
   .dir-photo-upload-area { flex-direction: column; align-items: stretch; }
   .dir-upload-btn { justify-content: center; }
 }
+
+/* ── Member Name Heading in Family List ────────────────────── */
+.dir-member-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.dir-member-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary, #2c5f3a);
+  letter-spacing: .01em;
+}
+.dir-member-details {
+  font-size: .88rem;
+  color: #555;
+  margin-top: .25rem;
+  line-height: 1.5;
+}
+.dir-hidden-hint {
+  color: #aaa;
+  font-style: italic;
+  font-size: .82em;
+}
+
+/* ── Visibility Toggles Row in Edit Form ────────────────────── */
+.dir-edit-visibility-row {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+/* ── Hidden from directory badge ────────────────────────────── */
+.dir-badge-hidden {
+  display: inline-block;
+  font-size: .72rem;
+  padding: .1rem .45rem;
+  border-radius: 1rem;
+  background: #f0f0f0;
+  color: #999;
+  border: 1px solid #ddd;
+  font-style: italic;
+}
+
+/* ── Pool Access Cross-link Callout ─────────────────────────── */
+.dir-pool-crosslink-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  background: #eef6ff;
+  border: 1px solid #b6d4f5;
+  border-radius: .5rem;
+  padding: .75rem 1rem;
+  margin-top: 1rem;
+  font-size: .9rem;
+  color: #334;
+}
+.dir-pool-crosslink-callout strong { color: #1a3a5c; }
+
+/* ── Pool Gate Family Note ──────────────────────────────────── */
+.dir-pool-family-note {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  background: #fffbe6;
+  border: 1px solid #f0d060;
+  border-radius: .4rem;
+  padding: .5rem .85rem;
+  margin-bottom: .75rem;
+  font-size: .875rem;
+  color: #555;
+}
+.dir-pool-family-note svg { flex-shrink: 0; color: #b8860b; }
+
+/* ── Inline Link Button ─────────────────────────────────────── */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary, #2c5f3a);
+  font: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  display: inline;
+}
+.btn-link:hover { color: var(--primary-dark, #1e4227); }
 
 
 /* ── Pool Phone Access ─────────────────────────────────────── */
