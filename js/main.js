@@ -349,6 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
       authSection.style.display = 'none';
       welcomeSection.style.display = '';
       welcomeName.textContent = user.firstName;
+      document.querySelectorAll('.members-only').forEach(el => el.style.display = '');
     }
 
     function showLoggedOutState() {
@@ -357,6 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
       loginCard.style.display = 'none';
       signupCard.style.display = 'none';
       if (socialCompleteCard) socialCompleteCard.style.display = 'none';
+      document.querySelectorAll('.members-only').forEach(el => el.style.display = 'none');
     }
 
     // Show/hide forms
@@ -490,6 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="auth-success">
               <h3 style="margin-bottom:8px; color:#155724;">Account Created!</h3>
               <p>${data.message}</p>
+              <p style="margin-top:12px;"><strong>Note:</strong> Account approval can take up to 3 business days.</p>
             </div>
             <p class="auth-toggle"><a href="#" onclick="location.reload(); return false;">Back to Login</a></p>
           `;

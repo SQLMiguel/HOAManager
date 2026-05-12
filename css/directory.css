@@ -157,6 +157,12 @@
   color: var(--primary);
   margin: 0 0 .35rem;
 }
+.dir-card-primary {
+  font-size: .85rem;
+  color: #666;
+  font-style: italic;
+  margin: -.25rem 0 .4rem;
+}
 .dir-card-row { font-size: .84rem; color: #555; margin: .18rem 0; line-height: 1.4; }
 .dir-card-row a { color: var(--primary); text-decoration: none; }
 .dir-card-row a:hover { text-decoration: underline; }

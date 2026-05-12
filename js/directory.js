@@ -113,6 +113,8 @@
 
   function memberCard(m) {
     const name     = displayName(m);
+    const primary  = fullName(m);
+    const showPrimary = primary && primary !== name;
     const address  = m.user ? m.user.address || '' : '';
     const photoUrl = primaryPhotoUrl(m);
     const prof     = m.profile || {};
@@ -138,6 +140,7 @@
           ${photo}
           <div class="dir-card-info">
             <h3 class="dir-card-name">${e(name)}</h3>
+            ${showPrimary ? `<p class="dir-card-primary">${e(primary)}</p>` : ''}
             ${rows.join('')}
           </div>
         </div>
@@ -186,9 +189,24 @@
       const q = this.value.trim().toLowerCase();
       if (!q) { renderDirectory(allMembers); return; }
       const filtered = allMembers.filter(m => {
-        const name    = displayName(m).toLowerCase();
-        const address = (m.user ? m.user.address || '' : '').toLowerCase();
-        return name.includes(q) || address.includes(q);
+        const name        = displayName(m).toLowerCase();
+        const primaryName = fullName(m).toLowerCase();
+        const address     = (m.user ? m.user.address || '' : '').toLowerCase();
+        if (name.includes(q) || primaryName.includes(q) || address.includes(q)) return true;
+
+        const adultMatch = (m.adults || [])
+          .filter(a => a.is_visible !== 0)
+          .some(a => (a.name || '').toLowerCase().includes(q));
+        if (adultMatch) return true;
+
+        const childMatch = (m.children || [])
+          .filter(c => c.is_visible !== 0)
+          .some(c => (c.first_name || '').toLowerCase().includes(q));
+        if (childMatch) return true;
+
+        const petMatch = (m.pets || [])
+          .some(p => (p.name || '').toLowerCase().includes(q));
+        return petMatch;
       });
       renderDirectory(filtered);
     });
