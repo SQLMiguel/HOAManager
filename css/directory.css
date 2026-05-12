@@ -76,6 +76,64 @@
   margin-top: .7rem;
 }
 
+/* ── Community filter pills (toolbar) ───────────────────────── */
+.dir-community-filter {
+  display: flex;
+  gap: .35rem;
+  flex-shrink: 0;
+}
+.dir-filter-pill {
+  padding: .4rem .95rem;
+  border-radius: 2rem;
+  border: 1.5px solid #ccc;
+  background: #fff;
+  font-size: .85rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  color: #555;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.dir-filter-pill:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.dir-filter-pill.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Community toggle (profile editor) ──────────────────────── */
+.dir-community-toggle {
+  display: flex;
+  gap: .5rem;
+  margin-top: .5rem;
+}
+.dir-community-btn {
+  flex: 1;
+  padding: .6rem 1rem;
+  border-radius: var(--radius-sm, 6px);
+  border: 2px solid #ddd;
+  background: #fff;
+  font-size: .95rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  cursor: pointer;
+  color: #555;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.dir-community-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.dir-community-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 700;
+}
+
 /* ── Stats ─────────────────────────────────────────────────── */
 .dir-stats { font-size: .88rem; color: var(--text-light, #666); margin-bottom: .6rem; }
 

@@ -187,6 +187,9 @@ async function initDb() {
     try { await conn.query(sql); } catch(e) { /* column already exists */ }
   }
 
+  // Migrate dir_profiles: add community column
+  try { await conn.query(`ALTER TABLE dir_profiles ADD COLUMN community VARCHAR(20) DEFAULT NULL`); } catch(e) { /* column already exists */ }
+
   // Ensure all users have an SMS unsubscribe token
   const [usersMissingSmsToken] = await conn.query(`SELECT id FROM users WHERE sms_unsubscribe_token IS NULL OR TRIM(sms_unsubscribe_token) = ''`);
   for (const u of usersMissingSmsToken) {
@@ -1757,22 +1760,25 @@ app.get('/api/directory/me', requireAuth, async (req, res) => {
 app.post('/api/directory/profile', requireAuth, async (req, res) => {
   const uid = req.session.userId;
   const { display_name, phone, show_phone, show_email, anniversary, show_anniversary,
-          interests, show_interests, notes, show_notes, do_not_list, is_published, consent_given } = req.body;
+          interests, show_interests, notes, show_notes, do_not_list, is_published, consent_given,
+          community } = req.body;
   const existing = await dbGet('SELECT id FROM dir_profiles WHERE user_id=?', [uid]);
   if (existing) {
     await dbRun(`UPDATE dir_profiles SET display_name=?,phone=?,show_phone=?,show_email=?,anniversary=?,show_anniversary=?,
-      interests=?,show_interests=?,notes=?,show_notes=?,do_not_list=?,is_published=?,consent_given=?,updated_at=CURRENT_TIMESTAMP
+      interests=?,show_interests=?,notes=?,show_notes=?,do_not_list=?,is_published=?,consent_given=?,community=?,updated_at=CURRENT_TIMESTAMP
       WHERE user_id=?`,
       [display_name||null, phone||null, show_phone?1:0, show_email?1:0,
        anniversary||null, show_anniversary?1:0, interests||null, show_interests?1:0,
-       notes||null, show_notes?1:0, do_not_list?1:0, is_published?1:0, consent_given?1:0, uid]);
+       notes||null, show_notes?1:0, do_not_list?1:0, is_published?1:0, consent_given?1:0,
+       community||null, uid]);
   } else {
     await dbRun(`INSERT INTO dir_profiles (id,user_id,display_name,phone,show_phone,show_email,anniversary,show_anniversary,
-      interests,show_interests,notes,show_notes,do_not_list,is_published,consent_given)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      interests,show_interests,notes,show_notes,do_not_list,is_published,consent_given,community)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [uuidv4(), uid, display_name||null, phone||null, show_phone?1:0, show_email?1:0,
        anniversary||null, show_anniversary?1:0, interests||null, show_interests?1:0,
-       notes||null, show_notes?1:0, do_not_list?1:0, is_published?1:0, consent_given?1:0]);
+       notes||null, show_notes?1:0, do_not_list?1:0, is_published?1:0, consent_given?1:0,
+       community||null]);
   }
   // Sync profile phone to users.phone so it becomes the default SMS contact number
   if (phone !== undefined) {

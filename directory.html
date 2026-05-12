@@ -72,6 +72,11 @@
             </svg>
             <input type="text" id="dirSearch" placeholder="Search by name, family member, address, or street…" autocomplete="off">
           </div>
+          <div class="dir-community-filter" id="dirCommunityFilter">
+            <button type="button" class="dir-filter-pill active" data-community="">All</button>
+            <button type="button" class="dir-filter-pill" data-community="Gables">Gables</button>
+            <button type="button" class="dir-filter-pill" data-community="Glenridge">Glenridge</button>
+          </div>
           <div class="dir-actions">
             <button class="btn btn-outline" id="printDirBtn" type="button">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -187,6 +192,16 @@
               <h4>Display Name <span class="dir-badge-required">Required</span></h4>
               <p class="dir-field-hint">How your household appears in the directory (e.g. "The Johnson Family").</p>
               <input type="text" id="profDisplayName" placeholder="e.g. The Johnson Family" maxlength="80" class="dir-input" required>
+            </div>
+
+            <div class="dir-field-group">
+              <h4>Community <span class="dir-badge-required">Required</span></h4>
+              <p class="dir-field-hint">Which community do you live in?</p>
+              <div class="dir-community-toggle" id="profCommunityToggle">
+                <button type="button" class="dir-community-btn" data-value="Gables" id="commBtnGables">Gables</button>
+                <button type="button" class="dir-community-btn" data-value="Glenridge" id="commBtnGlenridge">Glenridge</button>
+              </div>
+              <input type="hidden" id="profCommunity" value="">
             </div>
 
             <div class="dir-field-group">

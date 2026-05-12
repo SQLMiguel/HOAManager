@@ -17,15 +17,18 @@
   'use strict';
 
   // ── State ────────────────────────────────────────────────────
-  let myProfile  = null;   // raw buildProfile() object for current user
-  let allMembers = [];
-  let smsPrefs   = null;
+  let myProfile      = null;   // raw buildProfile() object for current user
+  let allMembers     = [];
+  let smsPrefs       = null;
+  let activeCommunity = '';    // '' = All, 'Gables', or 'Glenridge'
 
   // ── Init ─────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', async () => {
     await checkAuth();
     initProfileWizard();
     initSearch();
+    initCommunityFilter();
+    initCommunityToggle();
     initPrintBtn();
     initProfileToggle();
     initFamilyTab();
@@ -88,7 +91,7 @@
       const filtered = (Array.isArray(data) ? data : [])
         .filter(m => !(m && m.profile && m.profile.do_not_list));
       allMembers = filtered;
-      renderDirectory(allMembers);
+      applyFilters();
     } catch (err) {
       console.error('loadDirectory error:', err);
       if (grid) grid.innerHTML = '<p class="dir-error">Unable to load directory. Please try again.</p>';
@@ -183,36 +186,63 @@
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg>';
   }
 
-  // ── Search ───────────────────────────────────────────────────
+  // ── Search & Community Filter ─────────────────────────────────
+  function applyFilters() {
+    const q = (document.getElementById('dirSearch').value || '').trim().toLowerCase();
+    const filtered = allMembers.filter(m => {
+      // Community filter
+      if (activeCommunity) {
+        const memberCommunity = (m.profile && m.profile.community) || '';
+        if (memberCommunity !== activeCommunity) return false;
+      }
+      // Text search
+      if (!q) return true;
+      const name        = displayName(m).toLowerCase();
+      const primaryName = fullName(m).toLowerCase();
+      const address     = (m.user ? m.user.address || '' : '').toLowerCase();
+      if (name.includes(q) || primaryName.includes(q) || address.includes(q)) return true;
+
+      const adultMatch = (m.adults || [])
+        .filter(a => a.is_visible !== 0)
+        .some(a => (a.name || '').toLowerCase().includes(q));
+      if (adultMatch) return true;
+
+      const childMatch = (m.children || [])
+        .filter(c => c.is_visible !== 0)
+        .some(c => (c.first_name || '').toLowerCase().includes(q));
+      if (childMatch) return true;
+
+      return (m.pets || []).some(p => (p.name || '').toLowerCase().includes(q));
+    });
+    renderDirectory(filtered);
+  }
+
   function initSearch() {
-    document.getElementById('dirSearch').addEventListener('input', function () {
-      const q = this.value.trim().toLowerCase();
-      if (!q) { renderDirectory(allMembers); return; }
-      const filtered = allMembers.filter(m => {
-        const name        = displayName(m).toLowerCase();
-        const primaryName = fullName(m).toLowerCase();
-        const address     = (m.user ? m.user.address || '' : '').toLowerCase();
-        if (name.includes(q) || primaryName.includes(q) || address.includes(q)) return true;
+    document.getElementById('dirSearch').addEventListener('input', applyFilters);
+  }
 
-        const adultMatch = (m.adults || [])
-          .filter(a => a.is_visible !== 0)
-          .some(a => (a.name || '').toLowerCase().includes(q));
-        if (adultMatch) return true;
-
-        const childMatch = (m.children || [])
-          .filter(c => c.is_visible !== 0)
-          .some(c => (c.first_name || '').toLowerCase().includes(q));
-        if (childMatch) return true;
-
-        const petMatch = (m.pets || [])
-          .some(p => (p.name || '').toLowerCase().includes(q));
-        return petMatch;
+  function initCommunityFilter() {
+    document.querySelectorAll('.dir-filter-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.dir-filter-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeCommunity = btn.dataset.community;
+        applyFilters();
       });
-      renderDirectory(filtered);
     });
   }
 
   // ── Print ────────────────────────────────────────────────────
+  function initCommunityToggle() {
+    document.querySelectorAll('#profCommunityToggle .dir-community-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#profCommunityToggle .dir-community-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('profCommunity').value = btn.dataset.value;
+      });
+    });
+  }
+
   function initPrintBtn() {
     document.getElementById('printDirBtn').addEventListener('click', doPrint);
   }
@@ -398,6 +428,13 @@
     setChk('profDoNotList',      prof.do_not_list);
     setChk('consentCheck',       prof.consent_given);
 
+    // Populate community toggle
+    const community = prof.community || '';
+    document.getElementById('profCommunity').value = community;
+    document.querySelectorAll('#profCommunityToggle .dir-community-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.value === community);
+    });
+
     const pubBtn   = document.getElementById('publishBtn');
     const unpubBtn = document.getElementById('unpublishBtn');
     const status   = document.getElementById('publishStatus');
@@ -528,6 +565,7 @@
 
     const payload = {
       display_name:      displayNameVal,
+      community:         document.getElementById('profCommunity').value || null,
       phone:             phoneVal,
       show_phone:        chk('profShowPhone')       ? 1 : 0,
       anniversary:       val('profAnniversary'),
