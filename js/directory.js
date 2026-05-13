@@ -418,11 +418,9 @@
 
     setVal('profDisplayName',    prof.display_name);
     setVal('profPhone',          prof.phone);
-    setVal('profAnniversary',    prof.anniversary);
     setVal('profInterests',      prof.interests);
     setVal('profNotes',          prof.notes);
     setChk('profShowPhone',      prof.show_phone);
-    setChk('profShowAnniversary',prof.show_anniversary);
     setChk('profShowInterests',  prof.show_interests);
     setChk('profShowNotes',      prof.show_notes);
     setChk('profDoNotList',      prof.do_not_list);
@@ -568,8 +566,6 @@
       community:         document.getElementById('profCommunity').value || null,
       phone:             phoneVal,
       show_phone:        chk('profShowPhone')       ? 1 : 0,
-      anniversary:       val('profAnniversary'),
-      show_anniversary:  chk('profShowAnniversary') ? 1 : 0,
       interests:         val('profInterests'),
       show_interests:    chk('profShowInterests')   ? 1 : 0,
       notes:             val('profNotes'),
