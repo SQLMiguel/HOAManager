@@ -160,8 +160,8 @@
     const parts = [];
     (m.adults   || []).filter(a => a.is_visible !== 0).forEach(a => {
       const contact = [
-        a.show_phone !== 0 && a.email ? `<span class="dir-badge-email">${e(a.email)}</span>` : '',
-        a.show_email !== 0 && a.phone ? `<span class="dir-badge-email">${e(a.phone)}</span>` : ''
+        a.show_phone !== 0 && a.phone ? `<span class="dir-badge-email">${e(a.phone)}</span>` : '',
+        a.show_email !== 0 && a.email ? `<span class="dir-badge-email">${e(a.email)}</span>` : ''
       ].filter(Boolean).join('');
       parts.push(`<span class="dir-badge">${e(a.name)}${contact}</span>`);
     });
@@ -187,13 +187,26 @@
   }
 
   // ── Search & Community Filter ─────────────────────────────────
+
+  // Community was added to dir_profiles after most members were created, so
+  // many existing rows have community = NULL. Fall back to a keyword scan of
+  // the household address so the Gables/Glenridge pills aren't empty.
+  function memberCommunity(m) {
+    const saved = (m.profile && m.profile.community) || '';
+    if (saved) return saved;
+    const addr = ((m.user && m.user.address) || '').toLowerCase();
+    if (!addr) return '';
+    if (addr.includes('gables'))    return 'Gables';
+    if (addr.includes('glenridge')) return 'Glenridge';
+    return '';
+  }
+
   function applyFilters() {
     const q = (document.getElementById('dirSearch').value || '').trim().toLowerCase();
     const filtered = allMembers.filter(m => {
-      // Community filter
+      // Community filter (with address-based fallback for legacy rows)
       if (activeCommunity) {
-        const memberCommunity = (m.profile && m.profile.community) || '';
-        if (memberCommunity !== activeCommunity) return false;
+        if (memberCommunity(m) !== activeCommunity) return false;
       }
       // Text search
       if (!q) return true;
@@ -289,7 +302,10 @@
         if (user.email)                         rows.push(`<span class="dpl">Email</span> ${e(user.email)}`);
         if (prof.show_phone && prof.phone)      rows.push(`<span class="dpl">Phone</span> ${e(prof.phone)}`);
         adults.forEach(a => {
-          const details = [a.phone ? e(a.phone) : '', a.email ? e(a.email) : ''].filter(Boolean).join(' · ');
+          const details = [
+            a.show_phone !== 0 && a.phone ? e(a.phone) : '',
+            a.show_email !== 0 && a.email ? e(a.email) : ''
+          ].filter(Boolean).join(' · ');
           rows.push(`<span class="dpl">Adult</span> ${e(a.name)}${details ? ' — ' + details : ''}`);
         });
         if (childNames.length)                  rows.push(`<span class="dpl">Children</span> ${childNames.join(', ')}`);
@@ -561,7 +577,14 @@
     statusEl.textContent = 'Saving…';
     statusEl.className   = 'auto-save-status auto-save-pending';
 
+    // IMPORTANT: the server's POST /api/directory/profile rewrites every
+    // column on every save. Fields we omit get coerced to 0/NULL, which would
+    // silently wipe publish status, consent, do_not_list, anniversary, etc.
+    // Merge the current Step-1 inputs with whatever else is already on the
+    // saved profile so we never lose data the user can't see on this tab.
+    const prevProfile = (myProfile && myProfile.profile) || {};
     const payload = {
+      // Step-1 fields (the only ones this tab edits)
       display_name:      displayNameVal,
       community:         document.getElementById('profCommunity').value || null,
       phone:             phoneVal,
@@ -570,6 +593,13 @@
       show_interests:    chk('profShowInterests')   ? 1 : 0,
       notes:             val('profNotes'),
       show_notes:        chk('profShowNotes')       ? 1 : 0,
+      // Preserve fields owned by other tabs / actions so they aren't reset to 0
+      show_email:        prevProfile.show_email        ?? 1,
+      anniversary:       prevProfile.anniversary       ?? null,
+      show_anniversary:  prevProfile.show_anniversary  ?? 0,
+      do_not_list:       prevProfile.do_not_list       ?? 0,
+      is_published:      prevProfile.is_published      ?? 0,
+      consent_given:     prevProfile.consent_given     ?? 0,
     };
 
     const [ok, msg] = await apiPost('/api/directory/profile', payload);

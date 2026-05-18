@@ -5,6 +5,17 @@
 
 require('dotenv').config();
 const express = require('express');
+
+// Keep the server alive when a stray async error escapes (e.g. an
+// ECONNRESET from the remote MySQL pool when a request is mid-flight).
+// We log loudly so problems are still visible.
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠ Unhandled promise rejection:', reason && reason.stack || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠ Uncaught exception:', err && err.stack || err);
+});
+
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
@@ -122,6 +133,10 @@ const dbPool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   charset: 'utf8mb4',
+  // Hostinger's remote MySQL silently drops idle connections after a few
+  // minutes. TCP keepalive + auto-retry on ECONNRESET keeps the pool healthy.
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
 });
 
 async function initDb() {
@@ -613,8 +628,31 @@ async function initDb() {
 }
 
 // ── MySQL query helpers ─────────────────────────────────
+// Retry once on transient connection errors. Hostinger's managed MySQL will
+// occasionally hand us a stale socket from the pool that errors out with
+// ECONNRESET / PROTOCOL_CONNECTION_LOST on the first query; the next attempt
+// transparently grabs a fresh connection.
+const TRANSIENT_DB_ERRORS = new Set([
+  'ECONNRESET',
+  'PROTOCOL_CONNECTION_LOST',
+  'EPIPE',
+  'ETIMEDOUT',
+]);
+
+async function dbQueryWithRetry(sql, params) {
+  try {
+    return await dbPool.query(sql, params);
+  } catch (err) {
+    if (TRANSIENT_DB_ERRORS.has(err.code)) {
+      console.warn(`⚠ DB transient error (${err.code}); retrying once.`);
+      return await dbPool.query(sql, params);
+    }
+    throw err;
+  }
+}
+
 async function dbAll(sql, params = []) {
-  const [rows] = await dbPool.query(sql, params);
+  const [rows] = await dbQueryWithRetry(sql, params);
   return rows;
 }
 
@@ -624,7 +662,7 @@ async function dbGet(sql, params = []) {
 }
 
 async function dbRun(sql, params = []) {
-  await dbPool.query(sql, params);
+  await dbQueryWithRetry(sql, params);
 }
 
 async function poolMembersHasRfidTagColumn() {
@@ -1900,22 +1938,61 @@ app.delete('/api/directory/social/:id', requireAuth, async (req, res) => {
 });
 
 // POST /api/directory/photos
-app.post('/api/directory/photos', requireAuth, async (req, res) => {
+app.post('/api/directory/photos', requireAuth, (req, res) => {
   dirUpload.single('photo')(req, res, async (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
-    const photoCount = (await dbAll('SELECT id FROM dir_photos WHERE user_id=?', [req.session.userId])).length;
-    if (photoCount >= 20) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: 'Maximum of 20 photos allowed.' });
+    // IMPORTANT: this multer callback is `async`. Any thrown error inside
+    // becomes an unhandled rejection and the request hangs silently. Wrap
+    // everything in try/catch so the client always gets a real response and
+    // we always log the underlying cause.
+    try {
+      if (err) {
+        console.error('Photo upload multer error:', err.message);
+        return res.status(400).json({ error: err.message });
+      }
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+      }
+      const userId = req.session && req.session.userId;
+      if (!userId) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(401).json({ error: 'Not authenticated.' });
+      }
+
+      const existing = await dbAll('SELECT id FROM dir_photos WHERE user_id=?', [userId]);
+      const photoCount = existing.length;
+      if (photoCount >= 20) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(400).json({ error: 'Maximum of 20 photos allowed.' });
+      }
+
+      const { category, caption } = req.body;
+      const id = uuidv4();
+      const webPath = `/images/directory/${userId}/${req.file.filename}`;
+      await dbRun(
+        'INSERT INTO dir_photos (id,user_id,filename,category,caption,display_order) VALUES (?,?,?,?,?,?)',
+        [id, userId, webPath, category || 'Household', caption || null, photoCount]
+      );
+
+      // Verify the row really landed before reporting success.
+      const saved = await dbGet('SELECT * FROM dir_photos WHERE id=?', [id]);
+      if (!saved) {
+        console.error('Photo upload: row missing after INSERT', { id, userId });
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(500).json({ error: 'Photo could not be saved to the database.' });
+      }
+
+      dirAudit(userId, 'photo_uploaded', req.file.filename);
+      console.log('✓ Photo uploaded:', { id, userId, filename: req.file.filename });
+      res.json({ success: true, photo: saved });
+    } catch (e) {
+      console.error('Photo upload failed:', e && (e.code || e.name), e && e.message);
+      if (e && e.stack) console.error(e.stack);
+      // Remove the orphan file so we don't leak disk space when the DB write fails.
+      if (req.file && req.file.path) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+      }
+      res.status(500).json({ error: 'Photo upload failed. ' + (e && e.message ? e.message : '') });
     }
-    const { category, caption } = req.body;
-    const id = uuidv4();
-    const webPath = `/images/directory/${req.session.userId}/${req.file.filename}`;
-    await dbRun('INSERT INTO dir_photos (id,user_id,filename,category,caption,display_order) VALUES (?,?,?,?,?,?)',
-      [id, req.session.userId, webPath, category||'Household', caption||null, photoCount]);
-    dirAudit(req.session.userId, 'photo_uploaded', req.file.filename);
-    res.json({ success: true, photo: await dbGet('SELECT * FROM dir_photos WHERE id=?', [id]) });
   });
 });
 app.put('/api/directory/photos/:id', requireAuth, async (req, res) => {

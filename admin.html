@@ -213,15 +213,32 @@
     .pool-wallet-error { color: #c0392b; }
     .pool-wallet-heading { font-size: 0.9rem; margin: 16px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #e8edf2; }
     .pool-wallet-heading-sent { color: var(--text-light); }
-    .pool-wallet-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e8edf2; border-radius: 8px; background: #fff; margin-bottom: 8px; flex-wrap: wrap; }
-    .pool-wallet-pending { border-left: 4px solid #f0ad4e; }
-    .pool-wallet-sent { border-left: 4px solid #2d6a4f; opacity: 0.75; }
+    .pool-wallet-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e8edf2; border-radius: 8px; background: #fff; margin-bottom: 8px; flex-wrap: wrap; transition: background 0.2s, border-color 0.2s, opacity 0.2s; }
+    .pool-wallet-pending { border-left: 4px solid #f0ad4e; background: #fffaf0; }
+    .pool-wallet-sent { border-left: 4px solid #2d6a4f; background: #eaf6ee; opacity: 0.85; }
+    .pool-wallet-sent .pool-wallet-row-info strong { color: #2d6a4f; }
     .pool-wallet-row-info { flex: 1; min-width: 200px; }
     .pool-wallet-row-info strong { font-size: 0.9rem; }
     .pool-wallet-detail { color: var(--text-light); font-size: 0.82rem; margin-top: 2px; }
     .pool-wallet-date { color: var(--text-light); font-size: 0.78rem; }
     .pool-wallet-row-actions { display: flex; gap: 8px; align-items: center; }
-    .pool-wallet-sent-badge { color: #2d6a4f; font-weight: 600; font-size: 0.82rem; }
+    .pool-wallet-sent-badge { color: #fff; background: #2d6a4f; padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 0.82rem; }
+    /* Override global .btn-outline (white-on-transparent) so the Email
+       Instructions link is visible on the admin's white background. */
+    .pool-wallet-email-btn.btn-outline {
+      background: #fff;
+      color: #2d6a4f;
+      border: 2px solid #2d6a4f;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .pool-wallet-email-btn.btn-outline:hover {
+      background: #2d6a4f;
+      color: #fff;
+    }
+    .pool-wallet-mark-sent-btn { padding: 6px 14px; font-size: 0.82rem; }
 
     @media (max-width: 768px) {
       .pool-table { font-size: 0.82rem; }
