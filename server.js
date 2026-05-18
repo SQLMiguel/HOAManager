@@ -1960,9 +1960,9 @@ app.post('/api/directory/photos', requireAuth, (req, res) => {
 
       const existing = await dbAll('SELECT id FROM dir_photos WHERE user_id=?', [userId]);
       const photoCount = existing.length;
-      if (photoCount >= 20) {
+      if (photoCount >= 1) {
         try { fs.unlinkSync(req.file.path); } catch (_) {}
-        return res.status(400).json({ error: 'Maximum of 20 photos allowed.' });
+        return res.status(400).json({ error: 'Only one household photo is allowed. Please delete the existing photo before uploading a new one.' });
       }
 
       const { category, caption } = req.body;

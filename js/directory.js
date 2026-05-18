@@ -986,6 +986,11 @@
     document.querySelectorAll('.dir-del-photo-btn').forEach(btn => {
       btn.addEventListener('click', () => deletePhoto(btn.dataset.id));
     });
+
+    // Only one household photo is allowed. Hide the upload form once a photo
+    // exists so the user deletes it before uploading a replacement.
+    const uploadArea = document.querySelector('.dir-photo-upload-area');
+    if (uploadArea) uploadArea.style.display = list.length >= 1 ? 'none' : '';
   }
 
   async function uploadPhoto() {
