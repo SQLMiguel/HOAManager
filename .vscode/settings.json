@@ -1,3 +1,4 @@
 {
-    "chat.agent.maxRequests": 5000
+    "chat.agent.maxRequests": 5000,
+    "chat.permissions.default": "autopilot"
 }

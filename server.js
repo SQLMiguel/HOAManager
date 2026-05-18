@@ -884,10 +884,16 @@ const twilioFromNumber = process.env.TWILIO_PHONE_NUMBER || '';
 
 // Verify email config on startup (non-blocking)
 transporter.verify().then(() => {
-  console.log('✓ Email server connection verified');
+  console.log(`✓ Email server connection verified (${process.env.SMTP_HOST}:${process.env.SMTP_PORT} as ${process.env.SMTP_USER})`);
 }).catch(err => {
-  console.warn('⚠ Email server not configured or unreachable. Emails will be logged to console.');
-  console.warn('  Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in .env');
+  console.warn('⚠ Email server not configured or unreachable. Emails will fail until fixed.');
+  console.warn(`  Host: ${process.env.SMTP_HOST}:${process.env.SMTP_PORT} secure=${process.env.SMTP_SECURE}`);
+  console.warn(`  User: ${process.env.SMTP_USER || '(unset)'}`);
+  console.warn(`  Error code:    ${err.code || '(none)'}`);
+  console.warn(`  Response code: ${err.responseCode || '(none)'}`);
+  if (err.response) console.warn(`  Response:      ${err.response}`);
+  console.warn(`  Message:       ${err.message}`);
+  console.warn('  Check SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS in .env');
 });
 
 async function sendEmail(to, subject, html, opts = {}) {
@@ -904,16 +910,28 @@ async function sendEmail(to, subject, html, opts = {}) {
   }
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`✓ Email sent to ${to}: ${subject}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✓ Email sent to ${to}: ${subject} (messageId=${info.messageId})`);
+    if (info.rejected && info.rejected.length) {
+      console.warn(`  ⚠ Rejected recipients: ${info.rejected.join(', ')}`);
+    }
+    if (info.response) console.log(`  SMTP response: ${info.response}`);
   } catch (err) {
-    // If email fails, log the details so the admin can see what would have been sent
-    console.log('─── Email (not sent — SMTP not configured) ───');
-    console.log(`  To: ${to}`);
-    console.log(`  Subject: ${subject}`);
-    console.log(`  Body: ${html.replace(/<[^>]*>/g, '').substring(0, 200)}...`);
-    if (mailOptions.attachments) console.log(`  Attachments: ${mailOptions.attachments.length}`);
-    console.log('───────────────────────────────────────────────');
+    // Surface the real nodemailer/SMTP failure so we can diagnose it
+    console.error('─── Email FAILED to send ───');
+    console.error(`  To: ${to}`);
+    console.error(`  Subject: ${subject}`);
+    console.error(`  From: ${mailOptions.from}`);
+    console.error(`  SMTP host: ${process.env.SMTP_HOST}:${process.env.SMTP_PORT} secure=${process.env.SMTP_SECURE}`);
+    console.error(`  SMTP user: ${process.env.SMTP_USER || '(unset)'}`);
+    console.error(`  Error name:    ${err.name}`);
+    console.error(`  Error code:    ${err.code || '(none)'}`);
+    console.error(`  Error command: ${err.command || '(none)'}`);
+    if (err.responseCode) console.error(`  Response code: ${err.responseCode}`);
+    if (err.response)     console.error(`  Response:      ${err.response}`);
+    console.error(`  Message:       ${err.message}`);
+    if (err.stack) console.error(err.stack);
+    console.error('────────────────────────────');
   }
 }
 
