@@ -780,6 +780,13 @@
   transition: background .12s;
 }
 .dir-del-photo-btn:hover { background: #c0392b; }
+.dir-edit-photo-btn {
+  background: rgba(0,0,0,.55); border: none; cursor: pointer;
+  color: #fff; border-radius: .35rem; padding: .25rem;
+  display: flex; align-items: center;
+  transition: background .12s;
+}
+.dir-edit-photo-btn:hover { background: #2980b9; }
 
 /* Upload area */
 .dir-photo-upload-area {

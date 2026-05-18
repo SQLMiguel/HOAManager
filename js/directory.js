@@ -959,6 +959,11 @@
     document.getElementById('uploadPhotoBtn').addEventListener('click', uploadPhoto);
   }
 
+  // When the user clicks Edit on the existing household photo, we reveal the
+  // upload form and remember that the next upload should replace the current
+  // photo (server enforces a 1-photo cap, so we delete before uploading).
+  let replacePhotoId = null;
+
   function renderPhotos(list) {
     document.getElementById('photoGrid').innerHTML = list.map(ph =>
       `<div class="dir-photo-thumb" data-id="${ph.id}">
@@ -969,6 +974,11 @@
             <input type="checkbox" class="photo-vis-toggle" data-id="${ph.id}" ${ph.is_visible ? 'checked' : ''}>
             <span class="dir-toggle-slider"></span>
           </label>
+          <button class="dir-edit-photo-btn" data-id="${ph.id}" title="Replace photo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+          </button>
           <button class="dir-del-photo-btn" data-id="${ph.id}" title="Delete photo">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
@@ -986,11 +996,28 @@
     document.querySelectorAll('.dir-del-photo-btn').forEach(btn => {
       btn.addEventListener('click', () => deletePhoto(btn.dataset.id));
     });
+    // Edit (replace) buttons
+    document.querySelectorAll('.dir-edit-photo-btn').forEach(btn => {
+      btn.addEventListener('click', () => beginReplacePhoto(btn.dataset.id));
+    });
 
     // Only one household photo is allowed. Hide the upload form once a photo
-    // exists so the user deletes it before uploading a replacement.
+    // exists so the user deletes (or chooses to replace) it before uploading.
     const uploadArea = document.querySelector('.dir-photo-upload-area');
-    if (uploadArea) uploadArea.style.display = list.length >= 1 ? 'none' : '';
+    if (uploadArea && !replacePhotoId) {
+      uploadArea.style.display = list.length >= 1 ? 'none' : '';
+    }
+    if (list.length === 0) replacePhotoId = null;
+  }
+
+  function beginReplacePhoto(id) {
+    replacePhotoId = id;
+    const uploadArea = document.querySelector('.dir-photo-upload-area');
+    if (uploadArea) {
+      uploadArea.style.display = '';
+      uploadArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    showMsg('photoUploadMsg', 'Select a new photo to replace the current one.');
   }
 
   async function uploadPhoto() {
@@ -1006,6 +1033,16 @@
 
     showMsg('photoUploadMsg', 'Uploading…');
     try {
+      // If we're in replace mode, delete the existing photo first so the
+      // server-side 1-photo cap doesn't reject the new upload.
+      if (replacePhotoId) {
+        const delRes = await fetch(`/api/directory/photos/${replacePhotoId}`, { method: 'DELETE' });
+        if (!delRes.ok) {
+          showMsg('photoUploadMsg', 'Could not remove the existing photo.', true);
+          return;
+        }
+        replacePhotoId = null;
+      }
       const res  = await fetch('/api/directory/photos', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.success) {
