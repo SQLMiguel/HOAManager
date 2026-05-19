@@ -1425,6 +1425,38 @@ app.post('/api/signup', async (req, res) => {
     `, [userId, firstName.trim(), lastName.trim(), email.toLowerCase().trim(), address.trim(), phone?.trim() || null, passwordHash, householdOwnerId]);
     await dbRun(`UPDATE users SET sms_opt_out = 0, sms_unsubscribe_token = COALESCE(sms_unsubscribe_token, ?) WHERE id = ?`, [uuidv4(), userId]);
 
+    // If this is a secondary household login, merge them into the household's
+    // dir_adults so they appear as an adult on the primary directory record
+    // rather than as a separate HOA member. If an adult row already exists
+    // with the same email under this household, leave it alone (no duplicate).
+    if (householdOwnerId) {
+      const emailNorm = email.toLowerCase().trim();
+      const existing = await dbGet(
+        `SELECT id FROM dir_adults WHERE user_id = ? AND LOWER(email) = ?`,
+        [householdOwnerId, emailNorm]
+      );
+      if (!existing) {
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        // Avoid adding a duplicate-by-name row (e.g. if the primary already
+        // listed this person as an adult without an email).
+        const byName = await dbGet(
+          `SELECT id, email FROM dir_adults WHERE user_id = ? AND LOWER(name) = LOWER(?)`,
+          [householdOwnerId, fullName]
+        );
+        if (byName) {
+          if (!byName.email) {
+            await dbRun(`UPDATE dir_adults SET email = ? WHERE id = ?`, [emailNorm, byName.id]);
+          }
+        } else {
+          await dbRun(
+            `INSERT INTO dir_adults (id, user_id, name, birthday, show_birthday, phone, email, is_visible, sms_opt_in)
+             VALUES (?, ?, ?, NULL, 0, ?, ?, 1, 1)`,
+            [uuidv4(), householdOwnerId, fullName, phone?.trim() || null, emailNorm]
+          );
+        }
+      }
+    }
+
     // Send notification email to admin
     const adminUrl = `${SITE_URL}/admin.html`;
     const wantsPool = !!requestPoolAccess;
