@@ -188,6 +188,7 @@ async function initDb() {
     `ALTER TABLE users ADD COLUMN sms_unsubscribe_token VARCHAR(36) UNIQUE`,
     `ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN is_pool_manager TINYINT(1) NOT NULL DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN household_owner_id VARCHAR(36) DEFAULT NULL`,
   ];
   for (const sql of alterUsers) {
     try { await conn.query(sql); } catch(e) { /* column already exists */ }
@@ -1108,11 +1109,99 @@ app.use(express.static(path.join(__dirname), {
 }));
 
 // ── Auth Middleware ──────────────────────────────────────
+// Normalize a Glenridge street address for comparison purposes. We tolerate
+// case differences, whitespace, punctuation, common street-suffix
+// abbreviations (Rd/Road, St/Street, etc.), and unit/apartment markers so
+// "3390 Sally Kirk Rd." matches "3390 Sally Kirk Road". Returns '' for empty
+// input.
+const STREET_SUFFIX_MAP = {
+  rd: 'road', road: 'road',
+  st: 'street', str: 'street', street: 'street',
+  ave: 'avenue', av: 'avenue', avenue: 'avenue',
+  blvd: 'boulevard', boulevard: 'boulevard',
+  dr: 'drive', drv: 'drive', drive: 'drive',
+  ln: 'lane', lane: 'lane',
+  ct: 'court', court: 'court',
+  cir: 'circle', circle: 'circle',
+  pl: 'place', place: 'place',
+  ter: 'terrace', terr: 'terrace', terrace: 'terrace',
+  trl: 'trail', tr: 'trail', trail: 'trail',
+  way: 'way',
+  pkwy: 'parkway', parkway: 'parkway',
+  hwy: 'highway', highway: 'highway',
+  pt: 'point', point: 'point',
+  xing: 'crossing', crossing: 'crossing',
+  run: 'run',
+  row: 'row',
+  loop: 'loop',
+  n: 'north', north: 'north',
+  s: 'south', south: 'south',
+  e: 'east', east: 'east',
+  w: 'west', west: 'west',
+  ne: 'northeast', northeast: 'northeast',
+  nw: 'northwest', northwest: 'northwest',
+  se: 'southeast', southeast: 'southeast',
+  sw: 'southwest', southwest: 'southwest'
+};
+
+function normalizeAddressForMatch(addr) {
+  if (!addr) return '';
+  let s = String(addr)
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return '';
+  // Drop unit/apt/suite designators and everything after them, so
+  // "123 Main St Apt 4" matches "123 Main Street".
+  s = s.replace(/\b(apt|apartment|unit|ste|suite|#)\b.*$/i, '').trim();
+  // Tokenize, expand known street-suffix abbreviations, then drop the
+  // trailing suffix token entirely so "Sally Kirk Rd", "Sally Kirk Road",
+  // and "Sally Kirk" all collapse to "sally kirk".
+  let tokens = s.split(' ').filter(Boolean).map(t => STREET_SUFFIX_MAP[t] || t);
+  const SUFFIX_WORDS = new Set(Object.values(STREET_SUFFIX_MAP));
+  while (tokens.length > 1 && SUFFIX_WORDS.has(tokens[tokens.length - 1])) {
+    tokens.pop();
+  }
+  return tokens.join(' ');
+}
+
+// Find the approved primary household-owner user at the given address, if any.
+// "Primary" means household_owner_id IS NULL — i.e. the original signup for
+// that address. Returns the user row or null.
+async function findApprovedHouseholdOwnerByAddress(address) {
+  const target = normalizeAddressForMatch(address);
+  if (!target) return null;
+  const rows = await dbAll(
+    `SELECT id, first_name, last_name, address
+       FROM users
+      WHERE status = 'approved'
+        AND (household_owner_id IS NULL OR household_owner_id = '')`);
+  return rows.find(r => normalizeAddressForMatch(r.address) === target) || null;
+}
+
 function requireAuth(req, res, next) {
-  if (req.session && req.session.userId) {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  // Resolve and cache the household-owner id on the session. Older sessions
+  // created before this column existed are backfilled on first request.
+  if (req.session.householdOwnerId) {
     return next();
   }
-  return res.status(401).json({ error: 'Not authenticated' });
+  dbGet('SELECT id, household_owner_id FROM users WHERE id = ?', [req.session.userId])
+    .then(u => {
+      if (!u) return res.status(401).json({ error: 'Not authenticated' });
+      req.session.householdOwnerId = u.household_owner_id || u.id;
+      next();
+    })
+    .catch(err => {
+      console.error('requireAuth household lookup error:', err.message);
+      // Fail open to the user's own id rather than 500 — directory data will
+      // still be scoped to their record.
+      req.session.householdOwnerId = req.session.userId;
+      next();
+    });
 }
 
 function requireAdmin(req, res, next) {
@@ -1148,9 +1237,10 @@ function handleOAuthCallback(provider) {
       if (user.status === 'pending') return res.redirect('/members.html?oauth=pending');
       if (user.status === 'denied')  return res.redirect('/members.html?oauth=denied');
       // Approved — create session
-      req.session.userId    = user.id;
-      req.session.userName  = `${user.first_name} ${user.last_name}`;
-      req.session.userEmail = user.email;
+      req.session.userId            = user.id;
+      req.session.userName          = `${user.first_name} ${user.last_name}`;
+      req.session.userEmail         = user.email;
+      req.session.householdOwnerId  = user.household_owner_id || user.id;
       return res.redirect('/members.html?oauth=success');
     })(req, res, next);
   };
@@ -1259,10 +1349,35 @@ app.post('/api/auth/social-complete', async (req, res) => {
   }
 });
 
+// ---------- Check whether an existing household is registered at an address ----------
+// Used by the signup wizard to ask a secondary household member whether they
+// want to join the existing household record instead of starting a new one.
+app.post('/api/signup/check-address', async (req, res) => {
+  try {
+    const { address } = req.body || {};
+    if (!address || !address.trim()) {
+      return res.json({ exists: false });
+    }
+    const owner = await findApprovedHouseholdOwnerByAddress(address);
+    if (!owner) return res.json({ exists: false });
+    res.json({
+      exists: true,
+      household: {
+        // Don't leak the owner's full identity — just enough to confirm.
+        ownerName: `${owner.first_name} ${owner.last_name.charAt(0)}.`,
+        address: owner.address
+      }
+    });
+  } catch (err) {
+    console.error('check-address error:', err.message);
+    res.json({ exists: false });
+  }
+});
+
 // ---------- Signup ----------
 app.post('/api/signup', async (req, res) => {
   try {
-    const { firstName, lastName, email, address, phone, password, confirmPassword, requestPoolAccess } = req.body;
+    const { firstName, lastName, email, address, phone, password, confirmPassword, requestPoolAccess, joinHousehold } = req.body;
 
     // Validation
     if (!firstName || !lastName || !email || !address || !password) {
@@ -1295,10 +1410,19 @@ app.post('/api/signup', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const userId = uuidv4();
 
+    // If the signup form indicated this person wants to join an existing
+    // household at the same address, find the approved primary owner and link
+    // the new user to them. The new account still requires admin approval.
+    let householdOwnerId = null;
+    if (joinHousehold) {
+      const owner = await findApprovedHouseholdOwnerByAddress(address);
+      if (owner) householdOwnerId = owner.id;
+    }
+
     await dbRun(`
-      INSERT INTO users (id, first_name, last_name, email, address, phone, password_hash, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, [userId, firstName.trim(), lastName.trim(), email.toLowerCase().trim(), address.trim(), phone?.trim() || null, passwordHash]);
+      INSERT INTO users (id, first_name, last_name, email, address, phone, password_hash, household_owner_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `, [userId, firstName.trim(), lastName.trim(), email.toLowerCase().trim(), address.trim(), phone?.trim() || null, passwordHash, householdOwnerId]);
     await dbRun(`UPDATE users SET sms_opt_out = 0, sms_unsubscribe_token = COALESCE(sms_unsubscribe_token, ?) WHERE id = ?`, [uuidv4(), userId]);
 
     // Send notification email to admin
@@ -1306,6 +1430,9 @@ app.post('/api/signup', async (req, res) => {
     const wantsPool = !!requestPoolAccess;
     const poolBadge = wantsPool
       ? `<tr><td style="padding: 8px; font-weight: bold; color:#b45309;">Pool Access:</td><td style="padding: 8px; color:#b45309;"><strong>REQUESTED</strong> — please enroll in Pool Entry Management after approval.</td></tr>`
+      : '';
+    const householdBadge = householdOwnerId
+      ? `<tr><td style="padding: 8px; font-weight: bold; color:#1d4ed8;">Household:</td><td style="padding: 8px; color:#1d4ed8;"><strong>JOINING EXISTING HOUSEHOLD</strong> at this address — directory data will be shared with the primary resident.</td></tr>`
       : '';
     await sendEmail(
       process.env.ADMIN_EMAIL,
@@ -1325,6 +1452,7 @@ app.post('/api/signup', async (req, res) => {
             <tr><td style="padding: 8px; font-weight: bold;">Address:</td><td style="padding: 8px;">${address}</td></tr>
             <tr><td style="padding: 8px; font-weight: bold;">Phone:</td><td style="padding: 8px;">${phone || 'Not provided'}</td></tr>
             ${poolBadge}
+            ${householdBadge}
           </table>
           <div style="margin-top: 24px; text-align: center;">
             <a href="${adminUrl}" style="background: #2d6a4f; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; display: inline-block;">Review &amp; Approve</a>
@@ -1379,10 +1507,10 @@ app.post('/api/login', async (req, res) => {
     }
 
     // Create session
-    // Create session
-    req.session.userId = user.id;
-    req.session.userName = `${user.first_name} ${user.last_name}`;
-    req.session.userEmail = user.email;
+    req.session.userId            = user.id;
+    req.session.userName          = `${user.first_name} ${user.last_name}`;
+    req.session.userEmail         = user.email;
+    req.session.householdOwnerId  = user.household_owner_id || user.id;
 
     res.json({
       success: true,
@@ -1738,7 +1866,11 @@ if (!fs.existsSync(dirPhotosBase)) fs.mkdirSync(dirPhotosBase, { recursive: true
 
 const dirStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const userDir = path.join(dirPhotosBase, req.session.userId);
+    // Photos belong to the household, not the individual user. Secondary
+    // household members upload into the primary owner's folder so the whole
+    // household sees the same photo.
+    const householdId = req.session.householdOwnerId || req.session.userId;
+    const userDir = path.join(dirPhotosBase, householdId);
     if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
     cb(null, userDir);
   },
@@ -1772,14 +1904,16 @@ async function buildProfile(userId) {
   return { user, profile, adults, children, pets, social, photos };
 }
 
-// GET /api/directory - list all approved members (opt-out model: hidden only if do_not_list=1)
+// GET /api/directory - list all approved households (opt-out model: hidden only if do_not_list=1)
+// Only primary household owners (household_owner_id IS NULL) are listed so a
+// household with multiple logged-in members still appears once.
 app.get('/api/directory', requireAuth, async (req, res) => {
   try {
-    // Exclude users who have explicitly opted out via do_not_list at the SQL level
     const approvedUsers = await dbAll(`
       SELECT u.id FROM users u
       LEFT JOIN dir_profiles p ON p.user_id = u.id
       WHERE u.status = 'approved'
+        AND (u.household_owner_id IS NULL OR u.household_owner_id = '')
         AND (p.do_not_list IS NULL OR p.do_not_list = 0)
     `);
     const profiles = await Promise.all(approvedUsers.map(row => buildProfile(row.id)));
@@ -1802,19 +1936,21 @@ app.get('/api/directory', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/directory/me - get my full profile
+// GET /api/directory/me - get my full household profile.
+// Returns the household record, which may be owned by the current user or by
+// the household's primary owner if the current user joined an existing one.
 app.get('/api/directory/me', requireAuth, async (req, res) => {
   try {
-    res.json(await buildProfile(req.session.userId));
+    res.json(await buildProfile(req.session.householdOwnerId));
   } catch (err) {
     console.error('GET /api/directory/me error:', err.message);
     res.status(500).json({ error: 'Failed to load profile.' });
   }
 });
 
-// POST /api/directory/profile - create or update core profile
+// POST /api/directory/profile - create or update the household's core profile
 app.post('/api/directory/profile', requireAuth, async (req, res) => {
-  const uid = req.session.userId;
+  const uid = req.session.householdOwnerId;
   const { display_name, phone, show_phone, show_email, anniversary, show_anniversary,
           interests, show_interests, notes, show_notes, do_not_list, is_published, consent_given,
           community } = req.body;
@@ -1836,11 +1972,12 @@ app.post('/api/directory/profile', requireAuth, async (req, res) => {
        notes||null, show_notes?1:0, do_not_list?1:0, is_published?1:0, consent_given?1:0,
        community||null]);
   }
-  // Sync profile phone to users.phone so it becomes the default SMS contact number
+  // Sync profile phone to the primary owner's users.phone so it becomes the
+  // default SMS contact number for the household.
   if (phone !== undefined) {
     await dbRun(`UPDATE users SET phone = ? WHERE id = ?`, [phone?.trim() || null, uid]);
   }
-  dirAudit(uid, 'profile_updated', null);
+  dirAudit(req.session.userId, 'profile_updated', null);
   res.json({ success: true, profile: await buildProfile(uid) });
 });
 
@@ -1853,27 +1990,27 @@ app.post('/api/directory/adults', requireAuth, async (req, res) => {
   const sms_opt_in_val = req.body.sms_opt_in ? 1 : 0;
   const id = uuidv4();
   await dbRun('INSERT INTO dir_adults (id,user_id,name,birthday,show_birthday,phone,email,is_visible,sms_opt_in) VALUES (?,?,?,?,?,?,?,?,?)',
-    [id, req.session.userId, name.trim(), birthday||null, show_birthday?1:0, phone?.trim()||null, email?.trim()||null, is_visible!==false?1:0, sms_opt_in_val]);
+    [id, req.session.householdOwnerId, name.trim(), birthday||null, show_birthday?1:0, phone?.trim()||null, email?.trim()||null, is_visible!==false?1:0, sms_opt_in_val]);
   res.json({ success: true, adult: await dbGet('SELECT * FROM dir_adults WHERE id=?', [id]) });
 });
 app.put('/api/directory/adults/:id', requireAuth, async (req, res) => {
   const { phone, email } = req.body;
   if (email && !isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
   if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
-  const row = await dbGet('SELECT * FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  const row = await dbGet('SELECT * FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   if (!row) return res.status(404).json({ error: 'Adult not found.' });
   const sms_opt_in_val  = req.body.sms_opt_in  !== undefined ? (req.body.sms_opt_in  ? 1 : 0) : (row.sms_opt_in  || 0);
   const show_phone_val  = req.body.show_phone  !== undefined ? (req.body.show_phone  ? 1 : 0) : (row.show_phone  ?? 1);
   const show_email_val  = req.body.show_email  !== undefined ? (req.body.show_email  ? 1 : 0) : (row.show_email  ?? 1);
   await dbRun('UPDATE dir_adults SET phone=?, email=?, sms_opt_in=?, show_phone=?, show_email=? WHERE id=? AND user_id=?',
-    [phone?.trim()||null, email?.trim()||null, sms_opt_in_val, show_phone_val, show_email_val, req.params.id, req.session.userId]);
+    [phone?.trim()||null, email?.trim()||null, sms_opt_in_val, show_phone_val, show_email_val, req.params.id, req.session.householdOwnerId]);
   res.json({ success: true, adult: await dbGet('SELECT * FROM dir_adults WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/adults/:id', requireAuth, async (req, res) => {
-  const row = await dbGet('SELECT * FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  const row = await dbGet('SELECT * FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   if (!row) return res.json({ success: true });
-  await cleanupFamilyMemberDeletion({ personType: 'adult', personId: row.id, email: row.email, ownerUserId: req.session.userId });
-  await dbRun('DELETE FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  await cleanupFamilyMemberDeletion({ personType: 'adult', personId: row.id, email: row.email, ownerUserId: req.session.householdOwnerId });
+  await dbRun('DELETE FROM dir_adults WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   res.json({ success: true });
 });
 
@@ -1886,26 +2023,26 @@ app.post('/api/directory/children', requireAuth, async (req, res) => {
   const sms_opt_in_val = req.body.sms_opt_in ? 1 : 0;
   const id = uuidv4();
   await dbRun('INSERT INTO dir_children (id,user_id,first_name,birth_month,birth_day,show_birthday,is_visible,is_16_plus,phone,email,sms_opt_in) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-    [id, req.session.userId, first_name.trim(), birth_month||null, birth_day||null, show_birthday?1:0, is_visible!==false?1:0, is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val]);
+    [id, req.session.householdOwnerId, first_name.trim(), birth_month||null, birth_day||null, show_birthday?1:0, is_visible!==false?1:0, is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val]);
   res.json({ success: true, child: await dbGet('SELECT * FROM dir_children WHERE id=?', [id]) });
 });
 app.put('/api/directory/children/:id', requireAuth, async (req, res) => {
   const { is_16_plus, phone, email } = req.body;
   if (email && !isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address.' });
   if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Phone number must be 10 digits.' });
-  const row = await dbGet('SELECT * FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  const row = await dbGet('SELECT * FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   if (!row) return res.status(404).json({ error: 'Child not found.' });
   const sms_opt_in_val = req.body.sms_opt_in  !== undefined ? (req.body.sms_opt_in  ? 1 : 0) : (row.sms_opt_in  || 0);
   const is_visible_val = req.body.is_visible   !== undefined ? (req.body.is_visible  ? 1 : 0) : (row.is_visible  ?? 1);
   await dbRun('UPDATE dir_children SET is_16_plus=?, phone=?, email=?, sms_opt_in=?, is_visible=? WHERE id=? AND user_id=?',
-    [is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val, is_visible_val, req.params.id, req.session.userId]);
+    [is_16_plus?1:0, phone?.trim()||null, email?.trim()||null, sms_opt_in_val, is_visible_val, req.params.id, req.session.householdOwnerId]);
   res.json({ success: true, child: await dbGet('SELECT * FROM dir_children WHERE id=?', [req.params.id]) });
 });
 app.delete('/api/directory/children/:id', requireAuth, async (req, res) => {
-  const row = await dbGet('SELECT * FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  const row = await dbGet('SELECT * FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   if (!row) return res.json({ success: true });
-  await cleanupFamilyMemberDeletion({ personType: 'child', personId: row.id, email: row.email, ownerUserId: req.session.userId });
-  await dbRun('DELETE FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  await cleanupFamilyMemberDeletion({ personType: 'child', personId: row.id, email: row.email, ownerUserId: req.session.householdOwnerId });
+  await dbRun('DELETE FROM dir_children WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   res.json({ success: true });
 });
 
@@ -1915,11 +2052,11 @@ app.post('/api/directory/pets', requireAuth, async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Pet name is required.' });
   const id = uuidv4();
   await dbRun('INSERT INTO dir_pets (id,user_id,name,pet_type,is_visible) VALUES (?,?,?,?,?)',
-    [id, req.session.userId, name.trim(), pet_type||null, is_visible!==false?1:0]);
+    [id, req.session.householdOwnerId, name.trim(), pet_type||null, is_visible!==false?1:0]);
   res.json({ success: true, pet: await dbGet('SELECT * FROM dir_pets WHERE id=?', [id]) });
 });
 app.delete('/api/directory/pets/:id', requireAuth, async (req, res) => {
-  await dbRun('DELETE FROM dir_pets WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  await dbRun('DELETE FROM dir_pets WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   res.json({ success: true });
 });
 
@@ -1929,11 +2066,11 @@ app.post('/api/directory/social', requireAuth, async (req, res) => {
   if (!platform || !url) return res.status(400).json({ error: 'Platform and URL are required.' });
   const id = uuidv4();
   await dbRun('INSERT INTO dir_social (id,user_id,platform,url,is_visible) VALUES (?,?,?,?,?)',
-    [id, req.session.userId, platform.trim(), url.trim(), is_visible!==false?1:0]);
+    [id, req.session.householdOwnerId, platform.trim(), url.trim(), is_visible!==false?1:0]);
   res.json({ success: true, social: await dbGet('SELECT * FROM dir_social WHERE id=?', [id]) });
 });
 app.delete('/api/directory/social/:id', requireAuth, async (req, res) => {
-  await dbRun('DELETE FROM dir_social WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  await dbRun('DELETE FROM dir_social WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   res.json({ success: true });
 });
 
@@ -1952,11 +2089,13 @@ app.post('/api/directory/photos', requireAuth, (req, res) => {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded.' });
       }
-      const userId = req.session && req.session.userId;
-      if (!userId) {
+      if (!req.session || !req.session.userId) {
         try { fs.unlinkSync(req.file.path); } catch (_) {}
         return res.status(401).json({ error: 'Not authenticated.' });
       }
+      // Photos are owned by the household, not the individual user.
+      const userId = req.session.householdOwnerId || req.session.userId;
+      const actorId = req.session.userId;
 
       const existing = await dbAll('SELECT id FROM dir_photos WHERE user_id=?', [userId]);
       const photoCount = existing.length;
@@ -1981,7 +2120,7 @@ app.post('/api/directory/photos', requireAuth, (req, res) => {
         return res.status(500).json({ error: 'Photo could not be saved to the database.' });
       }
 
-      dirAudit(userId, 'photo_uploaded', req.file.filename);
+      dirAudit(actorId, 'photo_uploaded', req.file.filename);
       console.log('✓ Photo uploaded:', { id, userId, filename: req.file.filename });
       res.json({ success: true, photo: saved });
     } catch (e) {
@@ -1998,11 +2137,11 @@ app.post('/api/directory/photos', requireAuth, (req, res) => {
 app.put('/api/directory/photos/:id', requireAuth, async (req, res) => {
   const { caption, is_visible, category, display_order } = req.body;
   await dbRun(`UPDATE dir_photos SET caption=?,is_visible=?,category=?,display_order=? WHERE id=? AND user_id=?`,
-    [caption||null, is_visible?1:0, category||'Household', display_order||0, req.params.id, req.session.userId]);
+    [caption||null, is_visible?1:0, category||'Household', display_order||0, req.params.id, req.session.householdOwnerId]);
   res.json({ success: true });
 });
 app.delete('/api/directory/photos/:id', requireAuth, async (req, res) => {
-  const photo = await dbGet('SELECT * FROM dir_photos WHERE id=? AND user_id=?', [req.params.id, req.session.userId]);
+  const photo = await dbGet('SELECT * FROM dir_photos WHERE id=? AND user_id=?', [req.params.id, req.session.householdOwnerId]);
   if (!photo) return res.status(404).json({ error: 'Photo not found.' });
   const fullPath = path.join(__dirname, photo.filename);
   if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
@@ -2018,6 +2157,7 @@ app.get('/api/directory/print', requireAuth, async (req, res) => {
     SELECT u.id FROM users u
     LEFT JOIN dir_profiles p ON p.user_id = u.id
     WHERE u.status = 'approved'
+      AND (u.household_owner_id IS NULL OR u.household_owner_id = '')
       AND (p.do_not_list IS NULL OR p.do_not_list = 0)
   `);
   const profiles = await Promise.all(approvedUsers.map(row => buildProfile(row.id)));

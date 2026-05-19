@@ -370,8 +370,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ── Signup Wizard ──────────────────────────────────────
+    // When the user enters an address that matches an existing approved
+    // household, we ask whether they want to join that household. If they
+    // confirm, this flag is sent with the signup request so the new account
+    // gets linked to the primary household-owner user record.
+    let signupJoinHousehold = false;
+
     function resetWizard() {
       goToStep(1);
+      signupJoinHousehold = false;
       ['signupFirst','signupLast','signupAddress','signupEmail',
        'signupPassword','signupConfirm','signupPhone'].forEach(id => {
         const el = document.getElementById(id);
@@ -451,8 +458,47 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     }
 
-    document.getElementById('step1Next').addEventListener('click', () => {
-      if (validateStep1()) goToStep(2);
+    document.getElementById('step1Next').addEventListener('click', async () => {
+      if (!validateStep1()) return;
+      const btn = document.getElementById('step1Next');
+      const err = document.getElementById('signupError1');
+      const addr = document.getElementById('signupAddress').value.trim();
+
+      btn.disabled = true;
+      const origLabel = btn.textContent;
+      btn.textContent = 'Checking address…';
+      let info = { exists: false };
+      try {
+        const res = await fetch('/api/signup/check-address', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: addr })
+        });
+        if (res.ok) info = await res.json();
+      } catch (_) { /* fall through — treat as no existing household */ }
+      btn.disabled = false;
+      btn.textContent = origLabel;
+
+      if (info && info.exists) {
+        const ownerLabel = info.household && info.household.ownerName
+          ? ` (${info.household.ownerName})` : '';
+        const ok = window.confirm(
+          `An account is already registered for ${addr}${ownerLabel}.\n\n` +
+          `Would you like to join that existing household record?\n\n` +
+          `• OK = Join the household. You will share the same family directory ` +
+          `listing (adults, children, pets, photos, etc.) with the other household members and any of you can edit it after approval.\n` +
+          `• Cancel = Go back and use a different address.\n\n` +
+          `If you are the new owner of the property, please contact admin@GlenridgeCommunity.com for assistance to get the old resident removed.`
+        );
+        if (!ok) {
+          err.textContent = 'Please enter a different address, or click Continue and choose OK to join the existing household.';
+          return;
+        }
+        signupJoinHousehold = true;
+      } else {
+        signupJoinHousehold = false;
+      }
+      goToStep(2);
     });
 
     document.getElementById('step2Back').addEventListener('click', () => goToStep(1));
@@ -482,7 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
             phone:             document.getElementById('signupPhone').value,
             password:          document.getElementById('signupPassword').value,
             confirmPassword:   document.getElementById('signupConfirm').value,
-            requestPoolAccess: document.getElementById('signupRequestPool').checked
+            requestPoolAccess: document.getElementById('signupRequestPool').checked,
+            joinHousehold:     signupJoinHousehold
           })
         });
         const data = await res.json();
