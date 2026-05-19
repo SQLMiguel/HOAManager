@@ -670,7 +670,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function eventsOnDate(dateStr) {
-      return allEvents.filter(e => e.event_date === dateStr);
+      return allEvents.filter(e => {
+        if (!e.event_date) return false;
+        const start = e.event_date;
+        const end = e.end_date && e.end_date >= e.event_date ? e.end_date : e.event_date;
+        return dateStr >= start && dateStr <= end;
+      });
     }
 
     function formatDateLabel(dateStr) {
@@ -756,7 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const container = document.getElementById('calUpcomingList');
       const today = todayStr();
       const upcoming = allEvents
-        .filter(e => e.event_date >= today)
+        .filter(e => (e.end_date && e.end_date >= today) || e.event_date >= today)
         .slice(0, 8);
 
       if (!upcoming.length) {
