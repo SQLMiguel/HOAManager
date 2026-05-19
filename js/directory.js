@@ -1220,7 +1220,7 @@
     let actionsHtml = '';
 
     if (canRequest) {
-      actionsHtml += `<button class="btn btn-primary" type="button" id="requestCard1Btn">Request 1 Key Card</button>`;
+      actionsHtml += `<button class="btn btn-outline" type="button" id="requestCard1Btn">Request 1 Key Card</button>`;
       if (canRequestTwo) {
         actionsHtml += ` <button class="btn btn-outline" type="button" id="requestCard2Btn" style="margin-left:.5rem;">Request 2 Key Cards</button>`;
       }

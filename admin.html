@@ -446,7 +446,8 @@
         <div class="pool-panel active" id="poolMembers">
           <div class="pool-toolbar">
             <button class="btn btn-primary" id="poolSyncBtn">🔄 Sync Residents</button>
-            <button class="btn btn-outline" id="poolAddMemberBtn">+ Add Non-Resident</button>
+            <button class="btn btn-accent" id="poolAddMemberBtn">+ Add Non-Resident</button>
+            <input type="search" id="poolMemberSearch" placeholder="🔍 Search by name or address..." style="flex:1;min-width:220px;max-width:360px;padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:0.9rem;" />
             <span id="poolMemberCount" style="margin-left:auto;font-size:0.85rem;color:var(--text-light);"></span>
           </div>
           <div class="pool-household-summary" id="poolHouseholdSummary">
@@ -1836,8 +1837,22 @@
     });
 
     // ── Pool Members ──
+    let poolMemberSearchTerm = '';
+
     function renderPoolMembers() {
-      document.getElementById('poolMemberCount').textContent = `${poolMembers.length} member(s)`;
+      const total = poolMembers.length;
+      const term = poolMemberSearchTerm.trim().toLowerCase();
+      if (term) {
+        const matches = poolMembers.filter(m => {
+          const name = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
+          const addr = (m.street_address || '').toLowerCase();
+          const ownerAddr = (m.household_owner_name || '').toLowerCase();
+          return name.includes(term) || addr.includes(term) || ownerAddr.includes(term);
+        }).length;
+        document.getElementById('poolMemberCount').textContent = `${matches} of ${total} member(s) match`;
+      } else {
+        document.getElementById('poolMemberCount').textContent = `${total} member(s)`;
+      }
       renderPoolHouseholdSummary();
     }
 
@@ -1846,8 +1861,18 @@
       const countEl = document.getElementById('poolHouseholdCount');
       if (!listEl) return;
 
+      const term = poolMemberSearchTerm.trim().toLowerCase();
+      const sourceMembers = term
+        ? poolMembers.filter(m => {
+            const name = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
+            const addr = (m.street_address || '').toLowerCase();
+            const ownerAddr = (m.household_owner_name || '').toLowerCase();
+            return name.includes(term) || addr.includes(term) || ownerAddr.includes(term);
+          })
+        : poolMembers;
+
       const grouped = new Map();
-      for (const member of poolMembers) {
+      for (const member of sourceMembers) {
         const hasStreetAddress = !!member.street_address;
         const hasHouseholdOwner = !!member.household_owner_user_id;
         let key;
@@ -1900,13 +1925,25 @@
       }
 
       if (households.length === 0) {
-        listEl.innerHTML = '<div class="pool-household-item empty"><div class="addr">No resident addresses available yet.</div><div class="meta">Sync residents to populate household groupings.</div></div>';
+        const msg = term
+          ? `No members or addresses match "${poolMemberSearchTerm}".`
+          : 'No resident addresses available yet.';
+        const sub = term
+          ? 'Try a different search term, or clear the search to see all members.'
+          : 'Sync residents to populate household groupings.';
+        listEl.innerHTML = `<div class="pool-household-item empty"><div class="addr">${msg}</div><div class="meta">${sub}</div></div>`;
         return;
       }
 
       expandedPoolHouseholds.forEach(key => {
         if (!grouped.has(key)) expandedPoolHouseholds.delete(key);
       });
+
+      // When a search is active, auto-expand all matching households so
+      // the user can immediately see the matched members.
+      if (term) {
+        for (const key of grouped.keys()) expandedPoolHouseholds.add(key);
+      }
 
       listEl.innerHTML = households.map(h => `
         <div class="pool-household-item ${expandedPoolHouseholds.has(h.key) ? 'expanded' : ''}">
@@ -2009,6 +2046,12 @@
     document.getElementById('poolCollapseAllHouseholds').addEventListener('click', () => {
       expandedPoolHouseholds.clear();
       renderPoolHouseholdSummary();
+    });
+
+    // Pool member search (filter by partial name or address)
+    document.getElementById('poolMemberSearch').addEventListener('input', (e) => {
+      poolMemberSearchTerm = e.target.value || '';
+      renderPoolMembers();
     });
 
     // Sync residents
