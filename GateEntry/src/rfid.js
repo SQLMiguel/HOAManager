@@ -9,6 +9,7 @@
 
 const config = require('./config');
 const wiegand = require('./wiegand');
+const fs = require('fs');
 
 let reader = null;
 let serialReader = null;
@@ -35,6 +36,10 @@ function initMfrc522() {
 }
 
 function initSerial() {
+  if (!fs.existsSync(config.serialPort)) {
+    throw new Error(`serial port ${config.serialPort} does not exist`);
+  }
+
   // Lazy require so dev machines without serialport installed still boot.
   const { SerialPort, ReadlineParser, DelimiterParser } = require('serialport');
 
@@ -61,7 +66,11 @@ function initSerial() {
   port.open((err) => {
     if (err) {
       console.error(`  ✗ Failed to open ${config.serialPort}: ${err.message}`);
-      throw err;
+      serialReader = null;
+      mode = 'simulated';
+      isSimulated = true;
+      console.log('  [WARN] Serial reader disabled - running in simulation mode');
+      return;
     }
     console.log(`  ✓ Serial RFID reader open on ${config.serialPort} @ ${config.serialBaud} (${delim})`);
   });
