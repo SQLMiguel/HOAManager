@@ -8,8 +8,6 @@
      POST/DELETE /api/directory/children (first_name, birth_month, birth_day)
      POST/DELETE /api/directory/pets     (name, pet_type)
      POST/DELETE /api/directory/social   (platform, url, is_visible)
-     POST        /api/directory/photos   (multipart: photo file + category, caption)
-     PUT/DELETE  /api/directory/photos/:id
      GET         /api/directory/print
    ============================================================= */
 
@@ -26,6 +24,7 @@
   document.addEventListener('DOMContentLoaded', async () => {
     await checkAuth();
     initProfileWizard();
+    initAccountDetails();
     initSearch();
     initCommunityFilter();
     initCommunityToggle();
@@ -33,7 +32,6 @@
     initProfileToggle();
     initFamilyTab();
     initSocialTab();
-    initPhotosTab();
     initPublishTab();
     initSmsPreferences();
     initPoolPhones();
@@ -424,6 +422,17 @@
     if (!bp) return;
     const prof = bp.profile || {};
     const user = bp.user    || {};
+    const isPrimaryUser = !!(bp.currentUser && bp.currentUser.isPrimaryUser);
+
+    const accountEditor = document.getElementById('primaryAccountEditor');
+    const accountReadonly = document.getElementById('primaryAccountReadonly');
+    if (accountEditor) accountEditor.classList.toggle('dir-hidden', !isPrimaryUser);
+    if (accountReadonly) accountReadonly.classList.toggle('dir-hidden', isPrimaryUser);
+
+    setVal('acctFirstName', user.first_name);
+    setVal('acctLastName',  user.last_name);
+    setVal('acctAddress',   user.address);
+    setVal('acctEmail',     user.email);
 
     document.getElementById('infoNameDisplay').textContent    = fullName(bp) || '—';
     document.getElementById('infoAddressDisplay').textContent = user.address  || '—';
@@ -433,7 +442,7 @@
     if (emailEl) emailEl.textContent = user.email || '—';
 
     setVal('profDisplayName',    prof.display_name);
-    setVal('profPhone',          prof.phone);
+    setVal('profPhone',          prof.phone || user.phone);
     setVal('profInterests',      prof.interests);
     setVal('profNotes',          prof.notes);
     setChk('profShowPhone',      prof.show_phone);
@@ -468,12 +477,76 @@
     renderChildren(bp.children || []);
     renderPets(bp.pets       || []);
     renderSocial(bp.social   || []);
-    renderPhotos(bp.photos   || []);
     refreshPoolPhones();
   }
 
   // ── Profile Wizard State ─────────────────────────────────────
   let _profileStep = 1;
+
+  function initAccountDetails() {
+    const btn = document.getElementById('saveAccountBtn');
+    if (!btn) return;
+    btn.addEventListener('click', saveAccountDetails);
+
+    const emailEl = document.getElementById('acctEmail');
+    if (emailEl && window.FormValidation) FormValidation.validateEmailInput(emailEl);
+  }
+
+  async function saveAccountDetails() {
+    const statusEl = document.getElementById('accountSaveStatus');
+    const btn = document.getElementById('saveAccountBtn');
+    const payload = {
+      firstName: val('acctFirstName'),
+      lastName:  val('acctLastName'),
+      address:   val('acctAddress'),
+      email:     val('acctEmail')
+    };
+
+    if (!payload.firstName || !payload.lastName || !payload.address || !payload.email) {
+      statusEl.textContent = 'First name, last name, email, and address are required.';
+      statusEl.className = 'auto-save-status auto-save-error';
+      return;
+    }
+    if (!FormValidation.isValidEmail(payload.email)) {
+      statusEl.textContent = 'Please enter a valid email address.';
+      statusEl.className = 'auto-save-status auto-save-error';
+      document.getElementById('acctEmail').focus();
+      return;
+    }
+    statusEl.textContent = 'Saving...';
+    statusEl.className = 'auto-save-status auto-save-pending';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/directory/me/account', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        statusEl.textContent = data.error || 'Failed to save account details.';
+        statusEl.className = 'auto-save-status auto-save-error';
+        return;
+      }
+
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'auto-save-status auto-save-ok';
+      myProfile = await (await fetch('/api/directory/me')).json();
+      populateEditor(myProfile);
+      loadDirectory();
+      await loadSmsPreferences();
+      setTimeout(() => {
+        statusEl.textContent = '';
+        statusEl.className = 'auto-save-status';
+      }, 3000);
+    } catch {
+      statusEl.textContent = 'Network error.';
+      statusEl.className = 'auto-save-status auto-save-error';
+    } finally {
+      btn.disabled = false;
+    }
+  }
 
   function initProfileWizard() {
     // Clicking a stepper indicator navigates to that step (auto-saving step 1 first if needed)
@@ -495,17 +568,17 @@
       if (saved) goToProfileStep(2);
     });
 
-    // Generic next buttons on steps 2–5
+    // Generic next buttons on steps 2-4
     document.querySelectorAll('.pstep-next-btn').forEach(btn => {
       btn.addEventListener('click', () => goToProfileStep(_profileStep + 1));
     });
 
-    // Generic back buttons on steps 2–6
+    // Generic back buttons on steps 2-5
     document.querySelectorAll('.pstep-back-btn').forEach(btn => {
       btn.addEventListener('click', () => goToProfileStep(_profileStep - 1));
     });
 
-    // Done button on step 6
+    // Done button on step 5
     document.getElementById('profDoneBtn').addEventListener('click', () => {
       document.getElementById('profileSection').style.display = 'none';
     });
@@ -523,8 +596,8 @@
   }
 
   function goToProfileStep(step) {
-    step = Math.max(1, Math.min(6, step));
-    const panelIds = ['tab-info', 'tab-family', 'tab-pool-gate', 'tab-social', 'tab-photos', 'tab-publish'];
+    step = Math.max(1, Math.min(5, step));
+    const panelIds = ['tab-info', 'tab-family', 'tab-pool-gate', 'tab-social', 'tab-publish'];
     panelIds.forEach((id, i) => {
       const panel = document.getElementById(id);
       if (panel) panel.classList.toggle('active', i + 1 === step);
@@ -954,124 +1027,6 @@
     if (ok) { clearInputs('socialUrl'); document.getElementById('socialPlatform').value = ''; await refreshProfile(); }
   }
 
-  // ── Photos Tab ───────────────────────────────────────────────
-  function initPhotosTab() {
-    document.getElementById('uploadPhotoBtn').addEventListener('click', uploadPhoto);
-  }
-
-  // When the user clicks Edit on the existing household photo, we reveal the
-  // upload form and remember that the next upload should replace the current
-  // photo (server enforces a 1-photo cap, so we delete before uploading).
-  let replacePhotoId = null;
-
-  function renderPhotos(list) {
-    document.getElementById('photoGrid').innerHTML = list.map(ph =>
-      `<div class="dir-photo-thumb" data-id="${ph.id}">
-        <img src="${e(ph.filename)}" alt="${e(ph.caption || '')}">
-        ${ph.caption ? `<p class="dir-photo-caption">${e(ph.caption)}</p>` : ''}
-        <div class="dir-photo-overlay">
-          <label class="dir-toggle dir-toggle-small" title="Visible in directory">
-            <input type="checkbox" class="photo-vis-toggle" data-id="${ph.id}" ${ph.is_visible ? 'checked' : ''}>
-            <span class="dir-toggle-slider"></span>
-          </label>
-          <button class="dir-edit-photo-btn" data-id="${ph.id}" title="Replace photo">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/>
-            </svg>
-          </button>
-          <button class="dir-del-photo-btn" data-id="${ph.id}" title="Delete photo">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-            </svg>
-          </button>
-        </div>
-      </div>`
-    ).join('');
-
-    // Visibility toggles
-    document.querySelectorAll('.photo-vis-toggle').forEach(cb => {
-      cb.addEventListener('change', () => updatePhotoVisibility(cb.dataset.id, cb.checked));
-    });
-    // Delete buttons
-    document.querySelectorAll('.dir-del-photo-btn').forEach(btn => {
-      btn.addEventListener('click', () => deletePhoto(btn.dataset.id));
-    });
-    // Edit (replace) buttons
-    document.querySelectorAll('.dir-edit-photo-btn').forEach(btn => {
-      btn.addEventListener('click', () => beginReplacePhoto(btn.dataset.id));
-    });
-
-    // Only one household photo is allowed. Hide the upload form once a photo
-    // exists so the user deletes (or chooses to replace) it before uploading.
-    const uploadArea = document.querySelector('.dir-photo-upload-area');
-    if (uploadArea && !replacePhotoId) {
-      uploadArea.style.display = list.length >= 1 ? 'none' : '';
-    }
-    if (list.length === 0) replacePhotoId = null;
-  }
-
-  function beginReplacePhoto(id) {
-    replacePhotoId = id;
-    const uploadArea = document.querySelector('.dir-photo-upload-area');
-    if (uploadArea) {
-      uploadArea.style.display = '';
-      uploadArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-    showMsg('photoUploadMsg', 'Select a new photo to replace the current one.');
-  }
-
-  async function uploadPhoto() {
-    const fileInput = document.getElementById('photoFileInput');
-    const file = fileInput.files[0];
-    if (!file) { showMsg('photoUploadMsg', 'Please select a photo.', true); return; }
-    if (file.size > 5 * 1024 * 1024) { showMsg('photoUploadMsg', 'File must be under 5MB.', true); return; }
-
-    const fd = new FormData();
-    fd.append('photo', file);
-    fd.append('caption',  val('photoCaption'));
-    fd.append('category', val('photoCategory'));
-
-    showMsg('photoUploadMsg', 'Uploading…');
-    try {
-      // If we're in replace mode, delete the existing photo first so the
-      // server-side 1-photo cap doesn't reject the new upload.
-      if (replacePhotoId) {
-        const delRes = await fetch(`/api/directory/photos/${replacePhotoId}`, { method: 'DELETE' });
-        if (!delRes.ok) {
-          showMsg('photoUploadMsg', 'Could not remove the existing photo.', true);
-          return;
-        }
-        replacePhotoId = null;
-      }
-      const res  = await fetch('/api/directory/photos', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (data.success) {
-        showMsg('photoUploadMsg', 'Photo uploaded!');
-        fileInput.value = '';
-        clearInputs('photoCaption');
-        await refreshProfile();
-      } else {
-        showMsg('photoUploadMsg', data.error || 'Upload failed.', true);
-      }
-    } catch {
-      showMsg('photoUploadMsg', 'Network error — upload failed.', true);
-    }
-  }
-
-  async function updatePhotoVisibility(id, visible) {
-    await fetch(`/api/directory/photos/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_visible: visible ? 1 : 0 }),
-    });
-  }
-
-  async function deletePhoto(id) {
-    if (!confirm('Delete this photo?')) return;
-    await fetch(`/api/directory/photos/${id}`, { method: 'DELETE' });
-    await refreshProfile();
-  }
-
   // ── Publish Tab ──────────────────────────────────────────────
   function initPublishTab() {
     document.getElementById('publishBtn').addEventListener('click',   publishProfile);
@@ -1435,7 +1390,7 @@
   // ── Shared Helpers ───────────────────────────────────────────
   async function refreshProfile() {
     myProfile = await (await fetch('/api/directory/me')).json();
-    // Only refresh sub-lists (family, social, photos, pool phones) — do NOT
+    // Only refresh sub-lists (family, social, pool phones) — do NOT
     // overwrite Household Info fields, which the user may have edited but not
     // yet saved.
     if (!myProfile) return;
@@ -1443,7 +1398,6 @@
     renderChildren(myProfile.children || []);
     renderPets(myProfile.pets         || []);
     renderSocial(myProfile.social     || []);
-    renderPhotos(myProfile.photos     || []);
     refreshPoolPhones();
   }
 

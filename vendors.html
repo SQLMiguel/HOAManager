@@ -231,6 +231,7 @@
     </div>
   </footer>
 
+  <script src="js/validation.js"></script>
   <script>
     document.getElementById('footerYear').textContent = new Date().getFullYear();
 
@@ -503,7 +504,7 @@
       $('vendorFormTitle').textContent = vendor ? 'Edit Vendor' : 'Add a Vendor';
       $('vfId').value = vendor ? vendor.id : '';
       $('vfName').value = vendor ? vendor.name : '';
-      $('vfPhone').value = vendor && vendor.phone ? vendor.phone : '';
+      $('vfPhone').value = vendor && vendor.phone ? FormValidation.formatPhone(vendor.phone) : '';
       $('vfEmail').value = vendor && vendor.email ? vendor.email : '';
       $('vfWebsite').value = vendor && vendor.website ? vendor.website : '';
       $('vfAddress').value = vendor && vendor.address ? vendor.address : '';

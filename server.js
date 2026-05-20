@@ -1680,14 +1680,24 @@ app.post('/api/logout', async (req, res) => {
 // ---------- Get current user ----------
 app.get('/api/me', async (req, res) => {
   if (req.session && req.session.userId) {
+    const user = await dbGet('SELECT first_name, last_name, email, household_owner_id FROM users WHERE id = ?', [req.session.userId]);
+    if (!user) {
+      req.session.destroy(() => {});
+      return res.json({ authenticated: false });
+    }
+    req.session.userName = `${user.first_name} ${user.last_name}`;
+    req.session.userEmail = user.email;
+    req.session.householdOwnerId = user.household_owner_id || req.session.userId;
     res.json({
       authenticated: true,
       userId: req.session.userId,
+      householdOwnerId: req.session.householdOwnerId,
+      isPrimaryUser: req.session.userId === req.session.householdOwnerId,
       isAdmin: !!req.session.isAdmin,
       user: {
-        firstName: req.session.userName?.split(' ')[0],
-        lastName: req.session.userName?.split(' ').slice(1).join(' '),
-        email: req.session.userEmail
+        firstName: user.first_name,
+        lastName: user.last_name,
+        email: user.email
       }
     });
   } else {
@@ -1926,7 +1936,7 @@ async function dirAudit(userId, action, detail) {
 }
 
 async function buildProfile(userId) {
-  const user    = await dbGet('SELECT first_name, last_name, email, address FROM users WHERE id=?', [userId]);
+  const user    = await dbGet('SELECT first_name, last_name, email, address, phone FROM users WHERE id=?', [userId]);
   const profile = await dbGet('SELECT * FROM dir_profiles WHERE user_id=?', [userId]);
   const adults  = await dbAll('SELECT * FROM dir_adults WHERE user_id=? ORDER BY id', [userId]);
   const children= await dbAll('SELECT * FROM dir_children WHERE user_id=? ORDER BY id', [userId]);
@@ -1973,10 +1983,84 @@ app.get('/api/directory', requireAuth, async (req, res) => {
 // the household's primary owner if the current user joined an existing one.
 app.get('/api/directory/me', requireAuth, async (req, res) => {
   try {
-    res.json(await buildProfile(req.session.householdOwnerId));
+    const profile = await buildProfile(req.session.householdOwnerId);
+    profile.currentUser = {
+      id: req.session.userId,
+      householdOwnerId: req.session.householdOwnerId,
+      isPrimaryUser: req.session.userId === req.session.householdOwnerId
+    };
+    res.json(profile);
   } catch (err) {
     console.error('GET /api/directory/me error:', err.message);
     res.status(500).json({ error: 'Failed to load profile.' });
+  }
+});
+
+// PUT /api/directory/me/account - update primary household-owner account details
+app.put('/api/directory/me/account', requireAuth, async (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const currentUser = await dbGet('SELECT id, household_owner_id FROM users WHERE id = ?', [uid]);
+    if (!currentUser) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    req.session.householdOwnerId = currentUser.household_owner_id || uid;
+    if (uid !== req.session.householdOwnerId) {
+      return res.status(403).json({ error: 'Only the primary household user can edit these account details.' });
+    }
+
+    const firstName = (req.body.firstName || '').toString().trim();
+    const lastName  = (req.body.lastName  || '').toString().trim();
+    const email     = (req.body.email     || '').toString().trim().toLowerCase();
+    const address   = (req.body.address   || '').toString().trim();
+
+    if (!firstName || !lastName || !email || !address) {
+      return res.status(400).json({ error: 'First name, last name, email, and address are required.' });
+    }
+    if (firstName.length > 80 || lastName.length > 80) {
+      return res.status(400).json({ error: 'Name fields must be 80 characters or less.' });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+    if (email.length > 120) {
+      return res.status(400).json({ error: 'Email address must be 120 characters or less.' });
+    }
+    if (address.length > 200) {
+      return res.status(400).json({ error: 'Address must be 200 characters or less.' });
+    }
+
+    const existingEmail = await dbGet('SELECT id FROM users WHERE email = ? AND id <> ?', [email, uid]);
+    if (existingEmail) {
+      return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+
+    await dbRun(
+      `UPDATE users
+          SET first_name = ?, last_name = ?, email = ?, address = ?
+        WHERE id = ?`,
+      [firstName, lastName, email, address, uid]
+    );
+
+    const fullName = `${firstName} ${lastName}`;
+    await dbRun(`UPDATE pool_members SET first_name = ?, last_name = ? WHERE user_id = ? AND source = 'member'`, [firstName, lastName, uid]);
+    await dbRun(`UPDATE dir_pool_phones SET person_name = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND person_type = 'self'`, [fullName, uid]);
+
+    req.session.userName = fullName;
+    req.session.userEmail = email;
+
+    dirAudit(uid, 'account_updated', null);
+    res.json({
+      success: true,
+      message: 'Account details saved.',
+      user: { firstName, lastName, email, address }
+    });
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+    console.error('PUT /api/directory/me/account error:', err.message);
+    res.status(500).json({ error: 'Failed to update account details.' });
   }
 });
 
@@ -2108,63 +2192,7 @@ app.delete('/api/directory/social/:id', requireAuth, async (req, res) => {
 
 // POST /api/directory/photos
 app.post('/api/directory/photos', requireAuth, (req, res) => {
-  dirUpload.single('photo')(req, res, async (err) => {
-    // IMPORTANT: this multer callback is `async`. Any thrown error inside
-    // becomes an unhandled rejection and the request hangs silently. Wrap
-    // everything in try/catch so the client always gets a real response and
-    // we always log the underlying cause.
-    try {
-      if (err) {
-        console.error('Photo upload multer error:', err.message);
-        return res.status(400).json({ error: err.message });
-      }
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded.' });
-      }
-      if (!req.session || !req.session.userId) {
-        try { fs.unlinkSync(req.file.path); } catch (_) {}
-        return res.status(401).json({ error: 'Not authenticated.' });
-      }
-      // Photos are owned by the household, not the individual user.
-      const userId = req.session.householdOwnerId || req.session.userId;
-      const actorId = req.session.userId;
-
-      const existing = await dbAll('SELECT id FROM dir_photos WHERE user_id=?', [userId]);
-      const photoCount = existing.length;
-      if (photoCount >= 1) {
-        try { fs.unlinkSync(req.file.path); } catch (_) {}
-        return res.status(400).json({ error: 'Only one household photo is allowed. Please delete the existing photo before uploading a new one.' });
-      }
-
-      const { category, caption } = req.body;
-      const id = uuidv4();
-      const webPath = `/images/directory/${userId}/${req.file.filename}`;
-      await dbRun(
-        'INSERT INTO dir_photos (id,user_id,filename,category,caption,display_order) VALUES (?,?,?,?,?,?)',
-        [id, userId, webPath, category || 'Household', caption || null, photoCount]
-      );
-
-      // Verify the row really landed before reporting success.
-      const saved = await dbGet('SELECT * FROM dir_photos WHERE id=?', [id]);
-      if (!saved) {
-        console.error('Photo upload: row missing after INSERT', { id, userId });
-        try { fs.unlinkSync(req.file.path); } catch (_) {}
-        return res.status(500).json({ error: 'Photo could not be saved to the database.' });
-      }
-
-      dirAudit(actorId, 'photo_uploaded', req.file.filename);
-      console.log('✓ Photo uploaded:', { id, userId, filename: req.file.filename });
-      res.json({ success: true, photo: saved });
-    } catch (e) {
-      console.error('Photo upload failed:', e && (e.code || e.name), e && e.message);
-      if (e && e.stack) console.error(e.stack);
-      // Remove the orphan file so we don't leak disk space when the DB write fails.
-      if (req.file && req.file.path) {
-        try { fs.unlinkSync(req.file.path); } catch (_) {}
-      }
-      res.status(500).json({ error: 'Photo upload failed. ' + (e && e.message ? e.message : '') });
-    }
-  });
+  res.status(410).json({ error: 'Profile photo uploads are no longer available.' });
 });
 app.put('/api/directory/photos/:id', requireAuth, async (req, res) => {
   const { caption, is_visible, category, display_order } = req.body;

@@ -312,7 +312,9 @@
   overflow-x: auto;
   border-bottom: 2px solid #eee;
   background: #fff;
-  scrollbar-width: none;
+}
+@supports (-moz-appearance: none) {
+  .dir-tabs { scrollbar-width: none; }
 }
 .dir-tabs::-webkit-scrollbar { display: none; }
 .dir-tab {
@@ -342,7 +344,9 @@
   background: #fff;
   border-bottom: 2px solid #eee;
   overflow-x: auto;
-  scrollbar-width: none;
+}
+@supports (-moz-appearance: none) {
+  .profile-stepper { scrollbar-width: none; }
 }
 .profile-stepper::-webkit-scrollbar { display: none; }
 
@@ -518,6 +522,7 @@
   gap: .5rem;
   cursor: pointer;
   flex-shrink: 0;
+  -webkit-user-select: none;
   user-select: none;
   padding-top: .1rem;
 }
@@ -594,6 +599,8 @@
   border: 1px solid #e0e4ea;
   border-radius: .5rem;
 }
+.dir-account-editor { margin-top: .75rem; }
+.dir-account-email-hint { margin-top: .35rem; }
 .dir-edit-fields {
   display: flex;
   flex-wrap: wrap;

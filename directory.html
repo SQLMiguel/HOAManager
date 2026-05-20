@@ -165,11 +165,6 @@
             <div class="profile-step-connector"></div>
             <div class="profile-step-item" data-pstep="5">
               <div class="pstep-circle">5</div>
-              <div class="pstep-label">Photos</div>
-            </div>
-            <div class="profile-step-connector"></div>
-            <div class="profile-step-item" data-pstep="6">
-              <div class="pstep-circle">6</div>
               <div class="pstep-label">Privacy</div>
             </div>
           </div>
@@ -177,14 +172,43 @@
           <!-- ── TAB: Household Info ── -->
           <div class="dir-tab-panel active" id="tab-info">
             <div class="dir-field-group">
-              <h4>Required Information <span class="dir-badge-required">Always Visible</span></h4>
-              <div class="dir-info-row">
-                <label>Primary Member Name</label>
-                <span id="infoNameDisplay" class="dir-readonly">—</span>
+              <h4>Account Details <span class="dir-badge-required">Primary User</span></h4>
+              <p class="dir-field-hint">The primary household user can update the required account details shown in the directory.</p>
+              <div id="primaryAccountEditor" class="dir-edit-form dir-account-editor dir-hidden">
+                <div class="dir-edit-fields">
+                  <div class="dir-edit-field">
+                    <label for="acctFirstName">First Name</label>
+                    <input type="text" id="acctFirstName" maxlength="80" class="dir-input" autocomplete="given-name" required>
+                  </div>
+                  <div class="dir-edit-field">
+                    <label for="acctLastName">Last Name</label>
+                    <input type="text" id="acctLastName" maxlength="80" class="dir-input" autocomplete="family-name" required>
+                  </div>
+                  <div class="dir-edit-field dir-edit-field-full">
+                    <label for="acctAddress">Address</label>
+                    <input type="text" id="acctAddress" maxlength="200" class="dir-input" autocomplete="street-address" required>
+                  </div>
+                  <div class="dir-edit-field dir-edit-field-full">
+                    <label for="acctEmail">Email Address</label>
+                    <input type="email" id="acctEmail" maxlength="120" class="dir-input" autocomplete="email" required>
+                    <p class="dir-field-hint dir-account-email-hint">This email is always displayed to approved members.</p>
+                  </div>
+                </div>
+                <div class="dir-edit-actions">
+                  <button class="btn btn-primary" id="saveAccountBtn" type="button">Save Account Details</button>
+                  <span id="accountSaveStatus" class="auto-save-status" aria-live="polite"></span>
+                </div>
               </div>
-              <div class="dir-info-row">
-                <label>Address</label>
-                <span id="infoAddressDisplay" class="dir-readonly">—</span>
+              <div id="primaryAccountReadonly" class="dir-hidden">
+                <div class="dir-info-row">
+                  <label>Primary Member Name</label>
+                  <span id="infoNameDisplay" class="dir-readonly">—</span>
+                </div>
+                <div class="dir-info-row">
+                  <label>Address</label>
+                  <span id="infoAddressDisplay" class="dir-readonly">—</span>
+                </div>
+                <p class="dir-field-hint">Only the primary household user can edit the primary name, address, and email.</p>
               </div>
             </div>
 
@@ -449,38 +473,6 @@
             </div>
           </div>
 
-          <!-- ── TAB: Photos ── -->
-          <div class="dir-tab-panel" id="tab-photos">
-            <div class="dir-field-group">
-              <h4>Household Photo</h4>
-              <p class="dir-field-hint">Upload one household photo (JPG, PNG, WEBP — max 5MB). To replace it, delete the current photo first.</p>
-              <div id="photoGrid" class="dir-photo-grid"></div>
-              <div class="dir-photo-upload-area">
-                <label for="photoFileInput" class="dir-upload-btn">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
-                    <path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/>
-                  </svg>
-                  Choose Photo
-                  <input type="file" id="photoFileInput" accept=".jpg,.jpeg,.png,.webp" style="display:none;">
-                </label>
-                <div class="dir-photo-meta">
-                  <select id="photoCategory" class="dir-input dir-select">
-                    <option>Household</option><option>Adult</option><option>Child</option>
-                    <option>Pet</option><option>Other</option>
-                  </select>
-                  <input type="text" id="photoCaption" placeholder="Caption (optional)" maxlength="100" class="dir-input">
-                </div>
-                <button class="btn btn-primary" id="uploadPhotoBtn" type="button">Upload</button>
-              </div>
-              <p id="photoUploadMsg" class="dir-save-msg"></p>
-            </div>
-            <div class="pstep-nav">
-              <button class="btn pstep-back-btn" type="button">← Back</button>
-              <button class="btn btn-primary pstep-next-btn" type="button">Continue →</button>
-            </div>
-          </div>
-
           <!-- ── TAB: Privacy & Publish ── -->
           <div class="dir-tab-panel" id="tab-publish">
             <div class="dir-field-group">
@@ -516,7 +508,7 @@
               <div class="dir-consent-box" id="consentBox">
                 <label class="dir-consent-check">
                   <input type="checkbox" id="consentCheck">
-                  <span>I confirm I have the right to share all uploaded photos and information. I understand this is visible to Glenridge Community members only and accept the <strong>member-only terms of use</strong>.</span>
+                  <span>I confirm I have the right to share all profile information. I understand this is visible to Glenridge Community members only and accept the <strong>member-only terms of use</strong>.</span>
                 </label>
               </div>
 
