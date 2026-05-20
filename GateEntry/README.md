@@ -143,8 +143,33 @@ sudo journalctl -u gate-entry -f   # view live logs
 |---------|-------------|
 | `npm start` | Start the gate controller + read-only viewer |
 | `npm test` | Test RFID reader hardware |
+| `npm run read-card` | Start a reader-only web app for capturing card IDs |
 | `npm run sync` | Force a manual sync with the website |
 | `npm run setup-db` | Initialize/reset the local database |
+
+## Reader-Only Card ID App
+
+Use this when you only need to read a new card or fob ID before assigning it to a pool member. It does not open the gate, update the database, or sync with the HOA website.
+
+```bash
+cd ~/gate-entry
+npm run read-card
+```
+
+Then open this from a browser on the same network:
+
+```text
+http://<pi-ip>:8090
+```
+
+Scan a card at the reader. The app shows the latest card ID, keeps a short recent-scan list, and provides a copy button so the ID can be pasted into the HOA website admin panel.
+
+Optional `.env` settings:
+
+```text
+CARD_READER_PORT=8090
+CARD_READER_HOST=0.0.0.0
+```
 
 ## Assigning RFID Tags
 

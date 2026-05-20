@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node src/test-rfid.js",
+    "read-card": "node src/card-reader-app.js",
     "sync": "node src/manual-sync.js",
     "setup-db": "node src/setup-db.js"
   },

@@ -48,6 +48,10 @@ const config = {
   viewerPort: parseInt(process.env.VIEWER_PORT) || 8080,
   viewerHost: process.env.VIEWER_HOST || '0.0.0.0',
 
+  // Standalone card ID reader app (does not open the gate or touch the database)
+  cardReaderPort: parseInt(process.env.CARD_READER_PORT) || 8090,
+  cardReaderHost: process.env.CARD_READER_HOST || '0.0.0.0',
+
   // Phone unlock endpoint — optional pre-shared key (leave blank to disable check).
   // Clients must send this in header X-Gate-Phone-Key or body.gate_key.
   phoneUnlockKey: process.env.PHONE_UNLOCK_KEY || ''
