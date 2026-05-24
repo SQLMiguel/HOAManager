@@ -176,7 +176,10 @@ async function initDb() {
       status VARCHAR(10) DEFAULT 'pending',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       approved_at DATETIME,
-      approved_by VARCHAR(100)
+      approved_by VARCHAR(100),
+      denied_at DATETIME,
+      denied_by VARCHAR(100),
+      denial_note TEXT
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
@@ -189,6 +192,9 @@ async function initDb() {
     `ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN is_pool_manager TINYINT(1) NOT NULL DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN household_owner_id VARCHAR(36) DEFAULT NULL`,
+    `ALTER TABLE users ADD COLUMN denied_at DATETIME`,
+    `ALTER TABLE users ADD COLUMN denied_by VARCHAR(100)`,
+    `ALTER TABLE users ADD COLUMN denial_note TEXT`,
   ];
   for (const sql of alterUsers) {
     try { await conn.query(sql); } catch(e) { /* column already exists */ }
@@ -2543,7 +2549,7 @@ app.get('/api/admin/status', async (req, res) => {
 // Get all pending users
 app.get('/api/admin/users/pending', requireAdmin, async (req, res) => {
   const users = await dbAll(`
-    SELECT id, first_name, last_name, email, address, phone, status, created_at
+    SELECT id, first_name, last_name, email, address, phone, status, created_at, denial_note, denied_at, denied_by
     FROM users WHERE status = 'pending'
     ORDER BY created_at DESC
   `);
@@ -2553,7 +2559,7 @@ app.get('/api/admin/users/pending', requireAdmin, async (req, res) => {
 // Get all users
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   const users = await dbAll(`
-    SELECT id, first_name, last_name, email, address, phone, status, is_admin, is_pool_manager, created_at, approved_at
+    SELECT id, first_name, last_name, email, address, phone, status, is_admin, is_pool_manager, created_at, approved_at, denial_note, denied_at, denied_by
     FROM users
     ORDER BY created_at DESC
   `);
@@ -2726,7 +2732,9 @@ app.post('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
     }
 
     await dbRun(`
-      UPDATE users SET status = 'approved', approved_at = CURRENT_TIMESTAMP, approved_by = 'admin'
+      UPDATE users
+      SET status = 'approved', approved_at = CURRENT_TIMESTAMP, approved_by = 'admin',
+          denied_at = NULL, denied_by = NULL, denial_note = NULL
       WHERE id = ?
     `, [id]);
 
@@ -2800,13 +2808,23 @@ app.post('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
 app.post('/api/admin/users/:id/deny', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
+    const denialNote = String(req.body.reason || req.body.note || '').trim();
+    if (!denialNote) {
+      return res.status(400).json({ error: 'A denial reason is required and will be logged as an admin note.' });
+    }
+
     const user = await dbGet('SELECT * FROM users WHERE id = ?', [id]);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    await dbRun(`UPDATE users SET status = 'denied' WHERE id = ?`, [id]);
+    const deniedBy = req.session.adminUserId || 'admin';
+    await dbRun(`
+      UPDATE users
+      SET status = 'denied', denied_at = CURRENT_TIMESTAMP, denied_by = ?, denial_note = ?
+      WHERE id = ?
+    `, [deniedBy, denialNote, id]);
 
     // Send denial email
     await sendEmail(
@@ -2828,7 +2846,7 @@ app.post('/api/admin/users/:id/deny', requireAdmin, async (req, res) => {
       `
     );
 
-    res.json({ success: true, message: `${user.first_name} ${user.last_name} has been denied.` });
+    res.json({ success: true, message: `${user.first_name} ${user.last_name} has been denied. Denial note logged.` });
 
   } catch (err) {
     console.error('Deny error:', err);

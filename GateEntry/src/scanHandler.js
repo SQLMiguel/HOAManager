@@ -10,6 +10,22 @@
 
 const db = require('./database');
 const gate = require('./gate');
+const scanEvents = require('./scanEvents');
+
+function publishScan(result, details) {
+  scanEvents.recordScan({
+    source: details.sourceLabel,
+    status: result.allowed ? 'allowed' : (result.reason === 'unknown' ? 'unknown' : 'denied'),
+    reason: result.reason,
+    response_ms: Date.now() - details.scanStart,
+    credential_type: details.credentialType,
+    device_platform: result.device_platform || details.devicePlatform || null,
+    card_id: details.cardId || null,
+    member: result.member || details.member || null,
+    entry_type_name: details.entryTypeName || null
+  });
+  return result;
+}
 
 function handleScan(credentialType, value, context) {
   const scanStart = Date.now();
@@ -26,7 +42,13 @@ function handleScan(credentialType, value, context) {
     console.log(`│  ✗ Unknown ${credentialType} credential`);
     console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
     gate.unknownTag();
-    return { allowed: false, reason: 'unknown' };
+    return publishScan({ allowed: false, reason: 'unknown' }, {
+      sourceLabel,
+      scanStart,
+      credentialType,
+      devicePlatform: platformHint,
+      cardId: displayValue === '***' ? null : displayValue
+    });
   }
 
   const credInfo = {
@@ -42,7 +64,15 @@ function handleScan(credentialType, value, context) {
     console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
     gate.denyAccess();
     db.recordCheckin(member.id, member.entry_type_id, 'denied', false, `Status: ${member.status}`, credInfo);
-    return { allowed: false, reason: `status:${member.status}` };
+    return publishScan({ allowed: false, reason: `status:${member.status}` }, {
+      sourceLabel,
+      scanStart,
+      credentialType: credInfo.credential_type,
+      devicePlatform: credInfo.device_platform,
+      cardId: displayValue === '***' ? null : displayValue,
+      member: { id: member.id, first_name: member.first_name, last_name: member.last_name },
+      entryTypeName: member.entry_type_name
+    });
   }
 
   const access = db.checkAccess(member);
@@ -52,20 +82,35 @@ function handleScan(credentialType, value, context) {
     console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
     gate.openGate();
     db.recordCheckin(member.id, member.entry_type_id, 'allowed', access.isHoliday, access.reason, credInfo);
-    return {
+    return publishScan({
       allowed: true,
       reason: access.reason,
       member: { id: member.id, first_name: member.first_name, last_name: member.last_name },
       credential_type: credInfo.credential_type,
       device_platform: credInfo.device_platform
-    };
+    }, {
+      sourceLabel,
+      scanStart,
+      credentialType: credInfo.credential_type,
+      devicePlatform: credInfo.device_platform,
+      cardId: displayValue === '***' ? null : displayValue,
+      entryTypeName: member.entry_type_name
+    });
   }
 
   console.log(`│  ✗ ACCESS DENIED — ${access.reason}`);
   console.log(`└─ Response time: ${Date.now() - scanStart}ms`);
   gate.denyAccess();
   db.recordCheckin(member.id, member.entry_type_id, 'denied', access.isHoliday, access.reason, credInfo);
-  return { allowed: false, reason: access.reason };
+  return publishScan({ allowed: false, reason: access.reason }, {
+    sourceLabel,
+    scanStart,
+    credentialType: credInfo.credential_type,
+    devicePlatform: credInfo.device_platform,
+    cardId: displayValue === '***' ? null : displayValue,
+    member: { id: member.id, first_name: member.first_name, last_name: member.last_name },
+    entryTypeName: member.entry_type_name
+  });
 }
 
 module.exports = { handleScan };

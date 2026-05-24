@@ -38,6 +38,8 @@
     .user-row:hover { box-shadow: var(--shadow-md); }
     .user-info h3 { font-size: 1.05rem; margin-bottom: 4px; }
     .user-info p { font-size: 0.85rem; color: var(--text-light); margin-bottom: 2px; }
+    .user-denial-note { font-size: 0.86rem; color: #8a1f11; margin-top: 6px; }
+    .user-denial-note-date { color: #777; }
     .user-info .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
     .badge-pending { background: #fff3cd; color: #856404; }
     .badge-approved { background: #d4edda; color: #155724; }
@@ -1131,6 +1133,7 @@
             <p><strong>Address:</strong> ${esc(user.address)}</p>
             ${user.phone ? `<p><strong>Phone:</strong> ${esc(user.phone)}</p>` : ''}
             <p style="font-size:0.8rem; color: #aaa; margin-top: 4px;">Registered: ${new Date(user.created_at).toLocaleDateString()}</p>
+            ${user.status === 'denied' && user.denial_note ? `<p class="user-denial-note"><strong>Denial note:</strong> ${esc(user.denial_note)}${user.denied_at ? ` <span class="user-denial-note-date">(${new Date(user.denied_at).toLocaleDateString()})</span>` : ''}</p>` : ''}
             ${renderHouseholdMembers(user)}
           </div>
           <div class="user-actions">
@@ -1229,13 +1232,26 @@
     };
 
     window.denyUser = async (id) => {
-      if (!confirm('Deny this resident? They will receive an email notification.')) return;
+      const reason = prompt('Enter the reason for denying this HOA member. This note will be logged in the admin panel:');
+      if (reason === null) return;
+      const trimmedReason = reason.trim();
+      if (!trimmedReason) {
+        showAdminNotification('A denial reason is required.', 'error');
+        return;
+      }
+      if (!confirm('Deny this resident and log this reason? They will receive an email notification.')) return;
       try {
-        const res = await fetch(`/api/admin/users/${id}/deny`, { method: 'POST' });
+        const res = await fetch(`/api/admin/users/${id}/deny`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: trimmedReason })
+        });
         const data = await res.json();
         if (data.success) {
           await loadUsers();
           showAdminNotification(data.message, 'success');
+        } else {
+          showAdminNotification(data.error || 'Error denying user.', 'error');
         }
       } catch (err) {
         showAdminNotification('Error denying user.', 'error');

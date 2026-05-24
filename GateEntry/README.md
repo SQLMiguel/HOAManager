@@ -41,6 +41,7 @@ Raspberry Pi-based RFID gate entry system for the Glenridge Community pool. Repl
 - **Holiday support**: Holiday schedules override regular schedules for that date
 - **Idempotent sync**: Check-in push uses UUIDs to prevent duplicates on retry
 - **Read-only Pi dashboard**: Built-in web UI to view local DB members/credentials/schedules/check-ins/sync status (no editing)
+- **Fire tablet live monitor**: Pi-hosted admin page that updates instantly as cards are scanned
 
 ## Supported Phone Access Methods
 
@@ -196,6 +197,40 @@ The dashboard can **view only**:
 - Sync log and summary counters
 
 No edit APIs are exposed by the viewer. All edits must be made on the HOA website admin panel and then synced to the Pi.
+
+## Fire Tablet Admin Live Monitor
+
+When `npm start` is running, open this on the Fire tablet while it is connected to the same Wi-Fi network as the Raspberry Pi:
+
+```text
+http://<pi-ip>:8080/tablet.html
+```
+
+The tablet page is designed for the Fire tablet browser and shows:
+
+- The newest scan immediately, without refreshing the page
+- Allowed, denied, and unknown-card results
+- Member name when the card matches a synced pool member
+- Card ID for card/fob scans, useful when an unknown card needs to be assigned
+- Credential type, device platform, reason, and response time
+- Recent scan history from the current gate controller process
+
+The page uses a server-sent events connection to the Pi at `/api/viewer/events`. If the browser cannot keep the live connection open, the page falls back to polling `/api/viewer/live-scans` every few seconds.
+
+Optional protection:
+
+- Set `VIEWER_ADMIN_KEY` in the Pi `.env` file to require a shared key for `/api/viewer/events` and `/api/viewer/live-scans`.
+- If `VIEWER_ADMIN_KEY` is blank but `PHONE_UNLOCK_KEY` is set, the live monitor uses `PHONE_UNLOCK_KEY` as the shared key.
+- Open `http://<pi-ip>:8080/tablet.html?gate_key=<key>` once, or enter the key when prompted. The tablet stores it locally for later visits.
+
+Recommended Fire tablet setup:
+
+1. Connect the tablet to the same local network as the Pi.
+2. Open Silk Browser and browse to `http://<pi-ip>:8080/tablet.html`.
+3. Add the page to the home screen or keep Silk in full-screen/kiosk mode.
+4. Keep the tablet plugged in near the gate/admin desk.
+
+Security note: the live monitor is read-only, but it can show member names and card IDs. Use `VIEWER_ADMIN_KEY`, keep the Pi dashboard on a trusted local network, or protect it behind a local reverse proxy if the network is shared.
 
 ## How Access Works
 

@@ -3,11 +3,44 @@ const path = require('path');
 const config = require('./config');
 const db = require('./database');
 const scanHandler = require('./scanHandler');
+const scanEvents = require('./scanEvents');
 const sync = require('./sync');
 
 function startViewer() {
   const app = express();
   const publicDir = path.join(__dirname, '..', 'public');
+
+  function getCookie(req, name) {
+    const cookie = req.headers.cookie || '';
+    const parts = cookie.split(';').map(part => part.trim());
+    const prefix = `${name}=`;
+    const match = parts.find(part => part.startsWith(prefix));
+    return match ? decodeURIComponent(match.slice(prefix.length)) : '';
+  }
+
+  function getProvidedViewerKey(req) {
+    return req.get('X-Gate-Viewer-Key')
+      || req.get('X-Gate-Phone-Key')
+      || req.query.gate_key
+      || req.body?.gate_key
+      || getCookie(req, 'gate_admin_key')
+      || '';
+  }
+
+  function requireLiveViewerAuth(req, res, next) {
+    if (!config.viewerAdminKey) return next();
+    if (getProvidedViewerKey(req) === config.viewerAdminKey) return next();
+    return res.status(401).json({ success: false, error: 'unauthorized' });
+  }
+
+  function publishRejectedPhoneUnlock(reason) {
+    scanEvents.recordScan({
+      source: 'phone-unlock',
+      status: 'denied',
+      reason,
+      credential_type: 'phone-unlock'
+    });
+  }
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
@@ -49,6 +82,41 @@ function startViewer() {
       limit: req.query.limit
     });
     res.json(rows);
+  });
+
+  app.get('/api/viewer/live-scans', requireLiveViewerAuth, (req, res) => {
+    res.json({
+      latestScan: scanEvents.getLatestScan(),
+      scans: scanEvents.getRecentScans(req.query.limit)
+    });
+  });
+
+  app.get('/api/viewer/events', requireLiveViewerAuth, (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive'
+    });
+
+    function send(type, payload) {
+      res.write(`event: ${type}\n`);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
+
+    send('ready', {
+      ok: true,
+      latestScan: scanEvents.getLatestScan(),
+      scans: scanEvents.getRecentScans(20)
+    });
+
+    const unsubscribe = scanEvents.subscribe((scan) => send('scan', scan));
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 25000);
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
   });
 
   // Manual sync trigger — allows the website's admin Pool Entry Management
@@ -110,6 +178,7 @@ function startViewer() {
   app.post('/api/gate/phone-unlock', (req, res) => {
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     if (!checkRateLimit(ip)) {
+      publishRejectedPhoneUnlock('rate_limited');
       return res.status(429).json({ allowed: false, reason: 'rate_limited' });
     }
 
@@ -117,6 +186,7 @@ function startViewer() {
     if (config.phoneUnlockKey) {
       const provided = req.get('X-Gate-Phone-Key') || req.body?.gate_key;
       if (provided !== config.phoneUnlockKey) {
+        publishRejectedPhoneUnlock('unauthorized');
         return res.status(401).json({ allowed: false, reason: 'unauthorized' });
       }
     }
@@ -126,6 +196,7 @@ function startViewer() {
     const token = body.token;
     const allowed = ['qr_totp', 'qr_static', 'ble_token', 'nfc_phone'];
     if (!allowed.includes(type) || !token) {
+      publishRejectedPhoneUnlock('invalid_request');
       return res.status(400).json({ allowed: false, reason: 'invalid_request' });
     }
 

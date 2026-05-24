@@ -213,6 +213,16 @@ Network interface the dashboard listens on.
 ### `VIEWER_PORT`
 TCP port for the dashboard. Default `8080`. Change only if another service already uses that port.
 
+### `VIEWER_ADMIN_KEY`
+Optional shared key for the Fire tablet live monitor scan feed.
+
+When set, the Pi requires this key before returning data from:
+
+- `/api/viewer/events`
+- `/api/viewer/live-scans`
+
+If this value is blank but `PHONE_UNLOCK_KEY` is set, the live monitor uses `PHONE_UNLOCK_KEY` as its shared key. Open the tablet page with `?gate_key=<key>` once, or enter the key when the tablet prompts for it.
+
 ---
 
 ## Phone access (optional)

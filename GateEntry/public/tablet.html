@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GateEntry Admin Tablet</title>
+  <link rel="stylesheet" href="./tablet.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">GateEntry live monitor</p>
+      <h1>Admin Tablet</h1>
+    </div>
+    <div class="connection" id="connectionState" role="status" aria-live="polite">Connecting</div>
+  </header>
+
+  <main class="tablet-shell">
+    <section class="hero-card" id="latestCard" aria-live="polite">
+      <div class="hero-topline">
+        <span class="result-pill result-waiting" id="latestStatus">Waiting</span>
+        <span class="time-label" id="latestTime">No scans yet</span>
+      </div>
+      <div class="member-name" id="latestMember">Ready for the next scan</div>
+      <div class="reason" id="latestReason">Keep this tablet on the same Wi-Fi as the Raspberry Pi.</div>
+      <dl class="scan-details">
+        <div>
+          <dt>Card ID</dt>
+          <dd id="latestCardId">Not available</dd>
+        </div>
+        <div>
+          <dt>Credential</dt>
+          <dd id="latestCredential">Unknown</dd>
+        </div>
+        <div>
+          <dt>Response</dt>
+          <dd id="latestResponse">--</dd>
+        </div>
+      </dl>
+      <div class="actions">
+        <button id="copyCardBtn" type="button">Copy card ID</button>
+        <button id="refreshBtn" type="button" class="secondary">Refresh</button>
+        <a href="./index.html" class="secondary link-button">Full dashboard</a>
+      </div>
+    </section>
+
+    <section class="side-panel">
+      <div class="panel-title-row">
+        <h2>Recent scans</h2>
+        <span id="scanCount">0 shown</span>
+      </div>
+      <div class="scan-list" id="scanList" role="feed" aria-live="polite" aria-label="Recent gate scans">
+        <article class="empty-state">No scans yet. The newest scan will appear here instantly.</article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="tablet-footer">
+    Open this page from the Fire tablet at http://&lt;pi-ip&gt;:8080/tablet.html.
+  </footer>
+
+  <script src="./tablet.js"></script>
+</body>
+</html>

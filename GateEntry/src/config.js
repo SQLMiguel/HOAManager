@@ -54,7 +54,11 @@ const config = {
 
   // Phone unlock endpoint — optional pre-shared key (leave blank to disable check).
   // Clients must send this in header X-Gate-Phone-Key or body.gate_key.
-  phoneUnlockKey: process.env.PHONE_UNLOCK_KEY || ''
+  phoneUnlockKey: process.env.PHONE_UNLOCK_KEY || '',
+
+  // Optional admin key for live viewer scan data. Defaults to PHONE_UNLOCK_KEY
+  // so one shared local key can protect both phone unlocks and tablet monitoring.
+  viewerAdminKey: process.env.VIEWER_ADMIN_KEY || process.env.PHONE_UNLOCK_KEY || ''
 };
 
 module.exports = config;
