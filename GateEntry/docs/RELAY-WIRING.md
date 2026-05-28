@@ -2,6 +2,8 @@
 
 How the Pi's GPIO 5 controls the magnetic lock through a relay module.
 
+**[See the complete wiring diagram](diagrams/gate-access-wiring.mmd) for all four sections: wiegand reader, opto board, relay board, and release button.**
+
 > ⚠️ **GPIO 17 (pin 11) and GPIO 27 (pin 13) are reserved for the EP1501
 > Wiegand reader (D0 and D1 inputs). The relay must use a different GPIO.**
 

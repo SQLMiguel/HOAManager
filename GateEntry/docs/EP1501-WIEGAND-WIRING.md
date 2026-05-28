@@ -8,6 +8,8 @@ continues to operate normally.
 The Pi listens **in parallel** with the EP1501 — the existing reader, wiring,
 and gate logic are not disturbed.
 
+**[See the complete wiring diagram](diagrams/gate-access-wiring.mmd) for all four sections: wiegand reader, opto board, relay board, and release button.**
+
 ---
 
 ## 1. Parts Needed

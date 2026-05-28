@@ -1,10 +1,12 @@
-// ─── Gate Hardware Controller ───────────────────────────
+// Gate Hardware Controller
 // Controls the magnetic lock relay, LEDs, and buzzer via GPIO.
 //
-// On a real Raspberry Pi, this uses the onoff library for GPIO.
+// On a real Raspberry Pi, this uses the onoff library for GPIO and falls back
+// to the Raspberry Pi OS pinctrl command when sysfs GPIO is not available.
 // On non-Pi systems, it logs actions to the console instead.
 
 const config = require('./config');
+const { execFileSync } = require('child_process');
 
 let Gpio;
 let relay = null;
@@ -13,6 +15,30 @@ let ledRed = null;
 let buzzer = null;
 let isSimulated = false;
 let gateOpenTimeout = null;
+
+function commandExists(command) {
+  try {
+    execFileSync('which', [command], { stdio: 'ignore' });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function createPinctrlOutput(pin, initialValue) {
+  function writeSync(value) {
+    execFileSync('pinctrl', ['set', String(pin), 'op', value ? 'dh' : 'dl'], { stdio: 'ignore' });
+  }
+
+  writeSync(initialValue);
+
+  return {
+    writeSync,
+    unexport() {
+      try { execFileSync('pinctrl', ['set', String(pin), 'ip'], { stdio: 'ignore' }); } catch (_) {}
+    }
+  };
+}
 
 function init() {
   try {
@@ -33,17 +59,32 @@ function init() {
     buzzer.writeSync(0);
 
     isSimulated = false;
-    console.log('  ✓ GPIO initialized (relay=' + config.relayPin +
+    console.log('  [OK] GPIO initialized (relay=' + config.relayPin +
       ', green=' + config.ledGreenPin +
       ', red=' + config.ledRedPin +
       ', buzzer=' + config.buzzerPin + ')');
   } catch (e) {
-    isSimulated = true;
-    console.log('  ⚠ GPIO not available — gate hardware simulated');
+    try {
+      if (!commandExists('pinctrl')) throw e;
+
+      relay = createPinctrlOutput(config.relayPin, 1);
+      ledGreen = createPinctrlOutput(config.ledGreenPin, 1);
+      ledRed = createPinctrlOutput(config.ledRedPin, 0);
+      buzzer = createPinctrlOutput(config.buzzerPin, 0);
+
+      isSimulated = false;
+      console.log('  [OK] GPIO initialized with pinctrl fallback (relay=' + config.relayPin +
+        ', green=' + config.ledGreenPin +
+        ', red=' + config.ledRedPin +
+        ', buzzer=' + config.buzzerPin + ')');
+    } catch (_) {
+      isSimulated = true;
+      console.log('  [WARN] GPIO not available - gate hardware simulated');
+    }
   }
 }
 
-// ── Gate Actions ────────────────────────────────────────
+// Gate Actions
 
 function openGate(durationMs) {
   const duration = durationMs || config.gateOpenDurationMs;
@@ -53,9 +94,9 @@ function openGate(durationMs) {
   }
 
   if (isSimulated) {
-    console.log(`  🔓 [SIM] Gate OPEN (${duration}ms)`);
+    console.log(`  [SIM] Gate OPEN (${duration}ms)`);
     gateOpenTimeout = setTimeout(() => {
-      console.log('  🔒 [SIM] Gate LOCKED');
+      console.log('  [SIM] Gate LOCKED');
       gateOpenTimeout = null;
     }, duration);
     return;
@@ -84,7 +125,7 @@ function openGate(durationMs) {
 
 function denyAccess() {
   if (isSimulated) {
-    console.log('  🚫 [SIM] Access DENIED — red flash + buzzer');
+    console.log('  [SIM] Access DENIED - red flash + buzzer');
     return;
   }
 
@@ -105,7 +146,7 @@ function denyAccess() {
 
 function unknownTag() {
   if (isSimulated) {
-    console.log('  ❓ [SIM] Unknown RFID tag — red flash');
+    console.log('  [SIM] Unknown RFID tag - red flash');
     return;
   }
 
@@ -118,7 +159,7 @@ function unknownTag() {
   setTimeout(() => buzzer.writeSync(0), 800);
 }
 
-// ── Cleanup ─────────────────────────────────────────────
+// Cleanup
 
 function cleanup() {
   if (gateOpenTimeout) clearTimeout(gateOpenTimeout);
@@ -131,7 +172,7 @@ function cleanup() {
     if (buzzer) { buzzer.writeSync(0); buzzer.unexport(); }
   }
 
-  console.log('  ✓ GPIO cleaned up, gate locked');
+  console.log('  [OK] GPIO cleaned up, gate locked');
 }
 
 module.exports = {
