@@ -103,6 +103,33 @@ async function sendHeartbeat() {
   }
 }
 
+// Push a compact read-only snapshot to the website so admins can still see
+// the latest known gate-device data when the public website cannot reach the
+// Pi viewer directly.
+async function pushViewerSnapshot() {
+  try {
+    const snapshot = db.getViewerSnapshot();
+    const res = await fetch(`${config.websiteUrl}/api/gate/snapshot`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        device_id: config.deviceId,
+        captured_at: new Date().toISOString(),
+        snapshot
+      }),
+      timeout: 30000
+    });
+    if (!res.ok) {
+      throw new Error(`Snapshot push failed: HTTP ${res.status} ${res.statusText}`);
+    }
+    console.log('  [OK] Pushed gate viewer snapshot to website.');
+    return true;
+  } catch (e) {
+    console.log(`  [WARN] Gate viewer snapshot not pushed: ${e.message}`);
+    return false;
+  }
+}
+
 // ── Full Sync Cycle ─────────────────────────────────────
 
 async function runSync() {
@@ -134,6 +161,9 @@ async function runSync() {
 
   // Step 3: Heartbeat
   await sendHeartbeat();
+
+  // Step 4: Cached admin Gate Device snapshot
+  await pushViewerSnapshot();
 
   const elapsed = Date.now() - startTime;
   console.log(`── Sync cycle completed in ${elapsed}ms ──\n`);
@@ -168,6 +198,7 @@ module.exports = {
   pullFromWebsite,
   pushToWebsite,
   sendHeartbeat,
+  pushViewerSnapshot,
   runSync,
   startPeriodicSync,
   stopPeriodicSync

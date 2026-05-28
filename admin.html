@@ -2824,10 +2824,10 @@
         return;
       }
       const cards = [
-        { k: 'Members', v: summary.members_total ?? summary.members ?? 0, sub: `Active: ${summary.members_active ?? '—'}` },
-        { k: 'Credentials', v: summary.credentials_total ?? summary.credentials ?? 0, sub: `Active: ${summary.credentials_active ?? '—'}` },
-        { k: 'Schedules', v: summary.schedules_total ?? summary.schedules ?? 0, sub: '' },
-        { k: 'Check-ins', v: summary.checkins_total ?? summary.checkins ?? 0, sub: `Pending sync: ${summary.pending_sync ?? summary.pendingSync ?? 0}` },
+        { k: 'Members', v: summary.members_total ?? summary.members ?? summary.activeMembers ?? 0, sub: `Active: ${summary.members_active ?? summary.activeMembers ?? '-'}` },
+        { k: 'Credentials', v: summary.credentials_total ?? summary.credentials?.total ?? summary.credentials ?? 0, sub: `Active: ${summary.credentials_active ?? summary.credentials?.total ?? '-'}` },
+        { k: 'Schedules', v: summary.schedules_total ?? summary.schedules ?? summary.activeSchedules ?? 0, sub: '' },
+        { k: 'Check-ins', v: summary.checkins_total ?? summary.checkins ?? summary.totalCheckins ?? 0, sub: `Pending sync: ${summary.pending_sync ?? summary.pendingSync ?? 0}` },
         { k: 'Last sync', v: fmtTs(summary.last_sync || summary.lastSync), sub: '' }
       ];
       gateSummaryEl.innerHTML = cards.map(c => `
@@ -2868,7 +2868,12 @@
           });
           return;
         }
-        setGateStatus(`Connected · ${data.viewerUrl}`, 'ok');
+        if (data.cached) {
+          const cacheTime = fmtTs(data.cacheCapturedAt || data.cacheUpdatedAt);
+          setGateStatus(`Cached gate data from ${cacheTime}${data.error ? ` (live unreachable: ${data.error})` : ''}`, 'err');
+        } else {
+          setGateStatus(`Connected · ${data.viewerUrl}`, 'ok');
+        }
         renderGateSummary(data.summary);
 
         renderGateTable('gateSyncLogTable', data.syncLog, [

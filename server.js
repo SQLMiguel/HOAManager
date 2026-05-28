@@ -614,6 +614,18 @@ async function initDb() {
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
+  // Latest gate-device snapshot pushed by the Raspberry Pi. This lets the
+  // admin Gate Device panel show cached data even when the live Pi viewer is
+  // not reachable from the public website server.
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS gate_device_snapshots (
+      device_id VARCHAR(100) PRIMARY KEY,
+      captured_at DATETIME NOT NULL,
+      snapshot_json LONGTEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+
   // Seed default entry types if empty
   const [[typeCount]] = await conn.query('SELECT COUNT(*) as c FROM pool_entry_types');
   if (typeCount.c === 0) {
@@ -1002,7 +1014,7 @@ async function sendSms(to, body) {
 }
 
 // ── Middleware ───────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 const sessionStore = new MySQLStore({
@@ -4653,6 +4665,39 @@ app.post('/api/gate/heartbeat', requireGateKey, async (req, res) => {
 const GATE_VIEWER_URL = (process.env.GATE_VIEWER_URL || 'http://localhost:8080').replace(/\/$/, '');
 const GATE_VIEWER_KEY = process.env.GATE_VIEWER_KEY || process.env.PHONE_UNLOCK_KEY || '';
 
+function toMysqlDateTime(value) {
+  const d = value ? new Date(value) : new Date();
+  const safe = isNaN(d.getTime()) ? new Date() : d;
+  return safe.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getCachedGateSnapshot() {
+  const row = await dbGet(`
+    SELECT device_id, captured_at, updated_at, snapshot_json
+    FROM gate_device_snapshots
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `);
+  if (!row) return null;
+  const snapshot = parseJsonObject(row.snapshot_json);
+  if (!snapshot) return null;
+  return {
+    deviceId: row.device_id,
+    capturedAt: row.captured_at,
+    updatedAt: row.updated_at,
+    snapshot
+  };
+}
+
 async function fetchGateViewer(pathSuffix, { method = 'GET', body = null, timeoutMs = 8000 } = {}) {
   const url = `${GATE_VIEWER_URL}${pathSuffix}`;
   const headers = { 'Content-Type': 'application/json' };
@@ -4701,13 +4746,69 @@ app.get('/api/admin/gate/snapshot', requirePoolManager, async (req, res) => {
         }
       }
     });
+
+    if (!payload.reachable) {
+      const cached = await getCachedGateSnapshot();
+      if (cached) {
+        return res.json({
+          reachable: true,
+          cached: true,
+          deviceId: cached.deviceId,
+          cacheCapturedAt: cached.capturedAt,
+          cacheUpdatedAt: cached.updatedAt,
+          viewerUrl: GATE_VIEWER_URL,
+          error: payload.error,
+          ...cached.snapshot
+        });
+      }
+    }
+
     res.json(payload);
   } catch (err) {
+    const cached = await getCachedGateSnapshot();
+    if (cached) {
+      return res.json({
+        reachable: true,
+        cached: true,
+        deviceId: cached.deviceId,
+        cacheCapturedAt: cached.capturedAt,
+        cacheUpdatedAt: cached.updatedAt,
+        viewerUrl: GATE_VIEWER_URL,
+        error: (err && err.message) || 'Failed to contact gate.',
+        ...cached.snapshot
+      });
+    }
     res.status(502).json({
       reachable: false,
       viewerUrl: GATE_VIEWER_URL,
       error: (err && err.message) || 'Failed to contact gate.'
     });
+  }
+});
+
+app.post('/api/gate/snapshot', requireGateKey, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const deviceId = String(body.device_id || '').trim();
+    const snapshot = body.snapshot;
+    if (!deviceId || !snapshot || typeof snapshot !== 'object') {
+      return res.status(400).json({ success: false, error: 'device_id and snapshot are required.' });
+    }
+
+    const capturedAt = toMysqlDateTime(body.captured_at);
+    const snapshotJson = JSON.stringify(snapshot);
+    await dbRun(`
+      INSERT INTO gate_device_snapshots (device_id, captured_at, snapshot_json)
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        captured_at = VALUES(captured_at),
+        snapshot_json = VALUES(snapshot_json),
+        updated_at = CURRENT_TIMESTAMP
+    `, [deviceId, capturedAt, snapshotJson]);
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err && err.message) || 'Failed to store snapshot.' });
   }
 });
 

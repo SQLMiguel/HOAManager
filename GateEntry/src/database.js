@@ -626,6 +626,17 @@ function getSyncLogForViewer(limit = 200) {
   `).all(capped);
 }
 
+function getViewerSnapshot() {
+  return {
+    summary: getViewerSummary(),
+    members: getMembersForViewer({ limit: 500 }),
+    credentials: getCredentialsForViewer({ limit: 500 }),
+    schedules: getSchedulesForViewer(200),
+    checkins: getRecentCheckinsForViewer(100),
+    syncLog: getSyncLogForViewer(25)
+  };
+}
+
 function close() {
   if (db) db.close();
 }
@@ -655,5 +666,6 @@ module.exports = {
   getRecentCheckinsForViewer,
   getSyncLogForViewer,
   getCredentialsForViewer,
+  getViewerSnapshot,
   close
 };
