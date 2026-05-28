@@ -42,6 +42,16 @@ function configureInputPullup(pin) {
   execFileSync('pinctrl', ['set', String(pin), 'ip', 'pu'], { stdio: 'ignore' });
 }
 
+function isLowTransition(line) {
+  const text = String(line || '').toLowerCase();
+  if (/\b(hi|high)\b/.test(text) || /\|\s*1\b/.test(text)) return false;
+  if (/\b(lo|low)\b/.test(text) || /\|\s*0\b/.test(text)) return true;
+  // Some pinctrl versions only print that an event occurred. Treat those as
+  // valid so older output formats still work, but explicitly ignore high lines
+  // above to avoid double-counting Wiegand pulse release edges.
+  return true;
+}
+
 // Convert an array of bit values (0/1) into an uppercase hex string.
 // Parity bits (index 0 and last) are stripped before conversion.
 function decodeFrame(bits) {
@@ -180,6 +190,7 @@ function startPinctrlPoll(pin, bit, onBit) {
       const lines = String(data).split(/\r?\n/).filter(Boolean);
       for (const line of lines) {
         if (/waiting|timeout/i.test(line)) continue;
+        if (!isLowTransition(line)) continue;
         onBit(bit)(null);
       }
     });
