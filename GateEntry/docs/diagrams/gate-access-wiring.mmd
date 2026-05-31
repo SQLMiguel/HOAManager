@@ -1,53 +1,52 @@
+<!-- Title: Raspberry Pi 5 Gate Access Wiring (PC817 opto + Waveshare RPi Relay Board) -->
+<!-- Owner artifact: GateEntry/docs/EP1501-WIEGAND-WIRING.md + RELAY-WIRING.md -->
+<!-- Hardware: PC817 (817) 2-channel optocoupler module; Waveshare RPi Relay Board (CH1=BCM26/pin37, active-LOW) -->
+
 ```mermaid
 graph TB
-    subgraph SectionA["SECTION A - WIEGAND READER WIRES"]
-        Reader["Wiegand Reader<br/>on EP1501 TB2"]
-        Reader -->|TB2-1: +12V| Conn1["Power (LEAVE)"]
-        Reader -->|TB2-2: LED| Conn2["LED (LEAVE)"]
-        Reader -->|TB2-3: BZR| Conn3["Buzzer (LEAVE)"]
-        Reader -->|TB2-4: CLK/D1| OptoD1["Opto CH2"]
-        Reader -->|TB2-5: DAT/D0| OptoD0["Opto CH1"]
-        Reader -->|TB2-6: GND| OptoGND["Opto GND"]
+    subgraph SectionA["SECTION A - EXISTING WIEGAND READER WIRES (EP1501 TB2)"]
+        Reader["Wiegand Reader<br/>wired to EP1501 TB2"]
+        Reader -->|TB2-1 +12V| Conn1["Reader Power<br/>(LEAVE CONNECTED)"]
+        Reader -->|TB2-2 LED| Conn2["Reader LED<br/>(LEAVE CONNECTED)"]
+        Reader -->|TB2-3 BZR| Conn3["Reader Buzzer<br/>(LEAVE CONNECTED)"]
+        Reader -->|TB2-4 CLK/D1| OptoIn2["PC817 CH2 input"]
+        Reader -->|TB2-5 DAT/D0| OptoIn1["PC817 CH1 input"]
+        Reader -->|TB2-6 GND| OptoInGND["PC817 input GND<br/>(reference)"]
     end
 
-    subgraph SectionB["SECTION B - OPTO BOARD TO RASPBERRY PI"]
-        OptoD0 -->|Channel 1 Output| Pin11["RaspPi Pin 11<br/>GPIO17 / D0"]
-        OptoD1 -->|Channel 2 Output| Pin13["RaspPi Pin 13<br/>GPIO27 / D1"]
-        OptoVCC["Opto VCC<br/>3.3V side"]
-        OptoVCC -->|Pi VCC| Pin1["RaspPi Pin 1<br/>3.3V"]
-        OptoGND -->|Pi GND| Pin6["RaspPi Pin 6<br/>GND"]
+    subgraph SectionB["SECTION B - PC817 (817) OPTO MODULE TO RASPBERRY PI"]
+        OptoIn1 --> Opto["PC817 2-Channel<br/>Optocoupler Module<br/>(isolates reader from Pi)"]
+        OptoIn2 --> Opto
+        OptoInGND --> Opto
+        Opto -->|CH1 output| Pin11["Pi Pin 11 / GPIO17 (D0)"]
+        Opto -->|CH2 output| Pin13["Pi Pin 13 / GPIO27 (D1)"]
+        Opto -->|Pi-side VCC| Pin1["Pi Pin 1 / 3.3V<br/>(pulls up outputs)"]
+        Opto -->|Pi-side GND| Pin6["Pi Pin 6 / GND"]
     end
 
-    subgraph SectionC["SECTION C - RASPBERRY PI TO RELAY BOARD"]
-        Pin37["RaspPi Pin 37<br/>GPIO26"]
-        Pin37 -->|Control| Relay["Waveshare Relay<br/>Channel 1"]
-        RelayPower["Relay 40-pin<br/>Header"]
-        RelayPower -->|Attaches to| RaspPiHeader["RaspPi 40-pin<br/>Header"]
+    subgraph SectionC["SECTION C - WAVESHARE RPi RELAY BOARD ON PI"]
+        Relay["Waveshare RPi Relay Board<br/>attaches to 40-pin header<br/>Relay_JMP jumper ON | ACTIVE-LOW"]
+        Pin37["Pi Pin 37 / GPIO26 (BCM26)<br/>CH1 control"]
+        Pin37 -->|LOW = energize CH1| Relay
     end
 
-    subgraph SectionD["SECTION D - RELAY TO RELEASE BUTTON"]
-        Relay -->|CH1 COM| COM["Relay COM"]
-        Relay -->|CH1 NO| NO["Relay NO"]
-        Relay -->|CH1 NC| NC["Relay NC<br/>Not Used"]
-        
-        ButtonA["Inside Release<br/>Button Wire A"]
-        ButtonB["Inside Release<br/>Button Wire B"]
-        
-        ButtonA -->|to| ExistingA["Existing Button<br/>Terminal A"]
-        ButtonA -->|to| COM
-        
-        ButtonB -->|to| ExistingB["Existing Button<br/>Terminal B"]
-        ButtonB -->|to| NO
+    subgraph SectionD["SECTION D - RELAY CH1 TO INSIDE RELEASE BUTTON"]
+        Relay -->|CH1 COM| COM["Relay CH1 COM"]
+        Relay -->|CH1 NO| NO["Relay CH1 NO"]
+        Relay -.->|CH1 NC| NC["Relay CH1 NC<br/>(NOT USED)"]
+        COM --> ExistingA["Existing release<br/>button terminal A"]
+        NO --> ExistingB["Existing release<br/>button terminal B"]
+        ExistingA -.->|in parallel| Btn["Manual Release Button<br/>(relay closing = button press)"]
+        ExistingB -.->|in parallel| Btn
     end
 
-    RaspPiHeader -.->|contains| Pin1
-    RaspPiHeader -.->|contains| Pin6
-    RaspPiHeader -.->|contains| Pin11
-    RaspPiHeader -.->|contains| Pin13
-    RaspPiHeader -.->|contains| Pin37
+    Note1["NOTE: PC817 INVERTS polarity. Wiegand idles HIGH / pulses LOW;<br/>after the opto the Pi may read idle LOW / pulse HIGH. Confirm<br/>falling-vs-rising edge in wiegand.js during the card-tap test."]
+    Note2["NOTE: The Waveshare board covers the whole 40-pin header.<br/>Use a stacking / pass-through header (or wire the relay board by<br/>Dupont cable with 5V + 3.3V + GND) so the PC817 can still reach<br/>pins 1, 6, 11, 13."]
 
     style SectionA fill:#e1f5ff
     style SectionB fill:#f3e5f5
     style SectionC fill:#e8f5e9
     style SectionD fill:#fff3e0
+    style Note1 fill:#fff3cd,stroke:#e0a800
+    style Note2 fill:#fff3cd,stroke:#e0a800
 ```

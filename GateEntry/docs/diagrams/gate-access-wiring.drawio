@@ -68,7 +68,7 @@
           <mxGeometry x="20" y="480" width="400" height="30" as="geometry"/>
         </mxCell>
         
-        <mxCell id="opto" value="SparkFun Opto Board" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;" vertex="1" parent="1">
+        <mxCell id="opto" value="PC817 2-Channel&#10;Optocoupler Module&#10;(817 board)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;" vertex="1" parent="1">
           <mxGeometry x="40" y="540" width="140" height="60" as="geometry"/>
         </mxCell>
         
@@ -131,24 +131,24 @@
         </mxCell>
         
         <!-- SECTION C: PI TO RELAY -->
-        <mxCell id="sectionC" value="SECTION C - RASPBERRY PI TO RELAY BOARD" style="text;fontSize=14;fontStyle=1;fillColor=#e8f5e9;strokeColor=#1b5e20;rounded=1;" vertex="1" parent="1">
+        <mxCell id="sectionC" value="SECTION C - WAVESHARE RPi RELAY BOARD ON PI" style="text;fontSize=14;fontStyle=1;fillColor=#e8f5e9;strokeColor=#1b5e20;rounded=1;" vertex="1" parent="1">
           <mxGeometry x="20" y="920" width="400" height="30" as="geometry"/>
         </mxCell>
         
-        <mxCell id="relay_board" value="Waveshare Relay Board&#10;40-pin Header" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#2e7d32;" vertex="1" parent="1">
-          <mxGeometry x="60" y="980" width="140" height="60" as="geometry"/>
+        <mxCell id="relay_board" value="Waveshare RPi Relay Board&#10;attaches to 40-pin header&#10;Relay_JMP jumper ON" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#2e7d32;" vertex="1" parent="1">
+          <mxGeometry x="60" y="980" width="160" height="60" as="geometry"/>
         </mxCell>
         
-        <mxCell id="relay_note" value="Relay Channel 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#2e7d32;" vertex="1" parent="1">
-          <mxGeometry x="240" y="980" width="120" height="60" as="geometry"/>
+        <mxCell id="relay_note" value="Relay CH1 (ACTIVE-LOW)&#10;GPIO26 LOW = energize" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#2e7d32;" vertex="1" parent="1">
+          <mxGeometry x="260" y="980" width="140" height="60" as="geometry"/>
         </mxCell>
         
-        <mxCell id="pin37" value="Pin 37 / GPIO26" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffccbc;strokeColor=#d84315;" vertex="1" parent="1">
-          <mxGeometry x="60" y="1070" width="140" height="40" as="geometry"/>
+        <mxCell id="pin37" value="Pin 37 / GPIO26&#10;(BCM26)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffccbc;strokeColor=#d84315;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1070" width="160" height="40" as="geometry"/>
         </mxCell>
         
-        <mxCell id="ch1_control" value="CH1 Control Pin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#2e7d32;" vertex="1" parent="1">
-          <mxGeometry x="240" y="1070" width="120" height="40" as="geometry"/>
+        <mxCell id="ch1_control" value="CH1 control input&#10;(BCM26)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#2e7d32;" vertex="1" parent="1">
+          <mxGeometry x="260" y="1070" width="140" height="40" as="geometry"/>
         </mxCell>
         
         <mxCell id="arrowRelay" edge="1" parent="1" source="pin37" target="ch1_control">
@@ -221,9 +221,22 @@
           </mxGeometry>
         </mxCell>
         
+        <!-- ACCURACY NOTES -->
+        <mxCell id="note_invert" value="ACCURACY NOTE (PC817 / 817 module): the optocoupler INVERTS polarity. Wiegand idles HIGH and pulses LOW, so after the opto the Pi may read idle LOW / pulse HIGH. Confirm falling-vs-rising edge in wiegand.js during the card-tap test. Pi 3.3V on the Pi-side VCC pulls the two outputs up." style="text;fontSize=11;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#e0a800;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="540" width="320" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="note_header" value="ACCURACY NOTE (Waveshare RPi Relay Board): the board covers the FULL 40-pin header. Use a stacking / pass-through header, OR wire the relay board with Dupont cables (connect 5V + 3.3V + GND), so the PC817 can still reach pins 1, 6, 11, 13. Relay_JMP jumper must be ON for the Pi to control the relay. CH1=BCM26/pin37, CH2=BCM20/pin38, CH3=BCM21/pin40." style="text;fontSize=11;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#e0a800;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="960" width="320" height="130" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="note_parallel" value="ACCURACY NOTE (Section D): relay CH1 contacts wire IN PARALLEL with the existing manual release button. Energizing CH1 closes COM-NO, which is electrically identical to pressing the button. NC is unused. The manual button keeps working independently." style="text;fontSize=11;align=left;verticalAlign=top;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#e0a800;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1210" width="320" height="110" as="geometry"/>
+        </mxCell>
+        
         <!-- Legend -->
-        <mxCell id="legend" value="COLOR LEGEND: [Blue] Existing wiring | [Purple] Opto isolation | [Green] Relay control | [Orange] Release mechanism" style="text;fontSize=10;fillColor=#f5f5f5;strokeColor=#999999;rounded=1;" vertex="1" parent="1">
-          <mxGeometry x="20" y="1400" width="700" height="40" as="geometry"/>
+        <mxCell id="legend" value="COLOR LEGEND: [Blue] Existing reader wiring | [Purple] PC817 opto isolation | [Green] Relay control | [Orange] Release mechanism | [Yellow] Accuracy notes" style="text;fontSize=10;fillColor=#f5f5f5;strokeColor=#999999;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1400" width="900" height="40" as="geometry"/>
         </mxCell>
       </root>
     </mxGraphModel>

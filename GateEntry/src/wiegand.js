@@ -2,11 +2,19 @@
 // Decodes Wiegand 26- and 34-bit card reads from the EP1501 reader
 // via GPIO using the onoff library.
 //
-// Wiring (per WiringDiagram.png):
-//   EP1501 TB2-5 (DAT / D0) -> TXS0108E B1->A1 -> GPIO 17 (INPUT)
-//   EP1501 TB2-4 (CLK / D1) -> TXS0108E B2->A2 -> GPIO 27 (INPUT)
+// Wiring (per docs/diagrams/gate-access-wiring.mmd):
+//   EP1501 TB2-5 (DAT / D0) -> HY-M154 IN1 ->[opto]-> V1 -> GPIO 17 (INPUT, pull-up)
+//   EP1501 TB2-4 (CLK / D1) -> HY-M154 IN2 ->[opto]-> V2 -> GPIO 27 (INPUT, pull-up)
 //
-// Protocol:
+// The HY-M154 (817) board outputs are open-collector, so GPIO17/GPIO27 are
+// configured as inputs WITH INTERNAL PULL-UP to supply the idle HIGH level.
+//
+// NOTE - the 817 board INVERTS the raw Wiegand signal: the reader idles HIGH
+// and pulses LOW, but after the optocoupler the Pi sees idle LOW / pulse HIGH.
+// If no bits decode during the bench test, switch the watch edge below from
+// 'falling' to 'rising' (the data-bit edge is inverted by the opto).
+//
+// Protocol (at the reader, before the inverting opto):
 //   Both lines idle HIGH.
 //   Falling edge on D0 = bit '0'; falling edge on D1 = bit '1'.
 //   A frame ends after FRAME_TIMEOUT_MS of silence.
@@ -74,6 +82,17 @@ function decodeFrame(bits) {
 function init() {
   try {
     Gpio = require('onoff').Gpio;
+
+    // Enable the internal pull-ups first. The HY-M154 (817) outputs are
+    // open-collector and can only pull LOW, so GPIO17/GPIO27 need an internal
+    // pull-up to read a stable idle HIGH. onoff (sysfs) cannot set bias, so use
+    // pinctrl when present - best effort, never fatal.
+    if (commandExists('pinctrl')) {
+      try {
+        configureInputPullup(config.wiegandD0Pin);
+        configureInputPullup(config.wiegandD1Pin);
+      } catch (_) { /* pull-up is best effort; continue with onoff watchers */ }
+    }
 
     // GPIO direction must be 'in'; never drive D0/D1 as outputs -
     // the EP1501 reader drives these lines.
