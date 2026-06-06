@@ -16,6 +16,10 @@ let serialReader = null;
 let isSimulated = false;
 let mode = 'simulated'; // 'wiegand' | 'mfrc522' | 'serial' | 'simulated'
 
+function formatHexByte(value) {
+  return `0x${Number(value).toString(16).toUpperCase().padStart(2, '0')}`;
+}
+
 function initWiegand() {
   wiegand.init();
   mode = 'wiegand';
@@ -25,14 +29,23 @@ function initMfrc522() {
   const Mfrc522 = require('mfrc522-rpi');
   const SoftSPI = require('rpi-softspi');
   const softSPI = new SoftSPI({
-    clock: 23,  // SCLK
-    mosi: 19,   // MOSI
-    miso: 21,   // MISO
-    client: 24  // SDA / CS
+    clock: 11,  // BCM GPIO 11 (Pi header pin 23) - SCLK
+    mosi: 10,   // BCM GPIO 10 (Pi header pin 19) - MOSI
+    miso: 9,    // BCM GPIO 9  (Pi header pin 21) - MISO
+    client: 8   // BCM GPIO 8  (Pi header pin 24) - SDA / CS
   });
-  reader = new Mfrc522(softSPI).setResetPin(22);
+  reader = new Mfrc522(softSPI).setResetPin(25);
+  reader.reset();
+
+  const version = reader.readRegister(0x37);
+  if (version !== 0x91 && version !== 0x92) {
+    throw new Error(
+      `MFRC522 version check failed (${formatHexByte(version)}). Verify SPI is enabled and the reader is wired to BCM 11/10/9/8 with reset on BCM 25.`
+    );
+  }
+
   mode = 'mfrc522';
-  console.log('  ✓ MFRC522 RFID reader initialized (SPI)');
+  console.log(`  ✓ MFRC522 RFID reader initialized (SPI, version ${formatHexByte(version)})`);
 }
 
 function initSerial() {
@@ -161,6 +174,26 @@ function startPolling(onTag, debounceMs = 3000) {
     return serialReader.port;
   }
 
+  // ── MFRC522 (SPI) hardware polling ─────────────────────
+  if (mode === 'mfrc522') {
+    let lastTag = null;
+    let lastTagTime = 0;
+    const intervalMs = 100;
+    const interval = setInterval(() => {
+      const uid = readTag();
+      if (uid) {
+        const now = Date.now();
+        if (uid !== lastTag || (now - lastTagTime) > debounceMs) {
+          lastTag = uid;
+          lastTagTime = now;
+          onTag(uid);
+        }
+      }
+    }, intervalMs);
+    console.log(`  ✓ MFRC522 polling started (${intervalMs}ms interval, ${debounceMs}ms debounce)`);
+    return interval;
+  }
+
   // ── Simulation (keyboard) ──────────────────────────────
   if (isSimulated) {
     const readline = require('readline');
@@ -173,22 +206,7 @@ function startPolling(onTag, debounceMs = 3000) {
     return rl;
   }
 
-  // ── MFRC522 (SPI) hardware polling ─────────────────────
-  let lastTag = null;
-  let lastTagTime = 0;
-  const interval = setInterval(() => {
-    const uid = readTag();
-    if (uid) {
-      const now = Date.now();
-      if (uid !== lastTag || (now - lastTagTime) > debounceMs) {
-        lastTag = uid;
-        lastTagTime = now;
-        onTag(uid);
-      }
-    }
-  }, 200);
-  console.log('  ✓ MFRC522 polling started (200ms interval, ' + debounceMs + 'ms debounce)');
-  return interval;
+  return null;
 }
 
 function isSimulationMode() {

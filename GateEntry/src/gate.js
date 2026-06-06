@@ -44,8 +44,8 @@ function init() {
   try {
     Gpio = require('onoff').Gpio;
 
-    // Relay controls the magnetic lock (HIGH = locked, LOW = unlocked)
-    // Using active-low relay module: write 0 to energize (unlock)
+    // Active-low relay: writeSync(0) = energized = gate unlocked.
+    //                    writeSync(1) = released  = gate locked.
     relay = new Gpio(config.relayPin, 'out');
     relay.writeSync(1); // Start locked
 
