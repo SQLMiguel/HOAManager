@@ -50,7 +50,7 @@ const viewerServer = viewer.startViewer();
 // endpoint (see viewer.js) can reuse the exact same logic.
 
 function handleRfidScan(tagId) {
-  // The MFRC522 reader returns a UID regardless of whether the source
+  // The reader returns a UID regardless of whether the source
   // is a physical card, an Apple Wallet NFC pass, or an Android HCE tag.
   // lookupByCredential('rfid', ...) internally also checks nfc_phone.
   return scanHandler.handleScan('rfid', tagId, {

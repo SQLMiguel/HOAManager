@@ -1,6 +1,6 @@
 // ─── Unified Scan Handler ───────────────────────────────
 // Validates any credential type through the same access-check pipeline:
-//   - rfid         : physical MFRC522 card UID
+//   - rfid         : physical card UID
 //   - nfc_phone    : iPhone Wallet NFC pass or Android HCE tag UID
 //   - ble_token    : BLE advertisement token (companion app)
 //   - qr_static    : fixed token printed/embedded in a Wallet pass

@@ -1,6 +1,6 @@
 // ─── RFID Test Script ───────────────────────────────────
-// Tests RFID reader hardware. Run on the Raspberry Pi to verify
-// the MFRC522 module is wired correctly and reading tags.
+// Tests the configured RFID reader (Wiegand or serial). Run on the
+// Raspberry Pi to verify the reader is wired correctly and reading tags.
 //
 // Usage: node src/test-rfid.js
 

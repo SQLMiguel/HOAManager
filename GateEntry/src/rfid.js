@@ -1,51 +1,27 @@
 // ─── RFID Reader Module ─────────────────────────────────
-// Supports four reader backends, selected via config.readerType:
+// Supports three reader backends, selected via config.readerType:
 //   'wiegand' — EP1501 Wiegand reader via GPIO (D0/D1 edge detection)
-//   'mfrc522' — MFRC522 over SPI/SoftSPI (GPIO-attached)
 //   'serial'  — RS485/USB serial reader on /dev/ttyUSB* (ASCII line protocol)
-//   'auto'    — try wiegand first, then mfrc522, then serial, else simulation
+//   'auto'    — try wiegand first, then serial, else simulation
 //
 // On a desktop with no hardware, falls back to keyboard simulation.
+//
+// NOTE: A legacy MFRC522 (SPI/SoftSPI) backend was removed. The mfrc522-rpi /
+// rpi-softspi libraries rely on the bcm2835/sysfs GPIO interface, which does not
+// work on the Raspberry Pi 5 (RP1 GPIO) — it silently falls back to a mock mode
+// and never reads cards. The production gate uses the Wiegand (EP1501) reader.
 
 const config = require('./config');
 const wiegand = require('./wiegand');
 const fs = require('fs');
 
-let reader = null;
 let serialReader = null;
 let isSimulated = false;
-let mode = 'simulated'; // 'wiegand' | 'mfrc522' | 'serial' | 'simulated'
-
-function formatHexByte(value) {
-  return `0x${Number(value).toString(16).toUpperCase().padStart(2, '0')}`;
-}
+let mode = 'simulated'; // 'wiegand' | 'serial' | 'simulated'
 
 function initWiegand() {
   wiegand.init();
   mode = 'wiegand';
-}
-
-function initMfrc522() {
-  const Mfrc522 = require('mfrc522-rpi');
-  const SoftSPI = require('rpi-softspi');
-  const softSPI = new SoftSPI({
-    clock: 11,  // BCM GPIO 11 (Pi header pin 23) - SCLK
-    mosi: 10,   // BCM GPIO 10 (Pi header pin 19) - MOSI
-    miso: 9,    // BCM GPIO 9  (Pi header pin 21) - MISO
-    client: 8   // BCM GPIO 8  (Pi header pin 24) - SDA / CS
-  });
-  reader = new Mfrc522(softSPI).setResetPin(25);
-  reader.reset();
-
-  const version = reader.readRegister(0x37);
-  if (version !== 0x91 && version !== 0x92) {
-    throw new Error(
-      `MFRC522 version check failed (${formatHexByte(version)}). Verify SPI is enabled and the reader is wired to BCM 11/10/9/8 with reset on BCM 25.`
-    );
-  }
-
-  mode = 'mfrc522';
-  console.log(`  ✓ MFRC522 RFID reader initialized (SPI, version ${formatHexByte(version)})`);
 }
 
 function initSerial() {
@@ -95,15 +71,13 @@ function initSerial() {
 function init() {
   const want = config.readerType;
   const tryOrder = want === 'wiegand' ? ['wiegand']
-                 : want === 'mfrc522' ? ['mfrc522']
                  : want === 'serial'  ? ['serial']
-                 : ['wiegand', 'mfrc522', 'serial']; // 'auto'
+                 : ['wiegand', 'serial']; // 'auto'
 
   for (const m of tryOrder) {
     try {
-      if (m === 'wiegand')      initWiegand();
-      else if (m === 'mfrc522') initMfrc522();
-      else if (m === 'serial')  initSerial();
+      if (m === 'wiegand')     initWiegand();
+      else if (m === 'serial') initSerial();
       isSimulated = false;
       return;
     } catch (e) {
@@ -115,22 +89,6 @@ function init() {
   mode = 'simulated';
   console.log('  ⚠ No hardware reader available — running in simulation mode');
   console.log('    Type an RFID tag ID and press Enter to simulate a scan');
-}
-
-// Read a single MFRC522 tag (used only for SPI mode).
-function readTag() {
-  if (mode !== 'mfrc522') return null;
-  reader.reset();
-  const response = reader.findCard();
-  if (!response.status) return null;
-  const uidResponse = reader.getUid();
-  if (!uidResponse.status) return null;
-  const uid = uidResponse.data
-    .slice(0, 4)
-    .map(b => b.toString(16).padStart(2, '0').toUpperCase())
-    .join(':');
-  reader.stopCrypto();
-  return uid;
 }
 
 // Normalize a raw UID string from a serial reader into uppercase hex.
@@ -174,26 +132,6 @@ function startPolling(onTag, debounceMs = 3000) {
     return serialReader.port;
   }
 
-  // ── MFRC522 (SPI) hardware polling ─────────────────────
-  if (mode === 'mfrc522') {
-    let lastTag = null;
-    let lastTagTime = 0;
-    const intervalMs = 100;
-    const interval = setInterval(() => {
-      const uid = readTag();
-      if (uid) {
-        const now = Date.now();
-        if (uid !== lastTag || (now - lastTagTime) > debounceMs) {
-          lastTag = uid;
-          lastTagTime = now;
-          onTag(uid);
-        }
-      }
-    }, intervalMs);
-    console.log(`  ✓ MFRC522 polling started (${intervalMs}ms interval, ${debounceMs}ms debounce)`);
-    return interval;
-  }
-
   // ── Simulation (keyboard) ──────────────────────────────
   if (isSimulated) {
     const readline = require('readline');
@@ -215,7 +153,6 @@ function isSimulationMode() {
 
 module.exports = {
   init,
-  readTag,
   startPolling,
   isSimulationMode
 };

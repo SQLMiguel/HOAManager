@@ -26,11 +26,7 @@ const config = {
   gateOpenDurationMs: parseInt(process.env.GATE_OPEN_DURATION_MS) || 5000,
   syncIntervalMs: parseInt(process.env.SYNC_INTERVAL_MS) || 3600000, // 1 hour
 
-  // SPI for RFID reader
-  spiBus: parseInt(process.env.SPI_BUS) || 0,
-  spiDevice: parseInt(process.env.SPI_DEVICE) || 0,
-
-  // RFID reader selection: 'wiegand' (EP1501 GPIO) | 'mfrc522' (SPI) | 'serial' (RS485 USB) | 'auto'
+  // RFID reader selection: 'wiegand' (EP1501 GPIO) | 'serial' (RS485 USB) | 'auto'
   readerType: (process.env.READER_TYPE || 'auto').toLowerCase(),
 
   // Wiegand reader pins (BCM numbering) — must match wiring diagram
